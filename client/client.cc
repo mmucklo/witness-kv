@@ -24,16 +24,15 @@ int main( int argc, char* argv[] )
     KeyValueStore::KvsValue response;
     request.set_key( argv[1] );
     grpc::Status status = stub->Get( &context, request, &response );
-    if (!status.ok()) {
+    if ( !status.ok() ) {
       std::cout << "Not found in kvs!\n";
-    }
-    else {
+    } else {
       std::cout << "Got back " << response.value() << "for " << argv[1] << "\n";
     }
   } else if ( argc == 3 ) {
     KeyValueStore::KvsSetRequest request;
     request.set_key( argv[1] );
-    request.set_value(argv[2]);
+    request.set_value( argv[2] );
     grpc::Status status = stub->Set( &context, request, &empty );
   } else {
     exit( EXIT_FAILURE );

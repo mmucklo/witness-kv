@@ -15,8 +15,8 @@ using grpc::StatusCode;
 
 using KeyValueStore::Kvs;
 using KeyValueStore::KvsKey;
-using KeyValueStore::KvsValue;
 using KeyValueStore::KvsSetRequest;
+using KeyValueStore::KvsValue;
 
 std::map<std::string, std::string> globalMap {};
 
@@ -27,7 +27,7 @@ class KvsServiceImpl final : public Kvs::Service
   {
     auto it = globalMap.find( k->key() );
     if ( it == globalMap.end() ) {
-      return grpc::Status(grpc::StatusCode::NOT_FOUND, "Key does not exist!");
+      return grpc::Status( grpc::StatusCode::NOT_FOUND, "Key does not exist!" );
     }
 
     v->set_value( it->second );
