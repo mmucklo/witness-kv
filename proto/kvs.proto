@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package KeyValueStore;
+
+message KvsKey {
+  string Key = 1;
+}
+
+message KvsValue {
+  string Value = 1;
+}
+
+message KvsSetRequest {
+  string key = 1;
+  string value = 2;
+}
+
+service Kvs {
+  rpc Get(KvsKey) returns (KvsValue);
+  rpc Set(KvsSetRequest) returns (google.protobuf.Empty);
+  rpc Delete(KvsKey) returns (google.protobuf.Empty); 
+}
