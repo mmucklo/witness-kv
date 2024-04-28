@@ -1,94 +1,73 @@
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
-#include <thread>
-#include <grpcpp/grpcpp.h>
+
 #include "kvs.grpc.pb.h"
+#include <grpcpp/grpcpp.h>
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
-using paxos::Proposer;
-using paxos::Acceptor;
-using paxos::Leader;
-using paxos::LeaderElection;
-using paxos::PrepareRequest;
-using paxos::PrepareResponse;
-using paxos::AcceptRequest;
-using paxos::AcceptResponse;
-using paxos::ProposeRequest;
-using paxos::ProposeResponse;
-using paxos::RequestVoteRequest;
-using paxos::RequestVoteResponse;
 
-class ProposerImpl final : public Proposer::Service {
-public:
-    Status Prepare(ServerContext* context, const PrepareRequest* request, PrepareResponse* response) override {
-        // Handle prepare request
-        return Status::OK;
+using KeyValueStore::Kvs;
+using KeyValueStore::KvsKey;
+using KeyValueStore::KvsSetRequest;
+using KeyValueStore::KvsValue;
+
+std::map<std::string, std::string> globalMap {};
+
+class KvsServiceImpl final : public Kvs::Service
+{
+  Status Get( ServerContext* context, const KvsKey* k, KvsValue* v ) override
+  {
+    auto it = globalMap.find( k->key() );
+    if ( it == globalMap.end() ) {
+      return grpc::Status( grpc::StatusCode::NOT_FOUND, "Key does not exist!" );
     }
 
-    Status Accept(ServerContext* context, const AcceptRequest* request, AcceptResponse* response) override {
-        // Handle accept request
-        return Status::OK;
-    }
+    v->set_value( it->second );
+    return Status::OK;
+  }
+
+  Status Set( ServerContext* context, const KvsSetRequest* request, google::protobuf::Empty* response ) override
+  {
+    globalMap[request->key()] = request->value();
+    return Status::OK;
+  }
+
+  Status Delete( ServerContext* context, const KvsKey* k, google::protobuf::Empty* response ) override
+  {
+    return Status::OK;
+  }
 };
 
-class AcceptorImpl final : public Acceptor::Service {
-public:
-    Status ReceivePrepare(ServerContext* context, const PrepareRequest* request, PrepareResponse* response) override {
-        // Handle prepare request from proposer
-        return Status::OK;
-    }
+void RunServer( uint16_t port )
+{
+  // FIXME: Hard-coded port for now.
+  std::string server_address = "0.0.0.0:50051";
+  KvsServiceImpl service;
 
-    Status SendPromise(ServerContext* context, const PrepareRequest* request, PrepareResponse* response) override {
-        // Send promise response to proposer
-        return Status::OK;
-    }
+  ServerBuilder builder;
+  // Listen on the given address without any authentication mechanism.
+  builder.AddListeningPort( server_address, grpc::InsecureServerCredentials() );
+  // Register "service" as the instance through which we'll communicate with
+  // clients. In this case it corresponds to an *synchronous* service.
+  builder.RegisterService( &service );
+  // Finally assemble the server.
+  std::unique_ptr<Server> server( builder.BuildAndStart() );
+  std::cout << "Server listening on " << server_address << std::endl;
 
-    Status SendAccept(ServerContext* context, const AcceptRequest* request, AcceptResponse* response) override {
-        // Send accept message to learners
-        return Status::OK;
-    }
-};
+  // Wait for the server to shutdown. Note that some other thread must be
+  // responsible for shutting down the server for this call to ever return.
+  server->Wait();
 
-class LeaderImpl final : public Leader::Service {
-public:
-    Status Propose(ServerContext* context, const ProposeRequest* request, ProposeResponse* response) override {
-        // Handle proposal from client
-        return Status::OK;
-    }
-};
-
-class LeaderElectionImpl final : public LeaderElection::Service {
-public:
-    Status RequestVote(ServerContext* context, const RequestVoteRequest* request, RequestVoteResponse* response) override {
-        // Handle vote request
-        return Status::OK;
-    }
-};
-
-void RunServer() {
-    std::string server_address("0.0.0.0:50051");
-    ProposerImpl proposer_service;
-    AcceptorImpl acceptor_service;
-    LeaderImpl leader_service;
-    LeaderElectionImpl election_service;
-
-    ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&proposer_service);
-    builder.RegisterService(&acceptor_service);
-    builder.RegisterService(&leader_service);
-    builder.RegisterService(&election_service);
-
-    std::unique_ptr<Server> server(builder.BuildAndStart());
-    std::cout << "Server listening on " << server_address << std::endl;
-    server->Wait();
+  std::cout << "Server actually exited!\n";
 }
 
-int main() {
-    RunServer();
-    return 0;
+int main( int argc, char** argv )
+{
+  RunServer( 50051 );
+  return 0;
 }
