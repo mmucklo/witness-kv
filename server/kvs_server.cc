@@ -3,15 +3,13 @@
 #include <memory>
 #include <string>
 
-#include <grpcpp/grpcpp.h>
-
 #include "kvs.grpc.pb.h"
+#include <grpcpp/grpcpp.h>
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
-using grpc::StatusCode;
 
 using KeyValueStore::Kvs;
 using KeyValueStore::KvsKey;
@@ -20,7 +18,6 @@ using KeyValueStore::KvsValue;
 
 std::map<std::string, std::string> globalMap {};
 
-// Logic and data behind the server's behavior.
 class KvsServiceImpl final : public Kvs::Service
 {
   Status Get( ServerContext* context, const KvsKey* k, KvsValue* v ) override
@@ -48,6 +45,7 @@ class KvsServiceImpl final : public Kvs::Service
 
 void RunServer( uint16_t port )
 {
+  // FIXME: Hard-coded port for now.
   std::string server_address = "0.0.0.0:50051";
   KvsServiceImpl service;
 
@@ -64,6 +62,8 @@ void RunServer( uint16_t port )
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
   server->Wait();
+
+  std::cout << "Server actually exited!\n";
 }
 
 int main( int argc, char** argv )
