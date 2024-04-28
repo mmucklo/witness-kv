@@ -1,24 +1,62 @@
 syntax = "proto3";
 
-import "google/protobuf/empty.proto";
+package paxos;
 
-package KeyValueStore;
-
-message KvsKey {
-  string Key = 1;
+service Proposer {
+    rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
+    rpc Accept(AcceptRequest) returns (AcceptResponse) {}
 }
 
-message KvsValue {
-  string Value = 1;
+service Acceptor {
+    rpc ReceivePrepare(PrepareRequest) returns (PrepareResponse) {}
+    rpc SendPromise(PrepareRequest) returns (PrepareResponse) {}
+    rpc SendAccept(AcceptRequest) returns (AcceptResponse) {}
 }
 
-message KvsSetRequest {
-  string key = 1;
-  string value = 2;
+service Leader {
+    rpc Propose(ProposeRequest) returns (ProposeResponse) {}
 }
 
-service Kvs {
-  rpc Get(KvsKey) returns (KvsValue);
-  rpc Set(KvsSetRequest) returns (google.protobuf.Empty);
-  rpc Delete(KvsKey) returns (google.protobuf.Empty); 
+service LeaderElection {
+    rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
+}
+
+message PrepareRequest {
+    int32 round = 1;
+    string proposal_id = 2;
+}
+
+message PrepareResponse {
+    int32 round = 1;
+    string proposal_id = 2;
+    string value = 3;
+}
+
+message AcceptRequest {
+    int32 round = 1;
+    string proposal_id = 2;
+    string value = 3;
+}
+
+message AcceptResponse {
+    int32 round = 1;
+    string proposal_id = 2;
+}
+
+message ProposeRequest {
+    string value = 1;
+}
+
+message ProposeResponse {
+    bool success = 1;
+}
+
+message RequestVoteRequest {
+    int32 term = 1;
+    int32 candidate_id = 2;
+}
+
+message RequestVoteResponse {
+    int32 term = 1;
+    bool vote_granted = 2;
 }
