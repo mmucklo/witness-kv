@@ -11,5 +11,5 @@ add_executable(kvs_server ${SOURCES})
 target_link_libraries(kvs_server
     PRIVATE
         kvsproto
-	    paxosproto
+	paxosproto
 )
