@@ -60,4 +60,3 @@ message RequestVoteResponse {
     int32 term = 1;
     bool vote_granted = 2;
 }
-
