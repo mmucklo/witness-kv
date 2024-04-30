@@ -19,6 +19,8 @@ service Leader {
 
 service LeaderElection {
     rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
+    rpc Election(ElectionMessage) returns (ElectionResponse) {}
+    rpc Coordinator(ElectionMessage) returns (ElectionResponse) {}
 }
 
 message PrepareRequest {
@@ -59,4 +61,13 @@ message RequestVoteRequest {
 message RequestVoteResponse {
     int32 term = 1;
     bool vote_granted = 2;
+}
+
+message ElectionMessage {
+    int32 node_id = 1;
+    string message = 2;  // "election", "answer", "coordinator"
+}
+
+message ElectionResponse {
+    bool ack = 1;
 }
