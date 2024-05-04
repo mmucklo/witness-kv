@@ -57,13 +57,10 @@ void RunServer( uint16_t port )
   builder.RegisterService( &service );
   // Finally assemble the server.
   std::unique_ptr<Server> server( builder.BuildAndStart() );
-  std::cout << "Server listening on " << server_address << std::endl;
 
   // Wait for the server to shutdown. Note that some other thread must be
   // responsible for shutting down the server for this call to ever return.
   server->Wait();
-
-  std::cout << "Server actually exited!\n";
 }
 
 int main( int argc, char** argv )
