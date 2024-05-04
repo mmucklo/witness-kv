@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package paxos;
+
+service Proposer {
+    rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
+    rpc Accept(AcceptRequest) returns (AcceptResponse) {}
+}
+
+service Acceptor {
+    rpc ReceivePrepare(PrepareRequest) returns (PrepareResponse) {}
+    rpc SendPromise(PrepareRequest) returns (PrepareResponse) {}
+    rpc SendAccept(AcceptRequest) returns (AcceptResponse) {}
+}
+
+service Leader {
+    rpc Propose(ProposeRequest) returns (ProposeResponse) {}
+}
+
+service LeaderElection {
+    rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse) {}
+    rpc Election(ElectionMessage) returns (ElectionResponse) {}
+    rpc Coordinator(ElectionMessage) returns (ElectionResponse) {}
+}
+
+message PrepareRequest {
+    int32 round = 1;
+    string proposal_id = 2;
+}
+
+message PrepareResponse {
+    int32 round = 1;
+    string proposal_id = 2;
+    string value = 3;
+}
+
+message AcceptRequest {
+    int32 round = 1;
+    string proposal_id = 2;
+    string value = 3;
+}
+
+message AcceptResponse {
+    int32 round = 1;
+    string proposal_id = 2;
+}
+
+message ProposeRequest {
+    string value = 1;
+}
+
+message ProposeResponse {
+    bool success = 1;
+}
+
+message RequestVoteRequest {
+    int32 term = 1;
+    int32 candidate_id = 2;
+}
+
+message RequestVoteResponse {
+    int32 term = 1;
+    bool vote_granted = 2;
+}
+
+message ElectionMessage {
+    int32 node_id = 1;
+    string message = 2;  // "election", "answer", "coordinator"
+}
+
+message ElectionResponse {
+    bool ack = 1;
+}
