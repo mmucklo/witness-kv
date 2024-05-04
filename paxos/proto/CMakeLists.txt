@@ -6,7 +6,7 @@ set(PROTO_FILES
     paxos.proto
 )
 
-add_library(paxosproto ${PROTO_FILES})
+add_library(paxosproto STATIC ${PROTO_FILES})
 target_link_libraries(paxosproto
     PUBLIC
         protobuf::libprotobuf
