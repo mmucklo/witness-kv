@@ -1,13 +1,6 @@
 #ifndef __acceptor_hh__
 #define __acceptor_hh__
 
-#include <iostream>
-#include <map>
-#include <memory>
-#include <string>
-#include <optional>
-#include <mutex>
-
 #include "paxos.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
