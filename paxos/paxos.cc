@@ -2,9 +2,10 @@
 
 #include <fstream>
 #include <sstream>
+#include <set>
 
-void
-Paxos::parseNodesConfig(const std::string& configFileName)
+std::vector<Node>
+parseNodesConfig(const std::string& configFileName)
 {
     std::vector<Node> nodes{};
     std::ifstream configFile(configFileName);
@@ -29,9 +30,21 @@ Paxos::parseNodesConfig(const std::string& configFileName)
     }
 
     configFile.close();
+
+    return nodes;
+}
+
+void validateUniqueNodes(const std::vector<Node>& nodes) {
+  std::set<std::pair<std::string, int>> s;
+  for (const auto& node : nodes) {
+    if (!s.insert({node.ipAddress, node.port}).second) {
+      throw std::runtime_error("Invalid config file : Duplicate IP address and port found in configuration\n");
+    }
+  }
 }
 
 Paxos::Paxos(const std::string& configFileName)
 {
-    parseNodesConfig(configFileName);
+    m_Nodes = parseNodesConfig(configFileName);
+    validateUniqueNodes(m_Nodes);
 }

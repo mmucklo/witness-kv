@@ -8,10 +8,11 @@ struct Node{
     int port;
 };
 
+std::vector<Node> parseNodesConfig(const std::string& configFileName);
+
 class Paxos {
 private:
     std::vector<Node> m_Nodes;
-    void parseNodesConfig(const std::string& configFileName);
 public:
     Paxos(const std::string& configFileName);
     ~Paxos() = default;
