@@ -32,7 +32,7 @@ int main( int argc, char* argv[] )
 
   std::string input;
   while (true) {
-    std::cout << "Enter something to replicate (or 'quit' to exit): ";
+    std::cout << "Enter something to replicate (or 'quit' to exit): \n";
     std::getline(std::cin, input);
 
     if (input == "quit") {

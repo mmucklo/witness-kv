@@ -43,20 +43,14 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
 
   response->set_has_accepted_value( hasValue );
 
-  std::cout << "[ACCEPTOR] Has Accepted value: " << hasValue << "\n";
-
   if ( hasValue ) {
     response->set_accepted_proposal( m_acceptedProposal.value() );
     response->set_accepted_value( m_acceptedValue.value() );
-    std::cout << "[ACCEPTOR] m_acceptedProposal.value(): " << m_acceptedProposal.value()
-              << "m_acceptedValue.value(): " << m_acceptedValue.value() << "\n";
   } else {
     // FIXME: Is this else block needed ?
     response->set_accepted_proposal( 0 );
     response->set_accepted_value( "" );
   }
-
-  std::cerr << "In Acceptor's prepare call request: " << request->proposal_number() << "\n";
 
   return Status::OK;
 }
@@ -90,13 +84,11 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
   builder.RegisterService( &service );
 
   std::unique_ptr<grpc::Server> server( builder.BuildAndStart() );
-  std::cout << "Acceptor Server listening on " << address << std::endl;
 
   std::stop_token stoken = stop_source.get_token();
   while ( !stoken.stop_requested() ) {
     std::this_thread::sleep_for( 300ms );
   }
-  std::cout << "Exiting...\n";
 }
 
 AcceptorService::AcceptorService( const std::string& address )
