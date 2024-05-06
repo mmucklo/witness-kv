@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+// Test log message
+// TODO: just a placeholder for now.
+message paxos_round {
+    // Final fields TBD...
+    int32 round = 1;
+    string proposal_id = 2;
+    string value = 3;
+}

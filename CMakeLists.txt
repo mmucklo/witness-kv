@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
 project(witness-kv LANGUAGES CXX)
 
 include(etc/build_type.cmake)
@@ -9,8 +9,11 @@ enable_testing()
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 set(CMAKE_CXX_STANDARD 20)
-
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(ABSL_PROPAGATE_CXX_STD ON)
+add_subdirectory(abseil-cpp)
 add_subdirectory("${PROJECT_SOURCE_DIR}/server")
 add_subdirectory("${PROJECT_SOURCE_DIR}/tests")
 add_subdirectory("${PROJECT_SOURCE_DIR}/googletest")
 add_subdirectory("${PROJECT_SOURCE_DIR}/proto")
+add_subdirectory("${PROJECT_SOURCE_DIR}/log")
