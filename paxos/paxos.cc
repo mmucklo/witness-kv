@@ -21,10 +21,6 @@ static void validateUniqueNodes( const std::vector<Node>& nodes );
 using grpc::ServerContext;
 using grpc::Status;
 
-/*class PaxosInit final : public PaxosInitImpl::Service {
-    Status SendReady( ServerContext* context, const SendReadyMsg* k, KvsValue* v ) override
-};*/
-
 // Paxos Impl class
 class PaxosImpl
 {
@@ -32,8 +28,6 @@ public:
   std::vector<Node> m_Nodes;
   std::unique_ptr<Proposer> m_proposer;
   std::unique_ptr<AcceptorService> m_acceptor;
-
-  //std::counting_semaphore<> *m_sema;
 
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
 
@@ -55,18 +49,12 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
 
   m_proposer = std::make_unique<Proposer>( m_Nodes.size() );
 
-  //m_sema = new std::counting_semaphore<>(m_Nodes.size() - 1);
-
-  std::string str = m_Nodes[nodeId].ipAddress + ":" + std::to_string( m_Nodes[nodeId].port );
-  //std::cout << "paxos : node: ip address: " << str << "\n";
-  m_acceptor = std::make_unique<AcceptorService>( str );
+  m_acceptor = std::make_unique<AcceptorService>( m_Nodes[nodeId].getAddressPortStr() );
 
   m_acceptorStubs.resize( m_Nodes.size() );
 
-  //std::cout << "Getting stubs\n";
-  std::cout << "Number of nodes: " << m_Nodes.size() << "\n";
   for ( size_t i = 0; i < m_Nodes.size();  ) {
-    auto channel = grpc::CreateChannel( m_Nodes[i].ipAddress + ":" + std::to_string( m_Nodes[i].port ), grpc::InsecureChannelCredentials() );
+    auto channel = grpc::CreateChannel( m_Nodes[i].getAddressPortStr(), grpc::InsecureChannelCredentials() );
     auto lStub = paxos::Acceptor::NewStub( channel );
     grpc::ClientContext context;
     google::protobuf::Empty request;
@@ -83,19 +71,16 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
 
 Paxos::Paxos( const std::string& configFileName, int nodeId )
 {
-  //std::cout << "Init paxos on node: " << nodeId << std::endl;
   m_paxosImpl = new PaxosImpl( configFileName, nodeId );
 }
 
 Paxos::~Paxos()
 {
   delete m_paxosImpl;
-  //std::cout << "Destroying Paxos object!\n";
 }
 
 void Paxos::Replicate( const std::string& value )
 {
-  //std::cout << "Paxos: Got request to replicate following value: " << value << "\n";
   m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
 }
 

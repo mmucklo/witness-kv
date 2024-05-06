@@ -9,6 +9,9 @@ struct Node
 {
   std::string ipAddress;
   int port;
+  std::string getAddressPortStr() {
+    return this->ipAddress + ":" + std::to_string( this->port );
+  }
 };
 
 class Paxos
