@@ -27,6 +27,7 @@ public:
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
   Status Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response ) override;
+  Status SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) override;
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
@@ -69,6 +70,12 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   response->set_min_proposal( m_minProposal );
   return Status::OK;
 }
+
+Status 
+AcceptorImpl::SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) {
+  return Status::OK;
+}
+
 
 void RunServer( const std::string& address, const std::stop_source& stop_source )
 {

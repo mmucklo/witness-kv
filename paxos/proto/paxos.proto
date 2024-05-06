@@ -7,14 +7,7 @@ import "google/protobuf/empty.proto";
 service Acceptor {
     rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
     rpc Accept(AcceptRequest) returns (AcceptResponse) {}
-}
-
-service PaxosInit {
-    rpc SendReady(SendReadyMsg) returns (google.protobuf.Empty) {}
-}
-
-message SendReadyMsg {
-    uint32 nodeId = 1;
+    rpc SendPing(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 message PrepareRequest {

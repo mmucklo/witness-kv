@@ -21,31 +21,24 @@ static void validateUniqueNodes( const std::vector<Node>& nodes );
 using grpc::ServerContext;
 using grpc::Status;
 
-using paxos::PaxosInit;
-using paxos::SendReadyMsg;
-
 /*class PaxosInit final : public PaxosInitImpl::Service {
     Status SendReady( ServerContext* context, const SendReadyMsg* k, KvsValue* v ) override
 };*/
 
 // Paxos Impl class
-class PaxosImpl final : public PaxosInit::Service
+class PaxosImpl
 {
 public:
   std::vector<Node> m_Nodes;
   std::unique_ptr<Proposer> m_proposer;
   std::unique_ptr<AcceptorService> m_acceptor;
 
-  std::counting_semaphore<> *m_sema;
+  //std::counting_semaphore<> *m_sema;
 
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
 
   // get nodeId for now as a quick proto type
   int m_nodeId;
-
-  Status SendReady( ServerContext* context, const SendReadyMsg* request, google::protobuf::Empty* response ) override {
-    return Status::OK;
-  }
 
 public:
   PaxosImpl() = delete;
@@ -62,36 +55,47 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
 
   m_proposer = std::make_unique<Proposer>( m_Nodes.size() );
 
-  m_sema = new std::counting_semaphore<>(m_Nodes.size() - 1);
+  //m_sema = new std::counting_semaphore<>(m_Nodes.size() - 1);
 
   std::string str = m_Nodes[nodeId].ipAddress + ":" + std::to_string( m_Nodes[nodeId].port );
-  std::cout << "paxos : node: ip address: " << str << "\n";
+  //std::cout << "paxos : node: ip address: " << str << "\n";
   m_acceptor = std::make_unique<AcceptorService>( str );
 
   m_acceptorStubs.resize( m_Nodes.size() );
 
-  std::cout << "Getting stubs\n";
-  for ( size_t i = 0; i < m_Nodes.size(); i++ ) {
+  //std::cout << "Getting stubs\n";
+  std::cout << "Number of nodes: " << m_Nodes.size() << "\n";
+  for ( size_t i = 0; i < m_Nodes.size();  ) {
     auto channel = grpc::CreateChannel( m_Nodes[i].ipAddress + ":" + std::to_string( m_Nodes[i].port ), grpc::InsecureChannelCredentials() );
-    m_acceptorStubs[i] = paxos::Acceptor::NewStub( channel );
+    auto lStub = paxos::Acceptor::NewStub( channel );
+    grpc::ClientContext context;
+    google::protobuf::Empty request;
+    google::protobuf::Empty response;
+
+    if (!lStub->SendPing(&context, request, &response).ok()) {
+      std::cout << "Did not make connection..\n";
+      continue;
+    }
+    m_acceptorStubs[i] = std::move(lStub);
+    i++;
   }
 }
 
 Paxos::Paxos( const std::string& configFileName, int nodeId )
 {
-  std::cout << "Init paxos on node: " << nodeId << std::endl;
+  //std::cout << "Init paxos on node: " << nodeId << std::endl;
   m_paxosImpl = new PaxosImpl( configFileName, nodeId );
 }
 
 Paxos::~Paxos()
 {
   delete m_paxosImpl;
-  std::cout << "Destroying Paxos object!\n";
+  //std::cout << "Destroying Paxos object!\n";
 }
 
 void Paxos::Replicate( const std::string& value )
 {
-  std::cout << "Paxos: Got request to replicate following value: " << value << "\n";
+  //std::cout << "Paxos: Got request to replicate following value: " << value << "\n";
   m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
 }
 
