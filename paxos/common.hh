@@ -10,5 +10,6 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <semaphore>
 
 #endif //__common_hh__

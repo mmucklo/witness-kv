@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <memory>
+#include <semaphore>
 #include <set>
 #include <sstream>
 
@@ -17,18 +18,34 @@
 
 static void validateUniqueNodes( const std::vector<Node>& nodes );
 
+using grpc::ServerContext;
+using grpc::Status;
+
+using paxos::PaxosInit;
+using paxos::SendReadyMsg;
+
+/*class PaxosInit final : public PaxosInitImpl::Service {
+    Status SendReady( ServerContext* context, const SendReadyMsg* k, KvsValue* v ) override
+};*/
+
 // Paxos Impl class
-class PaxosImpl
+class PaxosImpl final : public PaxosInit::Service
 {
 public:
   std::vector<Node> m_Nodes;
   std::unique_ptr<Proposer> m_proposer;
   std::unique_ptr<AcceptorService> m_acceptor;
 
+  std::counting_semaphore<> *m_sema;
+
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
 
   // get nodeId for now as a quick proto type
   int m_nodeId;
+
+  Status SendReady( ServerContext* context, const SendReadyMsg* request, google::protobuf::Empty* response ) override {
+    return Status::OK;
+  }
 
 public:
   PaxosImpl() = delete;
@@ -45,6 +62,8 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
 
   m_proposer = std::make_unique<Proposer>( m_Nodes.size() );
 
+  m_sema = new std::counting_semaphore<>(m_Nodes.size() - 1);
+
   std::string str = m_Nodes[nodeId].ipAddress + ":" + std::to_string( m_Nodes[nodeId].port );
   std::cout << "paxos : node: ip address: " << str << "\n";
   m_acceptor = std::make_unique<AcceptorService>( str );
@@ -53,7 +72,7 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
 
   std::cout << "Getting stubs\n";
   for ( size_t i = 0; i < m_Nodes.size(); i++ ) {
-    auto channel = grpc::CreateChannel( str, grpc::InsecureChannelCredentials() );
+    auto channel = grpc::CreateChannel( m_Nodes[i].ipAddress + ":" + std::to_string( m_Nodes[i].port ), grpc::InsecureChannelCredentials() );
     m_acceptorStubs[i] = paxos::Acceptor::NewStub( channel );
   }
 }
