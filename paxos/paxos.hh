@@ -20,7 +20,7 @@ private:
   PaxosImpl* m_paxosImpl;
 
 public:
-  Paxos( const std::string& configFileName, uint32_t nodeId );
+  Paxos( const std::string& configFileName, uint8_t nodeId );
   ~Paxos();
 
   void Replicate( const std::string& value );

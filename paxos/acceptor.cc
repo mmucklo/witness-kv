@@ -43,9 +43,13 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
 
   response->set_has_accepted_value( hasValue );
 
+  std::cout << "[ACCEPTOR] Has Accepted value: " << hasValue << "\n";
+
   if ( hasValue ) {
     response->set_accepted_proposal( m_acceptedProposal.value() );
     response->set_accepted_value( m_acceptedValue.value() );
+    std::cout << "[ACCEPTOR] m_acceptedProposal.value(): " << m_acceptedProposal.value()
+              << "m_acceptedValue.value(): " << m_acceptedValue.value() << "\n";
   } else {
     // FIXME: Is this else block needed ?
     response->set_accepted_proposal( 0 );
@@ -75,7 +79,6 @@ Status
 AcceptorImpl::SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) {
   return Status::OK;
 }
-
 
 void RunServer( const std::string& address, const std::stop_source& stop_source )
 {

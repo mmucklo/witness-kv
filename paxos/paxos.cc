@@ -32,15 +32,15 @@ public:
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
 
   // get nodeId for now as a quick proto type
-  uint32_t m_nodeId;
+  uint8_t m_nodeId;
 
 public:
   PaxosImpl() = delete;
-  PaxosImpl( const std::string& configFileName, uint32_t nodeId );
+  PaxosImpl( const std::string& configFileName, uint8_t nodeId );
   ~PaxosImpl() = default;
 };
 
-PaxosImpl::PaxosImpl( const std::string& configFileName, uint32_t nodeId )
+PaxosImpl::PaxosImpl( const std::string& configFileName, uint8_t nodeId )
 {
   m_Nodes = parseNodesConfig( configFileName );
   validateUniqueNodes( m_Nodes );
@@ -68,7 +68,7 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, uint32_t nodeId )
   }
 }
 
-Paxos::Paxos( const std::string& configFileName, uint32_t nodeId )
+Paxos::Paxos( const std::string& configFileName, uint8_t nodeId )
 {
   m_paxosImpl = new PaxosImpl( configFileName, nodeId );
 }
