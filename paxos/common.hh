@@ -8,5 +8,7 @@
 #include <string>
 #include <optional>
 #include <mutex>
+#include <thread>
+#include <stop_token>
 
 #endif //__common_hh__

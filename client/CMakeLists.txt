@@ -1,0 +1,15 @@
+
+find_package(Threads)
+
+set(SOURCES
+    client.cc
+)
+
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})
+include_directories(${PROJECT_SOURCE_DIR}/paxos)
+
+add_executable(client ${SOURCES})
+target_link_libraries(client
+    PRIVATE
+    paxos
+)
