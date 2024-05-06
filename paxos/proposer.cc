@@ -1,11 +1,12 @@
 #include "proposer.hh"
 
 
-void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value )
+void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value, const uint64_t index )
 {
 Start:
   paxos::PrepareRequest request;
   request.set_proposal_number( getNextProposalNumber() );
+  request.set_index_number( index );
 
   uint64_t maxProposalId = 0;
   std::string maxProposalValue = "";
@@ -33,6 +34,7 @@ Start:
   if ( majorityCount >= m_majorityThreshold ) {
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
+    accept_request.set_index_number( request.index_number() );
     accept_request.set_value( maxProposalValue );
 
     for ( size_t i = 0; i < stubs.size(); i++ ) {
@@ -44,7 +46,7 @@ Start:
         continue;
       } 
       else {
-        std::cout << "Accepted Proposal number: " << accept_response.min_proposal() << ", accepted value: " << maxProposalValue
+        std::cout << "Accepted Proposal number: " << accept_response.min_proposal() << ", accepted value: " << maxProposalValue << ", at index: " << request.index_number()
                 << "\n";
       }
     }
