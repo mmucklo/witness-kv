@@ -2,16 +2,6 @@
 #define __paxos_hh__
 
 #include "common.hh"
-//#include "proposer.hh"
-//#include "acceptor.hh"
-
-// Protobuf headers
-//#include "paxos.grpc.pb.h"
-//#include "paxos.pb.h"
-
-// GRPC headers
-//#include <grpc/grpc.h>
-//#include <grpcpp/create_channel.h>
 
 class PaxosImpl;
 
@@ -22,14 +12,6 @@ struct Node{
 
 class Paxos {
 private:
-    /*std::vector<Node> m_Nodes;
-    std::unique_ptr<Proposer> m_proposer;
-    std::unique_ptr<AcceptorService> m_acceptor;
-
-    //std::vector<std::unique_ptr<paxos::Acceptor::Stub>> stubs;
-
-    // get nodeId for now as a quick proto type
-    int m_nodeId;*/
     PaxosImpl *m_paxosImpl;
 
 public:

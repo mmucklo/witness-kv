@@ -52,6 +52,8 @@ AcceptorImpl::Prepare(ServerContext* context, const PrepareRequest* request, Pre
         response->set_accepted_value("");
     }
 
+    std::cerr << "In Acceptor's prepare call request: " << request->proposal_number() << "\n";
+
     return Status::OK;
 }
 

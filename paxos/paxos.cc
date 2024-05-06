@@ -48,14 +48,13 @@ PaxosImpl::PaxosImpl(const std::string& configFileName, int nodeId)
     std::cout << "paxos : node: ip address: " << str << "\n";
     m_acceptor = std::make_unique<AcceptorService>(str);
 
-    //std::this_thread::sleep_for( std::chrono::milliseconds( 2000 ) );
+    m_acceptorStubs.resize(m_Nodes.size());
 
     std::cout << "Getting stubs\n";
     for (size_t i = 0; i < m_Nodes.size(); i++) {
         auto channel = grpc::CreateChannel( str, grpc::InsecureChannelCredentials() );
         m_acceptorStubs[i] = paxos::Acceptor::NewStub( channel );
     }
-    std::cout << "Got stubs\n";
 }
 
 Paxos::Paxos(const std::string& configFileName, int nodeId)
@@ -74,7 +73,7 @@ void
 Paxos::Replicate(const std::string &value)
 {
     std::cout << "Paxos: Got request to replicate following value: " << value << "\n";
-    //m_proposer->Propose(value);
+    m_paxosImpl->m_proposer->Propose(this->m_paxosImpl->m_acceptorStubs, value);
 }
 
 std::vector<Node>

@@ -27,6 +27,7 @@ int main ( int argc, char* argv[] )
     }
 
     Paxos p{"paxos/nodes_config.txt", std::atoi(argv[1])};
+    p.Replicate("Hello");
 
     return 0;
 }
