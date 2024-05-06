@@ -16,8 +16,8 @@ class AcceptorImpl final : public Acceptor::Service
 {
 private:
   uint64_t m_minProposal;
-  std::optional<uint64_t> m_acceptedProposal;
-  std::optional<std::string> m_acceptedValue;
+  std::vector<std::optional<uint64_t>> m_acceptedProposal{1024};
+  std::vector<std::optional<std::string>> m_acceptedValue{1024};
   // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex m_mutex;
 
@@ -39,13 +39,13 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
     m_minProposal = n;
   }
 
-  bool hasValue = m_acceptedValue.has_value();
+  bool hasValue = m_acceptedValue[request->index_number()].has_value();
 
   response->set_has_accepted_value( hasValue );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( m_acceptedProposal.value() );
-    response->set_accepted_value( m_acceptedValue.value() );
+    response->set_accepted_proposal( m_acceptedProposal[request->index_number()].value() );
+    response->set_accepted_value( m_acceptedValue[request->index_number()].value() );
   } else {
     // FIXME: Is this else block needed ?
     response->set_accepted_proposal( 0 );
@@ -61,9 +61,9 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
 
   uint64_t n = request->proposal_number();
   if ( n >= m_minProposal ) {
-    m_acceptedProposal = n;
+    m_acceptedProposal[request->index_number()] = n;
     m_minProposal = n;
-    m_acceptedValue = std::move( request->value() );
+    m_acceptedValue[request->index_number()] = std::move( request->value() );
   }
   response->set_min_proposal( m_minProposal );
   return Status::OK;
