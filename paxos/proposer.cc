@@ -43,16 +43,15 @@ Start:
         std::cerr << "Accept GRPC Failed\n";
         continue;
       } 
-      uint64_t roundNumber = accept_response.min_proposal() >> 8;
-      if (roundNumber > m_roundNumber) {
-        m_roundNumber = roundNumber;
-        // FIXME: [V] This is ugly. Need to make this readable.
-        goto Start;
-      }
       else {
         std::cout << "Accepted Proposal number: " << accept_response.min_proposal() << ", accepted value: " << maxProposalValue
                 << "\n";
       }
     }
+  }
+  else
+  {
+      // FIXME: modularize it later
+      goto Start;
   }
 }
