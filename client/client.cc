@@ -28,7 +28,7 @@ int main( int argc, char* argv[] )
     exit( EXIT_FAILURE );
   }
 
-  Paxos p { "paxos/nodes_config.txt", std::atoi( argv[1] ) };
+  Paxos p { "paxos/nodes_config.txt", static_cast<uint32_t>(std::atoi( argv[1] )) };
   p.Replicate( "Hello" );
 
   return 0;

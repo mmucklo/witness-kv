@@ -27,7 +27,7 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
     }
   }
 
-  if ( majorityCount >= majority_threshold ) {
+  if ( majorityCount >= m_majorityThreshold ) {
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
     accept_request.set_value( maxProposalValue );

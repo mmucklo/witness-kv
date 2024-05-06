@@ -32,22 +32,22 @@ public:
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
 
   // get nodeId for now as a quick proto type
-  int m_nodeId;
+  uint32_t m_nodeId;
 
 public:
   PaxosImpl() = delete;
-  PaxosImpl( const std::string& configFileName, int nodeId );
+  PaxosImpl( const std::string& configFileName, uint32_t nodeId );
   ~PaxosImpl() = default;
 };
 
-PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
+PaxosImpl::PaxosImpl( const std::string& configFileName, uint32_t nodeId )
 {
   m_Nodes = parseNodesConfig( configFileName );
   validateUniqueNodes( m_Nodes );
 
   m_nodeId = nodeId;
 
-  m_proposer = std::make_unique<Proposer>( m_Nodes.size() );
+  m_proposer = std::make_unique<Proposer>( m_Nodes.size(), nodeId );
 
   m_acceptor = std::make_unique<AcceptorService>( m_Nodes[nodeId].getAddressPortStr() );
 
@@ -61,7 +61,6 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
     google::protobuf::Empty response;
 
     if (!lStub->SendPing(&context, request, &response).ok()) {
-      std::cout << "Did not make connection..\n";
       continue;
     }
     m_acceptorStubs[i] = std::move(lStub);
@@ -69,7 +68,7 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, int nodeId )
   }
 }
 
-Paxos::Paxos( const std::string& configFileName, int nodeId )
+Paxos::Paxos( const std::string& configFileName, uint32_t nodeId )
 {
   m_paxosImpl = new PaxosImpl( configFileName, nodeId );
 }

@@ -14,10 +14,12 @@ class Proposer
 {
 private:
   uint64_t m_roundNumber;
-  int majority_threshold;
+  int m_majorityThreshold;
+  uint32_t m_nodeId;
 
 public:
-  Proposer( int num_acceptors ) : majority_threshold { num_acceptors / 2 + 1 }, m_roundNumber { 0 } {}
+  Proposer( int num_acceptors , uint32_t nodeId) : m_majorityThreshold { num_acceptors / 2 + 1 },
+                                                   m_roundNumber { 0 } {}
   ~Proposer() = default;
 
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
