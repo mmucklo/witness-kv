@@ -2,10 +2,11 @@
 
 #include <filesystem>
 
+#include "absl/flags/flag.h"
 #include "absl/log/log.h"
 #include "log.pb.h"
 
-constexpr int64_t MAX_FILE_SIZE = 1 << 30; // 1 GiB 
+ABSL_FLAG(int64_t, log_writer_max_file_size, 1 << 30, "Maximum file size for logs");
 
 void checkDir( std::string dir )
 {
@@ -30,8 +31,10 @@ void checkDir( std::string dir )
 LogWriter::LogWriter( std::string dir ) : dir_( dir ) { checkDir( dir_ ); }
 
 void LogWriter::InitFileWriter() {
-    lock_.AssertHeld();
-
+  lock_.AssertHeld();
+  absl::Time now = absl::Now();
+  std::string filename = "/tmp/file_writer_test.";
+  filename.append( absl::StrCat( absl::ToUnixMicros( now ) ) );
 }
 
 void LogWriter::Log( const Log::Message& msg )
