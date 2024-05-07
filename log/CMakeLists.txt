@@ -1,11 +1,7 @@
 
 add_library(file_writer file_writer.cc)
 add_library(log_writer log_writer.cc)
-add_library(log_writer log_writer.cc)
 
-target_include_directories(log_writer
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
-)
 target_include_directories(log_writer
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 )
@@ -40,14 +36,6 @@ target_link_libraries(log_writer PUBLIC
     absl::base
     absl::core_headers
     absl::log
-    absl::base
-    absl::core_headers
-    absl::log
-)
-
-target_link_libraries(log_writer PUBLIC
-    file_writer
-    logproto
     absl::base
     absl::core_headers
     absl::log
