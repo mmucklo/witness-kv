@@ -12,7 +12,6 @@ service Acceptor {
 
 message PrepareRequest {
     uint64 proposal_number = 1;
-    uint64 index_number = 2;
 }
 
 message PrepareResponse {
@@ -22,7 +21,6 @@ message PrepareResponse {
 }
 
 message AcceptRequest {
-    uint64 index_number = 1;
     uint64 proposal_number = 2;
     string value = 3;
 }

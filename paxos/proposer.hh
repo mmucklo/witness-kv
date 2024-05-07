@@ -33,6 +33,6 @@ public:
   ~Proposer() = default;
 
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
-                const std::string& value, const uint64_t index );
+                const std::string& value );
 };
 #endif // __proposer_hh__

@@ -78,9 +78,9 @@ Paxos::~Paxos()
   delete m_paxosImpl;
 }
 
-void Paxos::Replicate( const std::string& value, const uint64_t& index )
+void Paxos::Replicate( const std::string& value )
 {
-  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value, index );
+  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
 }
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName )
