@@ -16,33 +16,32 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-struct SanityTests : public ::testing::Test
+struct SanityTests
+    : public ::testing::Test
 {
-  pid_t server_pid;
-  virtual void SetUp() override
-  {
-    server_pid = fork();
-    ASSERT_NE( server_pid, -1 );
+    pid_t server_pid;
+    virtual void SetUp() override {
+        server_pid = fork();
+        ASSERT_NE( server_pid, -1 );
 
-    if ( server_pid == 0 ) {
-      // Child process: Run the server executable
-      char serverName[] = "build/server/kvs_server";
-      char* server_args[] = { serverName, nullptr };
-      ASSERT_NE( execvp( server_args[0], server_args ), -1 );
+        if ( server_pid == 0 ) {
+            // Child process: Run the server executable
+            char serverName[] = "build/server/kvs_server";
+            char* server_args[] = { serverName, nullptr };
+            ASSERT_NE( execvp( server_args[0], server_args ), -1 );
+        }
+
+        // Probably not needed, but wait a bit just to be safe.
+        std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
     }
 
-    // Probably not needed, but wait a bit just to be safe.
-    std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
-  }
-
-  virtual void TearDown() override
-  {
-    if ( server_pid != 0 ) {
-      ASSERT_EQ( kill( server_pid, SIGINT ), 0 );
-      int status;
-      waitpid( server_pid, &status, 0 );
+    virtual void TearDown() override {
+        if (server_pid != 0) {
+            ASSERT_EQ(kill(server_pid, SIGINT), 0);
+            int status;
+            waitpid(server_pid, &status, 0);
+        }
     }
-  }
 };
 
 TEST_F( SanityTests, BasicSanityTest )
