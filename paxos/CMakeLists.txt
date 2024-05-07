@@ -1,7 +1,6 @@
 find_package(Threads)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(SOURCES
     acceptor.cc
