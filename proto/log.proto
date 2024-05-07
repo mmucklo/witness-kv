@@ -8,8 +8,19 @@ message Message {
     // Final fields TBD...
     message Paxos {
         int32 round = 1;
-        string proposal_id = 2;
+        int32 proposal_id = 2;
         string value = 3;
     }
     Paxos paxos = 1;
+}
+
+message Header {
+    // When this log entry file was officially created
+    int64 timestamp_micros = 1;
+
+    // An index id for this entry. Should be unique relative to the prefx.
+    int64 idx = 2;
+
+    // The prefix for this log file.
+    string prefix = 3;
 }

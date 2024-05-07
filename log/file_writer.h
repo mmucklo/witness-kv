@@ -1,5 +1,5 @@
-#ifndef LOG_FILE_WRITER
-#define LOG_FILE_WRITER
+#ifndef LOG_FILE_WRITER_H
+#define LOG_FILE_WRITER_H
 
 #include <sys/types.h>
 
@@ -40,6 +40,7 @@ class FileWriter {
   void Flush();
 
   ssize_t bytes_written() { return bytes_written_; }
+  std::string& filename() { return filename_; }
 
  private:
   void WriteBuffer();
