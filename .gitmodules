@@ -2,3 +2,6 @@
 	path = abseil-cpp
 	url = https://github.com/abseil/abseil-cpp.git
 	branch = 20240116.2
+[submodule "googletest"]
+	path = googletest
+	url = https://github.com/google/googletest
