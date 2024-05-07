@@ -2,11 +2,7 @@ find_package(protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 find_package(Threads)
 
-set(PROTO_FILES
-    kvs.proto
-)
-
-add_library(kvsproto ${PROTO_FILES})
+add_library(kvsproto kvs.proto)
 target_link_libraries(kvsproto
     PUBLIC
         protobuf::libprotobuf
