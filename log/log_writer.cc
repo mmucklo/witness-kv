@@ -3,6 +3,9 @@
 #include <filesystem>
 
 #include "absl/log/log.h"
+#include "log.pb.h"
+
+constexpr int64_t MAX_FILE_SIZE = 1 << 30; // 1 GiB 
 
 void checkDir( std::string dir )
 {
@@ -25,3 +28,20 @@ void checkDir( std::string dir )
 }
 
 LogWriter::LogWriter( std::string dir ) : dir_( dir ) { checkDir( dir_ ); }
+
+void LogWriter::InitFileWriter() {
+    lock_.AssertHeld();
+
+}
+
+void LogWriter::Log( const Log::Message& msg )
+{
+  {
+    absl::MutexLock l( &write_queue_lock_ );
+    write_queue_.push( msg );
+  }
+  {
+    absl::MutexLock l( &lock_ );
+    
+  }
+}

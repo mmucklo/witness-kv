@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 
+#include <memory>
 #include <string>
 
 #include "absl/cleanup/cleanup.h"

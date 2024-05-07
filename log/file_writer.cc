@@ -5,6 +5,7 @@
 #include <sys/types.h>
 
 #include <filesystem>
+#include <memory>
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/log/check.h"

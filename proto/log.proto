@@ -1,10 +1,15 @@
 syntax = "proto3";
 
+package Log;
+
 // Test log message
 // TODO: just a placeholder for now.
-message paxos_round {
+message Message {
     // Final fields TBD...
-    int32 round = 1;
-    string proposal_id = 2;
-    string value = 3;
+    message Paxos {
+        int32 round = 1;
+        string proposal_id = 2;
+        string value = 3;
+    }
+    Paxos paxos = 1;
 }
