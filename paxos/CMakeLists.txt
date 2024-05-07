@@ -12,8 +12,8 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})
 
 add_subdirectory("proto")
 
-add_library(paxos SHARED ${SOURCES})
+add_library(paxos STATIC ${SOURCES})
 target_link_libraries(paxos
-    PRIVATE
+    PUBLIC
 	paxosproto
 )
