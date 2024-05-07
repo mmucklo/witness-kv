@@ -18,9 +18,6 @@
 
 static void validateUniqueNodes( const std::vector<Node>& nodes );
 
-using grpc::ServerContext;
-using grpc::Status;
-
 // Paxos Impl class
 class PaxosImpl
 {
