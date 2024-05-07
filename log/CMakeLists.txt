@@ -20,11 +20,7 @@ enable_testing()
 
 add_executable(${FileWriterTest} ${Sources})
 
-
 target_link_libraries(file_writer PUBLIC
-    absl::base
-    absl::core_headers
-    absl::log
     absl::base
     absl::core_headers
     absl::log
@@ -33,9 +29,6 @@ target_link_libraries(file_writer PUBLIC
 target_link_libraries(log_writer PUBLIC
     file_writer
     logproto
-    absl::base
-    absl::core_headers
-    absl::log
     absl::base
     absl::core_headers
     absl::log
