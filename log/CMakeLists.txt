@@ -9,16 +9,10 @@ target_include_directories(file_writer
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-set(FileWriterTest fileWriterTest)
-
-set(Sources
-    file_writer.cc
-    file_writer_test.cc
-)
-
 enable_testing()
 
-add_executable(${FileWriterTest} ${Sources})
+add_executable(file_writer_test file_writer_test.cc)
+add_executable(log_writer_test log_writer_test.cc)
 
 target_link_libraries(file_writer PUBLIC
     absl::base
@@ -34,8 +28,9 @@ target_link_libraries(log_writer PUBLIC
     absl::log
 )
 
-target_link_libraries(${FileWriterTest} PUBLIC
+target_link_libraries(file_writer_test PUBLIC
     test_main
+    file_writer
     absl::core_headers
     absl::flags
     absl::log
@@ -44,7 +39,17 @@ target_link_libraries(${FileWriterTest} PUBLIC
     kvsproto
 )
 
-add_test(
-    NAME ${FileWriterTest}
-    COMMAND ${FileWriterTest}
+target_link_libraries(log_writer_test PUBLIC
+    test_main
+    file_writer
+    log_writer
+    absl::core_headers
+    absl::flags
+    absl::log
+    absl::strings
+    gtest
+    kvsproto
 )
+
+include(GoogleTest)
+gtest_discover_tests(file_writer_test log_writer_test)
