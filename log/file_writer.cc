@@ -27,7 +27,7 @@ void verifyFilename(std::string filename) {
   CHECK((perms & std::filesystem::perms::owner_write) == std::filesystem::perms::owner_write) << "parent path should be writable.";
 }
 
-FileWriter::FileWriter( std::string filename ) : filename_( std::move( filename ) ), buffer_size_(0) {
+FileWriter::FileWriter( std::string filename ) : filename_( std::move( filename ) ), buffer_size_(0), bytes_written_(0) {
   // This may crash if we have an invalid filename.
   verifyFilename(filename_);
 
@@ -66,11 +66,11 @@ void FileWriter::Write(const absl::Cord& msg)
       int chunk_remaining = chunk_size - chunk_idx; // off by one error?
       if (chunk_remaining <= remaining) {
         // copy entire chunk into buffer.
-        chunk.copy(buffer_.get(), chunk_remaining, chunk_idx);
+        chunk.copy(buffer_.get() + buffer_size_, chunk_remaining, chunk_idx);
         chunk_idx += chunk_remaining;
         buffer_size_ += chunk_remaining;
       } else {
-        chunk.copy(buffer_.get(), remaining, chunk_idx);
+        chunk.copy(buffer_.get() + buffer_size_, remaining, chunk_idx);
         chunk_idx += remaining;
         buffer_size_ += remaining;
       }
@@ -80,14 +80,7 @@ void FileWriter::Write(const absl::Cord& msg)
 
       // Now we may want to write the buffer if it is full.
       if (buffer_size_ == BLOCK_SIZE) {
-        LOG(INFO) << "FileWriter::Write writing: " << buffer_size_  << " bytes: ";
-        int res = write(fd_, buffer_.get(), BLOCK_SIZE);
-        if (res == -1) {
-          // TODO(mmucklo): maybe track chunk index for logging purposes, and log chunk?
-          LOG(FATAL) << "Error writing chunk of Cord to file, errno: " << errno << ": " << strerror(errno) << ", filename: " << filename_;
-        }
-        // TODO(mmucklo): potentially track total bytes written?
-        buffer_size_ = 0;
+        WriteBuffer();
       }
     }
   }
@@ -96,17 +89,25 @@ void FileWriter::Write(const absl::Cord& msg)
   CHECK_LT(buffer_size_, BLOCK_SIZE);
 }
 
+void FileWriter::WriteBuffer() {
+  if (buffer_size_ == 0) {
+    return;
+  }
+
+  ssize_t res = write(fd_, buffer_.get(), buffer_size_);
+  if (res == -1) {
+    LOG(FATAL) << "Error writing chunk of Cord to file, errno: " << errno << ": " << strerror(errno) << ", filename: " << filename_;
+  }
+  bytes_written_ += res;
+  if (res < buffer_size_) {
+    LOG(FATAL) << "Error writing chunk of Cord to file, size written: " << res << ", size expected: " << buffer_size_;
+  }
+  buffer_size_ = 0;
+}
+
 void FileWriter::Flush()
 {
-  LOG(INFO) << "Flush called." << std::endl;
-  // TODO(mmucklo): potentially track total bytes written?
-  if (buffer_size_ > 0) {
-    int res = write(fd_, buffer_.get(), buffer_size_);
-    if (res == -1) {
-      LOG(FATAL) << "Error writing rest of buffer to file, errno: " << errno << ": " << strerror(errno) << ", filename: " << filename_;
-    }
-    buffer_size_ = 0;
-  }
+  WriteBuffer();
 
   // On some systems fsync() is better - this is assuming a modern linux kernel where fdatasync works as intended.
   // TODO(mmucklo): check kernel version - maybe make a #define / compiler flag or a passable cli flag.
