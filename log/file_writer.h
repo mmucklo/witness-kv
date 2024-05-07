@@ -24,7 +24,6 @@
 class FileWriter
 {
  public:
- public:
   FileWriter( std::string filename );
   FileWriter() = delete;
   FileWriter( const FileWriter& ) = delete;
@@ -38,7 +37,6 @@ class FileWriter
 
   // Writes the cord out, may buffer.
   void Write( const absl::Cord& msg );
-  void Write( const absl::Cord& msg );
 
   // Flushes all buffers to disk.
   void Flush();
@@ -46,13 +44,10 @@ class FileWriter
   ssize_t bytes_written() { return bytes_written_; }
 
  private:
- private:
   void WriteBuffer();
 
   int fd_;
   std::string filename_;
-  std::unique_ptr<char[]> buffer_;  // A buffer for contents we will output.
-  int buffer_size_;                 // The current filled size of the buffer.
   std::unique_ptr<char[]> buffer_;  // A buffer for contents we will output.
   int buffer_size_;                 // The current filled size of the buffer.
   ssize_t bytes_written_;
