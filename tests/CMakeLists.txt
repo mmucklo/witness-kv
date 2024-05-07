@@ -1,4 +1,10 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.10)
+
+add_library(test_main test_main.cc)
+target_link_libraries(test_main PUBLIC
+    gtest
+    absl::flags
+)
 
 set(This witnesskvTest)
 
