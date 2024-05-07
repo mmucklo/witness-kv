@@ -101,7 +101,6 @@ TEST( FileWriterTest, LargMultiCord )
   ASSERT_TRUE( std::filesystem::remove( std::filesystem::path( filename ) ) );
 }
 
-
 TEST( FlagTest, Smoke )
 {
     LOG(INFO) << "file_writer_test_flag: " << absl::GetFlag(FLAGS_file_writer_test_flag);
