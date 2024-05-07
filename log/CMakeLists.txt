@@ -35,10 +35,12 @@ target_link_libraries(log_writer PUBLIC
 )
 
 target_link_libraries(${FileWriterTest} PUBLIC
+    test_main
     absl::core_headers
+    absl::flags
     absl::log
     absl::strings
-    gtest_main
+    gtest
     kvsproto
 )
 
