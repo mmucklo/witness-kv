@@ -16,8 +16,8 @@ class AcceptorImpl final : public Acceptor::Service
 {
 private:
   uint64_t m_minProposal;
-  std::vector<std::optional<uint64_t>> m_acceptedProposal{1024};
-  std::vector<std::optional<std::string>> m_acceptedValue{1024};
+  std::map<uint64_t, std::optional<uint64_t>> m_acceptedProposal;
+  std::map<uint64_t, std::optional<std::string>> m_acceptedValue;
   // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex m_mutex;
 
@@ -39,7 +39,10 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
     m_minProposal = n;
   }
 
-  bool hasValue = m_acceptedValue[request->index_number()].has_value();
+  bool hasValue = false;
+  if ( m_acceptedValue.find( request->index_number() ) != m_acceptedValue.end()) {
+      hasValue = m_acceptedValue[request->index_number()].has_value(); 
+  }
 
   response->set_has_accepted_value( hasValue );
 
