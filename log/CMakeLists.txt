@@ -1,4 +1,3 @@
-
 add_library(file_writer file_writer.cc)
 add_library(log_writer log_writer.cc)
 
