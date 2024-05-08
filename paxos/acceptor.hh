@@ -1,17 +1,17 @@
-#ifndef __acceptor_hh__
-#define __acceptor_hh__
+#ifndef ACCEPTOR_HH_
+#define ACCEPTOR_HH_
 
 #include "common.hh"
 
 class AcceptorService
 {
-private:
+ private:
   // std::unique_ptr<AcceptorImpl> m_acceptorImpl;
-  std::jthread m_serviceThread;
-  std::stop_source m_stopSource = {};
+  std::jthread service_thread_;
+  std::stop_source stop_source_ = {};
 
-public:
+ public:
   AcceptorService( const std::string& address );
   ~AcceptorService();
 };
-#endif // __acceptor_hh__
+#endif // ACCEPTOR_HH_

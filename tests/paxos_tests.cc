@@ -35,5 +35,5 @@ TEST( PaxosSanity, ConfigFileParseTest )
   }
 
   temp_file.close();
-  remove( filename );
+  ASSERT_EQ(remove( filename ), 0);
 }

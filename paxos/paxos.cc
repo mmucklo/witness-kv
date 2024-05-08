@@ -21,17 +21,17 @@ static void validateUniqueNodes( const std::vector<Node>& nodes );
 // Paxos Impl class
 class PaxosImpl
 {
-public:
-  std::vector<Node> m_Nodes;
-  std::unique_ptr<Proposer> m_proposer;
-  std::unique_ptr<AcceptorService> m_acceptor;
+ public:
+  std::vector<Node> nodes_;
+  std::unique_ptr<Proposer> proposer_;
+  std::unique_ptr<AcceptorService> acceptor_;
 
-  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
+  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
 
   // get nodeId for now as a quick proto type
-  uint8_t m_nodeId;
+  uint8_t node_id_;
 
-public:
+ public:
   PaxosImpl() = delete;
   PaxosImpl( const std::string& configFileName, uint8_t nodeId );
   ~PaxosImpl() = default;
@@ -39,19 +39,19 @@ public:
 
 PaxosImpl::PaxosImpl( const std::string& configFileName, uint8_t nodeId )
 {
-  m_Nodes = parseNodesConfig( configFileName );
-  validateUniqueNodes( m_Nodes );
+  nodes_ = parseNodesConfig( configFileName );
+  validateUniqueNodes( nodes_ );
 
-  m_nodeId = nodeId;
+  node_id_ = nodeId;
 
-  m_proposer = std::make_unique<Proposer>( m_Nodes.size(), nodeId );
+  proposer_ = std::make_unique<Proposer>( nodes_.size(), nodeId );
 
-  m_acceptor = std::make_unique<AcceptorService>( m_Nodes[nodeId].getAddressPortStr() );
+  acceptor_ = std::make_unique<AcceptorService>( nodes_[nodeId].getAddressPortStr() );
 
-  m_acceptorStubs.resize( m_Nodes.size() );
+  acceptor_stubs_.resize( nodes_.size() );
 
-  for ( size_t i = 0; i < m_Nodes.size();  ) {
-    auto channel = grpc::CreateChannel( m_Nodes[i].getAddressPortStr(), grpc::InsecureChannelCredentials() );
+  for ( size_t i = 0; i < nodes_.size();  ) {
+    auto channel = grpc::CreateChannel( nodes_[i].getAddressPortStr(), grpc::InsecureChannelCredentials() );
     auto lStub = paxos::Acceptor::NewStub( channel );
     grpc::ClientContext context;
     google::protobuf::Empty request;
@@ -60,24 +60,24 @@ PaxosImpl::PaxosImpl( const std::string& configFileName, uint8_t nodeId )
     if (!lStub->SendPing(&context, request, &response).ok()) {
       continue;
     }
-    m_acceptorStubs[i] = std::move(lStub);
+    acceptor_stubs_[i] = std::move(lStub);
     i++;
   }
 }
 
 Paxos::Paxos( const std::string& configFileName, uint8_t nodeId )
 {
-  m_paxosImpl = new PaxosImpl( configFileName, nodeId );
+  paxos_impl_ = new PaxosImpl( configFileName, nodeId );
 }
 
 Paxos::~Paxos()
 {
-  delete m_paxosImpl;
+  delete paxos_impl_;
 }
 
 void Paxos::Replicate( const std::string& value )
 {
-  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
+  paxos_impl_->proposer_->Propose( this->paxos_impl_->acceptor_stubs_, value );
 }
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName )

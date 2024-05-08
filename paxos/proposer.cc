@@ -30,7 +30,7 @@ Start:
     }
   }
 
-  if ( majorityCount >= m_majorityThreshold ) {
+  if ( majorityCount >= majority_threshold_ ) {
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
     accept_request.set_value( maxProposalValue );
@@ -44,8 +44,8 @@ Start:
         continue;
       } 
       uint64_t roundNumber = accept_response.min_proposal() >> 8;
-      if (roundNumber > m_roundNumber) {
-        m_roundNumber = roundNumber;
+      if (roundNumber > round_number_) {
+        round_number_ = roundNumber;
         // FIXME: [V] This is ugly. Need to make this readable.
         goto Start;
       }

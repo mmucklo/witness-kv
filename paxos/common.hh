@@ -1,5 +1,5 @@
-#ifndef __common_hh__
-#define __common_hh__
+#ifndef COMMON_HH_
+#define COMMON_HH_
 
 #include <iostream>
 #include <map>
@@ -12,4 +12,4 @@
 #include <vector>
 #include <semaphore>
 
-#endif //__common_hh__
+#endif //COMMON_HH_
