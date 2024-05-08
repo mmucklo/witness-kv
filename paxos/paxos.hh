@@ -1,5 +1,5 @@
-#ifndef PAXOS_HH_
-#define PAXOS_HH_
+#ifndef __paxos_hh__
+#define __paxos_hh__
 
 #include "common.hh"
 
@@ -16,16 +16,16 @@ struct Node
 
 class Paxos
 {
- private:
-  PaxosImpl *paxos_impl_;
+private:
+  PaxosImpl* m_paxosImpl;
 
- public:
+public:
   Paxos( const std::string& configFileName, uint8_t nodeId );
   ~Paxos();
 
-  void Replicate( const std::string& value );
+  void Replicate( const std::string& value, const uint64_t& index  );
 };
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName );
 
-#endif // PAXOS_HH_
+#endif // __paxos_hh__

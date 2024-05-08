@@ -1,11 +1,12 @@
 #include "proposer.hh"
 
 
-void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value )
+void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value, const uint64_t index )
 {
 Start:
   paxos::PrepareRequest request;
   request.set_proposal_number( getNextProposalNumber() );
+  request.set_index_number( index );
 
   uint64_t maxProposalId = 0;
   std::string maxProposalValue = "";
@@ -30,9 +31,10 @@ Start:
     }
   }
 
-  if ( majorityCount >= majority_threshold_ ) {
+  if ( majorityCount >= m_majorityThreshold ) {
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
+    accept_request.set_index_number( request.index_number() );
     accept_request.set_value( maxProposalValue );
 
     for ( size_t i = 0; i < stubs.size(); i++ ) {
@@ -43,16 +45,15 @@ Start:
         std::cerr << "Accept GRPC Failed\n";
         continue;
       } 
-      uint64_t roundNumber = accept_response.min_proposal() >> 8;
-      if (roundNumber > round_number_) {
-        round_number_ = roundNumber;
-        // FIXME: [V] This is ugly. Need to make this readable.
-        goto Start;
-      }
       else {
-        std::cout << "Accepted Proposal number: " << accept_response.min_proposal() << ", accepted value: " << maxProposalValue
+        std::cout << "Accepted Proposal number: " << accept_response.min_proposal() << ", accepted value: " << maxProposalValue << ", at index: " << request.index_number()
                 << "\n";
       }
     }
+  }
+  else
+  {
+      // FIXME: modularize it later
+      goto Start;
   }
 }

@@ -1,5 +1,5 @@
-#ifndef PROPOSER_HH_
-#define PROPOSER_HH_
+#ifndef __proposer_hh__
+#define __proposer_hh__
 
 #include "common.hh"
 
@@ -12,28 +12,27 @@
 
 class Proposer
 {
- private:
+private:
   // Round number should be stored to disk.
-  uint64_t round_number_;
-  uint8_t node_id_;
-  int majority_threshold_;
+  uint64_t m_roundNumber;
+  uint8_t m_nodeId;
+  int m_majorityThreshold;
 
   uint64_t getNextProposalNumber() {
-    uint64_t propNum = ((++round_number_) << 8) | (uint64_t)node_id_;
+    uint64_t propNum = ((++m_roundNumber) << 8) | (uint64_t)m_nodeId;
     std::cout << "From Proposer prop number " << propNum << "\n";
     return propNum;
   }
 
- public:
-  Proposer( int num_acceptors , uint8_t nodeId) : majority_threshold_ { num_acceptors / 2 + 1 },
-                                                  round_number_ { 0 },
-                                                  node_id_ { nodeId }
+public:
+  Proposer( int num_acceptors , uint8_t nodeId) : m_majorityThreshold { num_acceptors / 2 + 1 },
+                                                  m_roundNumber { 0 },
+                                                  m_nodeId { nodeId }
   { 
   }
   ~Proposer() = default;
 
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
-                const std::string& value );
+                const std::string& value, const uint64_t index );
 };
-
-#endif // PROPOSER_HH_
+#endif // __proposer_hh__
