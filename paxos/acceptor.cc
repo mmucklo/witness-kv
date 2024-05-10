@@ -46,10 +46,6 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
   if ( hasValue ) {
     response->set_accepted_proposal( accepted_proposal_.value() );
     response->set_accepted_value( accepted_value_.value() );
-  } else {
-    // FIXME: Is this else block needed ?
-    response->set_accepted_proposal( 0 );
-    response->set_accepted_value( "" );
   }
 
   return Status::OK;
@@ -63,7 +59,7 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   if ( n >= min_proposal_ ) {
     accepted_proposal_ = n;
     min_proposal_ = n;
-    accepted_value_ = std::move( request->value() );
+    accepted_value_ = request->value();
   }
   response->set_min_proposal( min_proposal_ );
   return Status::OK;

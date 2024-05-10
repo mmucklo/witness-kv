@@ -16,18 +16,18 @@ class Proposer
   // Round number should be stored to disk.
   uint64_t round_number_;
   uint8_t node_id_;
-  int majority_threshold_;
+  uint32_t quorum_;
 
-  uint64_t getNextProposalNumber() {
+  uint64_t GetNextProposalNumber() {
     uint64_t propNum = ((++round_number_) << 8) | (uint64_t)node_id_;
     std::cout << "From Proposer prop number " << propNum << "\n";
     return propNum;
   }
 
  public:
-  Proposer( int num_acceptors , uint8_t nodeId) : majority_threshold_ { num_acceptors / 2 + 1 },
-                                                  round_number_ { 0 },
-                                                  node_id_ { nodeId }
+  Proposer( uint8_t num_acceptors , uint8_t nodeId) : quorum_ { num_acceptors / 2u + 1u },
+                                                      round_number_ { 0 },
+                                                      node_id_ { nodeId }
   { 
   }
   ~Proposer() = default;
