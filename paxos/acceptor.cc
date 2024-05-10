@@ -89,6 +89,7 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
   while ( !stoken.stop_requested() ) {
     std::this_thread::sleep_for( 300ms );
   }
+  LOG(INFO) << "Shutting down acceptor service.";
 }
 
 AcceptorService::AcceptorService( const std::string& address )

@@ -6,7 +6,6 @@
 class AcceptorService
 {
  private:
-  // std::unique_ptr<AcceptorImpl> m_acceptorImpl;
   std::jthread service_thread_;
   std::stop_source stop_source_ = {};
 

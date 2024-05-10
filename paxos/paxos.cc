@@ -1,11 +1,5 @@
 #include "paxos.hh"
 
-#include <fstream>
-#include <memory>
-#include <semaphore>
-#include <set>
-#include <sstream>
-
 #include "acceptor.hh"
 #include "proposer.hh"
 
@@ -15,8 +9,6 @@
 // GRPC headers
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
-
-static void validateUniqueNodes( const std::vector<Node>& nodes );
 
 // Paxos Impl class
 class PaxosImpl
@@ -33,41 +25,48 @@ class PaxosImpl
 
  public:
   PaxosImpl() = delete;
-  PaxosImpl( const std::string& configFileName, uint8_t nodeId );
+  PaxosImpl( const std::string& config_file_name, uint8_t node_id );
   ~PaxosImpl() = default;
 };
 
-PaxosImpl::PaxosImpl( const std::string& configFileName, uint8_t nodeId )
+PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
 {
-  nodes_ = parseNodesConfig( configFileName );
-  validateUniqueNodes( nodes_ );
+  nodes_ = ParseNodesConfig( config_file_name );
 
-  node_id_ = nodeId;
+  std::set<std::pair<std::string, int>> s;
+  for ( const auto& node : nodes_ ) {
+    CHECK(s.insert( { node.ip_address_, node.port } ).second) <<
+      "Invalid config file : Duplicate IP address and port found";
+  }
 
-  proposer_ = std::make_unique<Proposer>( nodes_.size(), nodeId );
+  node_id_ = node_id;
 
-  acceptor_ = std::make_unique<AcceptorService>( nodes_[nodeId].getAddressPortStr() );
+  proposer_ = std::make_unique<Proposer>( nodes_.size(), node_id );
+  CHECK_NE(proposer_, nullptr);
+  acceptor_ = std::make_unique<AcceptorService>( nodes_[node_id].GetAddressPortStr() );
+  CHECK_NE(acceptor_, nullptr);
 
   acceptor_stubs_.resize( nodes_.size() );
 
   for ( size_t i = 0; i < nodes_.size();  ) {
-    auto channel = grpc::CreateChannel( nodes_[i].getAddressPortStr(), grpc::InsecureChannelCredentials() );
-    auto lStub = paxos::Acceptor::NewStub( channel );
+    auto channel = grpc::CreateChannel( nodes_[i].GetAddressPortStr(), grpc::InsecureChannelCredentials() );
+    auto stub = paxos::Acceptor::NewStub( channel );
     grpc::ClientContext context;
     google::protobuf::Empty request;
     google::protobuf::Empty response;
 
-    if (!lStub->SendPing(&context, request, &response).ok()) {
+    if (!stub->SendPing(&context, request, &response).ok()) {
       continue;
     }
-    acceptor_stubs_[i] = std::move(lStub);
+    acceptor_stubs_[i] = std::move(stub);
+    LOG(INFO) << "Established connection with node: " << i;
     i++;
   }
 }
 
-Paxos::Paxos( const std::string& configFileName, uint8_t nodeId )
+Paxos::Paxos( const std::string& config_file_name, uint8_t node_id )
 {
-  paxos_impl_ = new PaxosImpl( configFileName, nodeId );
+  paxos_impl_ = new PaxosImpl( config_file_name, node_id );
 }
 
 Paxos::~Paxos()
@@ -75,46 +74,35 @@ Paxos::~Paxos()
   delete paxos_impl_;
 }
 
-void Paxos::Replicate( const std::string& value )
+void Paxos::Propose( const std::string& value )
 {
+  CHECK_NE(paxos_impl_->proposer_, nullptr) << "Proposer should not be NULL.";
   paxos_impl_->proposer_->Propose( this->paxos_impl_->acceptor_stubs_, value );
 }
 
-std::vector<Node> parseNodesConfig( const std::string& configFileName )
+std::vector<Node> ParseNodesConfig( const std::string& config_file_name )
 {
   std::vector<Node> nodes {};
-  std::ifstream configFile( configFileName );
+  std::ifstream config_file( config_file_name );
 
-  if ( !configFile.is_open() ) {
-    throw std::runtime_error( "Failed to open nodes configuration file" );
-  }
+  CHECK( config_file.is_open() ) << "Failed to open nodes configuration file";
 
   std::string line;
-  while ( std::getline( configFile, line ) ) {
+  while ( std::getline( config_file, line ) ) {
     std::stringstream ss( line );
-    std::string ipAddress, portStr;
+    std::string ip_address, port_str;
     int port;
-    if ( std::getline( ss, ipAddress, ':' ) && std::getline( ss, portStr ) ) {
+    if ( std::getline( ss, ip_address, ':' ) && std::getline( ss, port_str ) ) {
       try {
-        port = std::stoi( portStr );
+        port = std::stoi( port_str );
       } catch ( const std::invalid_argument& e ) {
         throw std::runtime_error( "Invalid port number in config file" );
       }
-      nodes.push_back( { ipAddress, port } );
+      nodes.push_back( { ip_address, port } );
     }
   }
 
-  configFile.close();
+  config_file.close();
 
   return nodes;
-}
-
-static void validateUniqueNodes( const std::vector<Node>& nodes )
-{
-  std::set<std::pair<std::string, int>> s;
-  for ( const auto& node : nodes ) {
-    if ( !s.insert( { node.ipAddress, node.port } ).second ) {
-      throw std::runtime_error( "Invalid config file : Duplicate IP address and port found in configuration\n" );
-    }
-  }
 }
