@@ -87,7 +87,6 @@ void PaxosImpl::HeartbeatThread(const std::stop_source& stop_source)
   std::stop_token stoken = stop_source.get_token();
 
   while ( !stoken.stop_requested() ) {
-
     std::this_thread::sleep_for( this->hb_timer_ );
 
     for (size_t i = 0; i < acceptor_stubs_.size(); i++) {
@@ -115,6 +114,8 @@ void PaxosImpl::HeartbeatThread(const std::stop_source& stop_source)
       }
     }
   }
+
+  LOG(INFO) << "Shutting down heartbeat thread.";
 }
 
 void PaxosImpl::CreateHeartbeatThread(void)

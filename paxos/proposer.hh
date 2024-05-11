@@ -14,19 +14,25 @@ class Proposer
 {
  private:
   // Round number should be stored to disk.
-  uint64_t round_number_;
+  //uint64_t round_number_;
+  uint64_t proposal_number_;
   uint8_t node_id_;
   uint32_t quorum_;
 
+  static constexpr uint8_t num_bits_for_node_id_ = 3; 
+  static constexpr uint64_t mask_ = ~((1ull << num_bits_for_node_id_) - 1);
+
   uint64_t GetNextProposalNumber() {
-    uint64_t propNum = ((++round_number_) << 8) | (uint64_t)node_id_;
-    std::cout << "From Proposer prop number " << propNum << "\n";
-    return propNum;
+    proposal_number_ =
+      ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) | (uint64_t)node_id_;
+    LOG(INFO) << "Generated proposal number: " << proposal_number_;
+    return proposal_number_;
   }
 
  public:
   Proposer( uint8_t num_acceptors , uint8_t nodeId) : quorum_ { num_acceptors / 2u + 1u },
-                                                      round_number_ { 0 },
+                                                      //round_number_ { 0 },
+                                                      proposal_number_ { 0 },
                                                       node_id_ { nodeId }
   { 
   }

@@ -18,7 +18,6 @@ class AcceptorImpl final : public Acceptor::Service
   uint64_t min_proposal_;
   std::optional<uint64_t> accepted_proposal_;
   std::optional<std::string> accepted_value_;
-  // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex mutex_;
 
  public:
@@ -40,8 +39,8 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
   }
 
   bool hasValue = accepted_value_.has_value();
-
   response->set_has_accepted_value( hasValue );
+  response->set_min_proposal( min_proposal_ );
 
   if ( hasValue ) {
     response->set_accepted_proposal( accepted_proposal_.value() );

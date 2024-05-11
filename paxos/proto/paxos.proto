@@ -18,6 +18,7 @@ message PrepareResponse {
     bool has_accepted_value = 1;
     uint64 accepted_proposal = 2;
     string accepted_value = 3;
+    uint64 min_proposal = 4;
 }
 
 message AcceptRequest {
