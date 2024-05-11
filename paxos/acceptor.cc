@@ -98,5 +98,7 @@ AcceptorService::~AcceptorService()
   if ( stop_source_.stop_possible() ) {
     stop_source_.request_stop();
   }
-  service_thread_.join();
+  if (service_thread_.joinable()) {
+    service_thread_.join();
+  }
 }
