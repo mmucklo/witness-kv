@@ -13,8 +13,7 @@
 class Proposer
 {
  private:
-  // Round number should be stored to disk.
-  //uint64_t round_number_;
+  // Proposal number should be stored to disk.
   uint64_t proposal_number_;
   uint8_t node_id_;
   uint32_t quorum_;
@@ -30,10 +29,9 @@ class Proposer
   }
 
  public:
-  Proposer( uint8_t num_acceptors , uint8_t nodeId) : quorum_ { num_acceptors / 2u + 1u },
-                                                      //round_number_ { 0 },
+  Proposer( uint8_t num_acceptors , uint8_t node_id) : quorum_ { num_acceptors / 2u + 1u },
                                                       proposal_number_ { 0 },
-                                                      node_id_ { nodeId }
+                                                      node_id_ { node_id }
   { 
   }
   ~Proposer() = default;
