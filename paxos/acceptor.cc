@@ -13,14 +13,14 @@ using paxos::PrepareResponse;
 
 class AcceptorImpl final : public Acceptor::Service
 {
-private:
+ private:
   std::map<uint64_t, uint64_t> min_proposal_;
   std::map<uint64_t, std::optional<uint64_t>> accepted_proposal_;
   std::map<uint64_t, std::optional<std::string>> accepted_value_;
   // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex mutex_;
 
-public:
+ public:
   AcceptorImpl() : mutex_ {} {}
   ~AcceptorImpl() = default;
 
@@ -95,13 +95,13 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
 
 AcceptorService::AcceptorService( const std::string& address )
 {
-  service_thread = std::jthread( RunServer, address, stop_source );
+  service_thread_ = std::jthread( RunServer, address, stop_source_ );
 }
 
 AcceptorService::~AcceptorService()
 {
-  if ( stop_source.stop_possible() ) {
-    stop_source.request_stop();
+  if ( stop_source_.stop_possible() ) {
+    stop_source_.request_stop();
   }
-  service_thread.join();
+  service_thread_.join();
 }

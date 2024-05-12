@@ -18,13 +18,10 @@
 
 static void validateUniqueNodes( const std::vector<Node>& nodes );
 
-using grpc::ServerContext;
-using grpc::Status;
-
 // Paxos Impl class
 class PaxosImpl
 {
-public:
+ public:
   std::vector<Node> nodes_;
   std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
@@ -34,7 +31,7 @@ public:
   // get nodeId for now as a quick proto type
   uint8_t node_id_;
 
-public:
+ public:
   PaxosImpl() = delete;
   PaxosImpl( const std::string& configFileName, uint8_t nodeId );
   ~PaxosImpl() = default;
@@ -78,7 +75,7 @@ Paxos::~Paxos()
   delete paxos_impl_;
 }
 
-void Paxos::Replicate( const std::string& value ) 
+void Paxos::Replicate( const std::string& value )
 {
   paxos_impl_->proposer_->Propose( this->paxos_impl_->acceptor_stubs_, value );
 }
@@ -100,7 +97,7 @@ std::vector<Node> parseNodesConfig( const std::string& configFileName )
   std::ifstream configFile( configFileName );
 
   if ( !configFile.is_open() ) {
-    throw std::runtime_error( "Failed to open nodes configuration file");
+    throw std::runtime_error( "Failed to open nodes configuration file ");
   }
 
   std::string line;
