@@ -23,6 +23,7 @@ class PaxosImpl
   mutable std::shared_mutex stubs_mutex_;
 
   uint8_t node_id_;
+  uint8_t leader_node_id_;
 
   std::jthread heartbeat_thread_;
   std::stop_source stop_source_ = {};
@@ -46,7 +47,9 @@ class PaxosImpl
 };
 
 PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
-  : num_active_acceptors_conns_{0}
+  : num_active_acceptors_conns_{ 0 },
+    node_id_{ node_id },
+    leader_node_id_{ std::numeric_limits<uint8_t>::max() }
 {
   nodes_ = ParseNodesConfig( config_file_name );
 
@@ -56,11 +59,9 @@ PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
       "Invalid config file : Duplicate IP address and port found";
   }
 
-  node_id_ = node_id;
-
   proposer_ = std::make_unique<Proposer>( nodes_.size(), node_id );
   CHECK_NE(proposer_, nullptr);
-  acceptor_ = std::make_unique<AcceptorService>( nodes_[node_id].GetAddressPortStr() );
+  acceptor_ = std::make_unique<AcceptorService>( nodes_[node_id].GetAddressPortStr(), node_id );
   CHECK_NE(acceptor_, nullptr);
 
   acceptor_stubs_.resize( nodes_.size() );
@@ -95,14 +96,15 @@ void PaxosImpl::HeartbeatThread(const std::stop_source& stop_source)
   std::stop_token stoken = stop_source.get_token();
 
   while ( !stoken.stop_requested() ) {
-    std::this_thread::sleep_for( this->hb_timer_ );
-
+    uint8_t highest_node_id = 0;
     for (size_t i = 0; i < acceptor_stubs_.size(); i++) {
-      google::protobuf::Empty request;
-      google::protobuf::Empty response;
+      paxos::PingRequest request;
+      paxos::PingResponse response;
       grpc::ClientContext context;
+      grpc::Status status;
       if (acceptor_stubs_[i]) {
-        if (!acceptor_stubs_[i]->SendPing(&context, request, &response).ok()) {
+        status = acceptor_stubs_[i]->SendPing(&context, request, &response);
+        if (!status.ok()) {
           LOG(WARNING) << "Connection lost with node: " << i;
           std::unique_lock lock(stubs_mutex_);
           acceptor_stubs_[i].reset();
@@ -115,15 +117,26 @@ void PaxosImpl::HeartbeatThread(const std::stop_source& stop_source)
          grpc::CreateChannel( nodes_[i].GetAddressPortStr(),
                               grpc::InsecureChannelCredentials() );
         auto stub = paxos::Acceptor::NewStub( channel );
-
-        if (stub->SendPing(&context, request, &response).ok()) {
+        status = stub->SendPing(&context, request, &response);
+        if (status.ok()) {
           LOG(INFO) << "Connection established with node: " << i;
           std::unique_lock lock(stubs_mutex_);
           acceptor_stubs_[i] = std::move(stub);
           num_active_acceptors_conns_++;
         }
       }
+
+      if (status.ok()) {
+        highest_node_id = std::max(highest_node_id, static_cast<uint8_t>(response.node_id()));
+      }
     }
+
+    if (leader_node_id_ != highest_node_id) {
+      LOG(INFO) << "New leader elected with node id: " << static_cast<uint32_t>(highest_node_id);
+      leader_node_id_ = highest_node_id;
+    }
+
+    std::this_thread::sleep_for( this->hb_timer_ );
   }
 
   LOG(INFO) << "Shutting down heartbeat thread.";

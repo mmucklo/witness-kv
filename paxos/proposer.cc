@@ -59,7 +59,6 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
                          << " and error message: " << status.error_message();
             continue;
           }
-          uint64_t round_number = accept_response.min_proposal() >> 8;
           if (accept_response.min_proposal() > proposal_number_) {
             proposal_number_ = accept_response.min_proposal();
             CHECK_LT(num_accepts, quorum_) << "It should be possible for a quorum of aceepts for a lower numbered proposal.";

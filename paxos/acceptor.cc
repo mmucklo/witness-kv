@@ -11,6 +11,8 @@ using paxos::AcceptRequest;
 using paxos::AcceptResponse;
 using paxos::PrepareRequest;
 using paxos::PrepareResponse;
+using paxos::PingRequest;
+using paxos::PingResponse;
 
 class AcceptorImpl final : public Acceptor::Service
 {
@@ -20,13 +22,16 @@ class AcceptorImpl final : public Acceptor::Service
   std::optional<std::string> accepted_value_;
   std::mutex mutex_;
 
+  uint8_t node_id_;
+
  public:
-  AcceptorImpl() : min_proposal_ { 0 }, mutex_ {} {}
+  AcceptorImpl(uint8_t node_id) 
+    : min_proposal_ { 0 }, mutex_ {}, node_id_{node_id} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
   Status Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response ) override;
-  Status SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) override;
+  Status SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) override;
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
@@ -65,15 +70,16 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
 }
 
 Status 
-AcceptorImpl::SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) {
+AcceptorImpl::SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) {
+  response->set_node_id(node_id_);
   return Status::OK;
 }
 
-void RunServer( const std::string& address, const std::stop_source& stop_source )
+void RunServer( const std::string& address, uint8_t node_id, const std::stop_source& stop_source )
 {
   using namespace std::chrono_literals;
 
-  AcceptorImpl service;
+  AcceptorImpl service{node_id};
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
   builder.RegisterService( &service );
@@ -87,9 +93,10 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
   LOG(INFO) << "Shutting down acceptor service.";
 }
 
-AcceptorService::AcceptorService( const std::string& address )
+AcceptorService::AcceptorService( const std::string& address, uint8_t node_id )
+  : node_id_{node_id}
 {
-  service_thread_ = std::jthread( RunServer, address, stop_source_ );
+  service_thread_ = std::jthread( RunServer, address, node_id, stop_source_ );
 }
 
 AcceptorService::~AcceptorService()
