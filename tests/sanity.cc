@@ -32,7 +32,7 @@ struct SanityTests
         }
 
         // Probably not needed, but wait a bit just to be safe.
-        std::this_thread::sleep_for( std::chrono::milliseconds( 200 ) );
+        std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
     }
 
     virtual void TearDown() override {

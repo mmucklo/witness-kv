@@ -1,5 +1,5 @@
-#ifndef __paxos_hh__
-#define __paxos_hh__
+#ifndef PAXOS_HH_
+#define PAXOS_HH_
 
 #include "common.hh"
 
@@ -7,25 +7,25 @@ class PaxosImpl;
 
 struct Node
 {
-  std::string ipAddress;
+  std::string ip_address_;
   int port;
-  std::string getAddressPortStr() {
-    return this->ipAddress + ":" + std::to_string( this->port );
+  std::string GetAddressPortStr() {
+    return this->ip_address_ + ":" + std::to_string( this->port );
   }
 };
 
 class Paxos
 {
-private:
-  PaxosImpl* m_paxosImpl;
+ private:
+  PaxosImpl *paxos_impl_;
 
-public:
-  Paxos( const std::string& configFileName, uint8_t nodeId );
+ public:
+  Paxos( const std::string& config_file_name, uint8_t node_id );
   ~Paxos();
 
-  void Replicate( const std::string& value );
+  void Propose( const std::string& value );
 };
 
-std::vector<Node> parseNodesConfig( const std::string& configFileName );
+std::vector<Node> ParseNodesConfig( const std::string& config_file_name );
 
-#endif // __paxos_hh__
+#endif // PAXOS_HH_

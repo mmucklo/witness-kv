@@ -1,5 +1,5 @@
-#ifndef __common_hh__
-#define __common_hh__
+#ifndef COMMON_HH_
+#define COMMON_HH_
 
 #include <iostream>
 #include <map>
@@ -11,5 +11,14 @@
 #include <thread>
 #include <vector>
 #include <semaphore>
+#include <fstream>
+#include <set>
+#include <sstream>
+#include <functional>
+#include <shared_mutex>
+#include <chrono>
 
-#endif //__common_hh__
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+
+#endif //COMMON_HH_

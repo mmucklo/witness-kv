@@ -1,18 +1,3 @@
-// Protobuf headers
-/*#include "kvs.grpc.pb.h"
-#include "kvs.pb.h"
-
-// GRPC headers
-#include <grpc/grpc.h>
-#include <grpcpp/create_channel.h>
-
-// std headers
-#include <iostream>
-#include <memory>
-
-#include <sys/wait.h>
-#include <unistd.h>*/
-
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -39,7 +24,7 @@ int main( int argc, char* argv[] )
       break;
     }
 
-    p.Replicate( input );
+    p.Propose( input );
   }
 
   return 0;

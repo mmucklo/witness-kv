@@ -11,45 +11,45 @@ using paxos::AcceptRequest;
 using paxos::AcceptResponse;
 using paxos::PrepareRequest;
 using paxos::PrepareResponse;
+using paxos::PingRequest;
+using paxos::PingResponse;
 
 class AcceptorImpl final : public Acceptor::Service
 {
-private:
-  uint64_t m_minProposal;
-  std::optional<uint64_t> m_acceptedProposal;
-  std::optional<std::string> m_acceptedValue;
-  // TODO: FIXME - For now we can use a terminal mutex.
-  std::mutex m_mutex;
+ private:
+  uint64_t min_proposal_;
+  std::optional<uint64_t> accepted_proposal_;
+  std::optional<std::string> accepted_value_;
+  std::mutex mutex_;
 
-public:
-  AcceptorImpl() : m_minProposal { 0 }, m_mutex {} {}
+  uint8_t node_id_;
+
+ public:
+  AcceptorImpl(uint8_t node_id) 
+    : min_proposal_ { 0 }, mutex_ {}, node_id_{node_id} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
   Status Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response ) override;
-  Status SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) override;
+  Status SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) override;
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
 {
-  std::lock_guard<std::mutex> guard( m_mutex );
+  std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n > m_minProposal ) {
-    m_minProposal = n;
+  if ( n > min_proposal_ ) {
+    min_proposal_ = n;
   }
 
-  bool hasValue = m_acceptedValue.has_value();
-
+  bool hasValue = accepted_value_.has_value();
   response->set_has_accepted_value( hasValue );
+  response->set_min_proposal( min_proposal_ );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( m_acceptedProposal.value() );
-    response->set_accepted_value( m_acceptedValue.value() );
-  } else {
-    // FIXME: Is this else block needed ?
-    response->set_accepted_proposal( 0 );
-    response->set_accepted_value( "" );
+    response->set_accepted_proposal( accepted_proposal_.value() );
+    response->set_accepted_value( accepted_value_.value() );
   }
 
   return Status::OK;
@@ -57,28 +57,29 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
 
 Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response )
 {
-  std::lock_guard<std::mutex> guard( m_mutex );
+  std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n >= m_minProposal ) {
-    m_acceptedProposal = n;
-    m_minProposal = n;
-    m_acceptedValue = std::move( request->value() );
+  if ( n >= min_proposal_ ) {
+    accepted_proposal_ = n;
+    min_proposal_ = n;
+    accepted_value_ = request->value();
   }
-  response->set_min_proposal( m_minProposal );
+  response->set_min_proposal( min_proposal_ );
   return Status::OK;
 }
 
 Status 
-AcceptorImpl::SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) {
+AcceptorImpl::SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) {
+  response->set_node_id(node_id_);
   return Status::OK;
 }
 
-void RunServer( const std::string& address, const std::stop_source& stop_source )
+void RunServer( const std::string& address, uint8_t node_id, const std::stop_source& stop_source )
 {
   using namespace std::chrono_literals;
 
-  AcceptorImpl service;
+  AcceptorImpl service{node_id};
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
   builder.RegisterService( &service );
@@ -89,17 +90,21 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
   while ( !stoken.stop_requested() ) {
     std::this_thread::sleep_for( 300ms );
   }
+  LOG(INFO) << "Shutting down acceptor service.";
 }
 
-AcceptorService::AcceptorService( const std::string& address )
+AcceptorService::AcceptorService( const std::string& address, uint8_t node_id )
+  : node_id_{node_id}
 {
-  m_serviceThread = std::jthread( RunServer, address, m_stopSource );
+  service_thread_ = std::jthread( RunServer, address, node_id, stop_source_ );
 }
 
 AcceptorService::~AcceptorService()
 {
-  if ( m_stopSource.stop_possible() ) {
-    m_stopSource.request_stop();
+  if ( stop_source_.stop_possible() ) {
+    stop_source_.request_stop();
   }
-  m_serviceThread.join();
+  if (service_thread_.joinable()) {
+    service_thread_.join();
+  }
 }

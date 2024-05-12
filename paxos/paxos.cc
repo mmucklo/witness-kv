@@ -1,11 +1,5 @@
 #include "paxos.hh"
 
-#include <fstream>
-#include <memory>
-#include <semaphore>
-#include <set>
-#include <sstream>
-
 #include "acceptor.hh"
 #include "proposer.hh"
 
@@ -16,105 +10,183 @@
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
 
-static void validateUniqueNodes( const std::vector<Node>& nodes );
-
 // Paxos Impl class
 class PaxosImpl
 {
-public:
-  std::vector<Node> m_Nodes;
-  std::unique_ptr<Proposer> m_proposer;
-  std::unique_ptr<AcceptorService> m_acceptor;
+ private:
+  std::vector<Node> nodes_;
+  std::unique_ptr<Proposer> proposer_;
+  std::unique_ptr<AcceptorService> acceptor_;
 
-  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> m_acceptorStubs;
+  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
+  size_t num_active_acceptors_conns_;
+  mutable std::shared_mutex stubs_mutex_;
 
-  // get nodeId for now as a quick proto type
-  uint8_t m_nodeId;
+  uint8_t node_id_;
+  uint8_t leader_node_id_;
 
-public:
+  std::jthread heartbeat_thread_;
+  std::stop_source stop_source_ = {};
+  std::chrono::seconds hb_timer_{3};
+
+  // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
+  // This thread then goes to sleep for `hb_timer_` number of seconds.
+  // If it detects failure/timeout, it removes that stub from the vector,
+  // and next time will attempt to establish a connection hoping the node is
+  // back. If it detects a successful re-connection, reinstate the new stub in
+  // the vector at the index corresponding to the node.
+  void HeartbeatThread(const std::stop_source& stop_source);
+
+ public:
   PaxosImpl() = delete;
-  PaxosImpl( const std::string& configFileName, uint8_t nodeId );
-  ~PaxosImpl() = default;
+  PaxosImpl( const std::string& config_file_name, uint8_t node_id );
+  ~PaxosImpl();
+
+  void CreateHeartbeatThread(void);
+  void Propose( const std::string& value );
 };
 
-PaxosImpl::PaxosImpl( const std::string& configFileName, uint8_t nodeId )
+PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
+  : num_active_acceptors_conns_{ 0 },
+    node_id_{ node_id },
+    leader_node_id_{ std::numeric_limits<uint8_t>::max() }
 {
-  m_Nodes = parseNodesConfig( configFileName );
-  validateUniqueNodes( m_Nodes );
+  nodes_ = ParseNodesConfig( config_file_name );
 
-  m_nodeId = nodeId;
+  std::set<std::pair<std::string, int>> s;
+  for ( const auto& node : nodes_ ) {
+    CHECK(s.insert( { node.ip_address_, node.port } ).second) <<
+      "Invalid config file : Duplicate IP address and port found";
+  }
 
-  m_proposer = std::make_unique<Proposer>( m_Nodes.size(), nodeId );
+  proposer_ = std::make_unique<Proposer>( nodes_.size(), node_id );
+  CHECK_NE(proposer_, nullptr);
+  acceptor_ = std::make_unique<AcceptorService>( nodes_[node_id].GetAddressPortStr(), node_id );
+  CHECK_NE(acceptor_, nullptr);
 
-  m_acceptor = std::make_unique<AcceptorService>( m_Nodes[nodeId].getAddressPortStr() );
+  acceptor_stubs_.resize( nodes_.size() );
+}
 
-  m_acceptorStubs.resize( m_Nodes.size() );
-
-  for ( size_t i = 0; i < m_Nodes.size();  ) {
-    auto channel = grpc::CreateChannel( m_Nodes[i].getAddressPortStr(), grpc::InsecureChannelCredentials() );
-    auto lStub = paxos::Acceptor::NewStub( channel );
-    grpc::ClientContext context;
-    google::protobuf::Empty request;
-    google::protobuf::Empty response;
-
-    if (!lStub->SendPing(&context, request, &response).ok()) {
-      continue;
-    }
-    m_acceptorStubs[i] = std::move(lStub);
-    i++;
+PaxosImpl::~PaxosImpl()
+{
+  if ( stop_source_.stop_possible() ) {
+    stop_source_.request_stop();
+  }
+  if (heartbeat_thread_.joinable()) {
+    heartbeat_thread_.join();
   }
 }
 
-Paxos::Paxos( const std::string& configFileName, uint8_t nodeId )
+void PaxosImpl::Propose( const std::string& value )
 {
-  m_paxosImpl = new PaxosImpl( configFileName, nodeId );
+  CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
+
+  std::shared_lock lock(stubs_mutex_);
+  if (this->num_active_acceptors_conns_ < (this->nodes_.size() / 2 + 1)) {
+    // TODO [V]: Fix this with a user specified timeout/deadline for request. 
+    LOG(WARNING) << "Replication not possible, majority of the nodes are not reachable.";
+  }
+  else {
+    this->proposer_->Propose( this->acceptor_stubs_, value );
+  }
+}
+
+void PaxosImpl::HeartbeatThread(const std::stop_source& stop_source)
+{
+  std::stop_token stoken = stop_source.get_token();
+
+  while ( !stoken.stop_requested() ) {
+    uint8_t highest_node_id = 0;
+    for (size_t i = 0; i < acceptor_stubs_.size(); i++) {
+      paxos::PingRequest request;
+      paxos::PingResponse response;
+      grpc::ClientContext context;
+      grpc::Status status;
+      if (acceptor_stubs_[i]) {
+        status = acceptor_stubs_[i]->SendPing(&context, request, &response);
+        if (!status.ok()) {
+          LOG(WARNING) << "Connection lost with node: " << i;
+          std::unique_lock lock(stubs_mutex_);
+          acceptor_stubs_[i].reset();
+          CHECK(num_active_acceptors_conns_);
+          num_active_acceptors_conns_--;
+        }
+      }
+      else {
+        auto channel =
+         grpc::CreateChannel( nodes_[i].GetAddressPortStr(),
+                              grpc::InsecureChannelCredentials() );
+        auto stub = paxos::Acceptor::NewStub( channel );
+        status = stub->SendPing(&context, request, &response);
+        if (status.ok()) {
+          LOG(INFO) << "Connection established with node: " << i;
+          std::unique_lock lock(stubs_mutex_);
+          acceptor_stubs_[i] = std::move(stub);
+          num_active_acceptors_conns_++;
+        }
+      }
+
+      if (status.ok()) {
+        highest_node_id = std::max(highest_node_id, static_cast<uint8_t>(response.node_id()));
+      }
+    }
+
+    if (leader_node_id_ != highest_node_id) {
+      LOG(INFO) << "New leader elected with node id: " << static_cast<uint32_t>(highest_node_id);
+      leader_node_id_ = highest_node_id;
+    }
+
+    std::this_thread::sleep_for( this->hb_timer_ );
+  }
+
+  LOG(INFO) << "Shutting down heartbeat thread.";
+}
+
+void PaxosImpl::CreateHeartbeatThread(void)
+{
+  auto hb_thread = std::bind(&PaxosImpl::HeartbeatThread, this, std::placeholders::_1);
+  heartbeat_thread_ = std::jthread( hb_thread, stop_source_ );
+}
+
+Paxos::Paxos( const std::string& config_file_name, uint8_t node_id )
+{
+  paxos_impl_ = new PaxosImpl( config_file_name, node_id );
+  paxos_impl_->CreateHeartbeatThread();
 }
 
 Paxos::~Paxos()
 {
-  delete m_paxosImpl;
+  delete paxos_impl_;
 }
 
-void Paxos::Replicate( const std::string& value )
+void Paxos::Propose( const std::string& value )
 {
-  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
+  this->paxos_impl_->Propose( value );
 }
 
-std::vector<Node> parseNodesConfig( const std::string& configFileName )
+std::vector<Node> ParseNodesConfig( const std::string& config_file_name )
 {
   std::vector<Node> nodes {};
-  std::ifstream configFile( configFileName );
+  std::ifstream config_file( config_file_name );
 
-  if ( !configFile.is_open() ) {
-    throw std::runtime_error( "Failed to open nodes configuration file" );
-  }
+  CHECK( config_file.is_open() ) << "Failed to open nodes configuration file";
 
   std::string line;
-  while ( std::getline( configFile, line ) ) {
+  while ( std::getline( config_file, line ) ) {
     std::stringstream ss( line );
-    std::string ipAddress, portStr;
+    std::string ip_address, port_str;
     int port;
-    if ( std::getline( ss, ipAddress, ':' ) && std::getline( ss, portStr ) ) {
+    if ( std::getline( ss, ip_address, ':' ) && std::getline( ss, port_str ) ) {
       try {
-        port = std::stoi( portStr );
+        port = std::stoi( port_str );
       } catch ( const std::invalid_argument& e ) {
         throw std::runtime_error( "Invalid port number in config file" );
       }
-      nodes.push_back( { ipAddress, port } );
+      nodes.push_back( { ip_address, port } );
     }
   }
 
-  configFile.close();
+  config_file.close();
 
   return nodes;
-}
-
-static void validateUniqueNodes( const std::vector<Node>& nodes )
-{
-  std::set<std::pair<std::string, int>> s;
-  for ( const auto& node : nodes ) {
-    if ( !s.insert( { node.ipAddress, node.port } ).second ) {
-      throw std::runtime_error( "Invalid config file : Duplicate IP address and port found in configuration\n" );
-    }
-  }
 }

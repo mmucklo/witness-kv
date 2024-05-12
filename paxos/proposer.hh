@@ -1,5 +1,5 @@
-#ifndef __proposer_hh__
-#define __proposer_hh__
+#ifndef PROPOSER_HH_
+#define PROPOSER_HH_
 
 #include "common.hh"
 
@@ -12,22 +12,26 @@
 
 class Proposer
 {
-private:
-  // Round number should be stored to disk.
-  uint64_t m_roundNumber;
-  uint8_t m_nodeId;
-  int m_majorityThreshold;
+ private:
+  // Proposal number should be stored to disk.
+  uint64_t proposal_number_;
+  uint8_t node_id_;
+  uint32_t quorum_;
 
-  uint64_t getNextProposalNumber() {
-    uint64_t propNum = ((++m_roundNumber) << 8) | (uint64_t)m_nodeId;
-    std::cout << "From Proposer prop number " << propNum << "\n";
-    return propNum;
+  static constexpr uint8_t num_bits_for_node_id_ = 3; 
+  static constexpr uint64_t mask_ = ~((1ull << num_bits_for_node_id_) - 1);
+
+  uint64_t GetNextProposalNumber() {
+    proposal_number_ =
+      ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) | (uint64_t)node_id_;
+    LOG(INFO) << "Generated proposal number: " << proposal_number_;
+    return proposal_number_;
   }
 
-public:
-  Proposer( int num_acceptors , uint8_t nodeId) : m_majorityThreshold { num_acceptors / 2 + 1 },
-                                                  m_roundNumber { 0 },
-                                                  m_nodeId { nodeId }
+ public:
+  Proposer( uint8_t num_acceptors , uint8_t node_id) : quorum_ { num_acceptors / 2u + 1u },
+                                                      proposal_number_ { 0 },
+                                                      node_id_ { node_id }
   { 
   }
   ~Proposer() = default;
@@ -35,4 +39,5 @@ public:
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
                 const std::string& value );
 };
-#endif // __proposer_hh__
+
+#endif // PROPOSER_HH_
