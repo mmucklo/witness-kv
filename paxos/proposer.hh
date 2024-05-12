@@ -1,5 +1,5 @@
-#ifndef __proposer_hh__
-#define __proposer_hh__
+#ifndef PROPOSER_HH_
+#define PROPOSER_HH_
 
 #include "common.hh"
 
@@ -14,23 +14,23 @@ class Proposer
 {
 private:
   // Round number should be stored to disk.
-  uint64_t m_roundNumber;
-  uint8_t m_nodeId;
-  int m_majorityThreshold;
-  int m_retryCount; // For testing so we can test nodes not reaching consensus
-  std::map<uint64_t, std::string> m_acceptedProposals;  // This would come from log read, just war for now
+  uint64_t round_number_;
+  uint8_t node_id_;
+  int majority_threshold_;
+  int retry_count_; // For testing so we can test nodes not reaching consensus
+  std::map<uint64_t, std::string> accepted_proposals_;  // This would come from log read, just war for now
 
   uint64_t getNextProposalNumber() {
-    uint64_t propNum = ((++m_roundNumber) << 8) | (uint64_t)m_nodeId;
+    uint64_t propNum = ((++round_number_) << 8) | (uint64_t)node_id_;
     std::cout << "From Proposer prop number " << propNum << "\n";
     return propNum;
   }
 
 public:
-  Proposer( int num_acceptors , uint8_t nodeId) : m_retryCount { 3 },
-                                                  m_majorityThreshold { num_acceptors / 2 + 1 },
-                                                  m_roundNumber { 0 },
-                                                  m_nodeId { nodeId }
+  Proposer( int num_acceptors , uint8_t nodeId) : retry_count_ { 3 },
+                                                  majority_threshold_ { num_acceptors / 2 + 1 },
+                                                  round_number_ { 0 },
+                                                  node_id_ { nodeId }
   { 
   }
   ~Proposer() = default;
@@ -38,18 +38,18 @@ public:
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
                 const std::string& value );
   std::string GetValue() {
-    if (m_acceptedProposals.empty()) {
+    if (accepted_proposals_.empty()) {
       return ""; // or throw an exception, depending on your requirements
     }
-    return m_acceptedProposals.rbegin()->second;
+    return accepted_proposals_.rbegin()->second;
   }
   std::uint64_t GetIndex() {
-    if (m_acceptedProposals.empty()) {
+    if (accepted_proposals_.empty()) {
       return 0; // or throw an exception, depending on your requirements
     }
-    return m_acceptedProposals.rbegin()->first;
+    return accepted_proposals_.rbegin()->first;
   }
 
   
 };
-#endif // __proposer_hh__
+#endif // PROPOSER_HH_

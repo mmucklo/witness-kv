@@ -1,5 +1,4 @@
 #include "acceptor.hh"
-
 #include "paxos.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 
@@ -15,14 +14,14 @@ using paxos::PrepareResponse;
 class AcceptorImpl final : public Acceptor::Service
 {
 private:
-  std::map<uint64_t, uint64_t> m_minProposal;
-  std::map<uint64_t, std::optional<uint64_t>> m_acceptedProposal;
-  std::map<uint64_t, std::optional<std::string>> m_acceptedValue;
+  std::map<uint64_t, uint64_t> min_proposal_;
+  std::map<uint64_t, std::optional<uint64_t>> accepted_proposal_;
+  std::map<uint64_t, std::optional<std::string>> accepted_value_;
   // TODO: FIXME - For now we can use a terminal mutex.
-  std::mutex m_mutex;
+  std::mutex mutex_;
 
 public:
-  AcceptorImpl() : m_mutex {} {}
+  AcceptorImpl() : mutex_ {} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
@@ -32,23 +31,23 @@ public:
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
 {
-  std::lock_guard<std::mutex> guard( m_mutex );
+  std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n > m_minProposal[request->index_number()] ) {
-    m_minProposal[request->index_number()] = n;
+  if ( n > min_proposal_[request->index_number()] ) {
+    min_proposal_[request->index_number()] = n;
   }
 
   bool hasValue = false;
-  if ( m_acceptedValue.find( request->index_number() ) != m_acceptedValue.end()) {
-      hasValue = m_acceptedValue[request->index_number()].has_value(); 
+  if ( accepted_value_.find( request->index_number() ) != accepted_value_.end()) {
+      hasValue = accepted_value_[request->index_number()].has_value(); 
   }
 
   response->set_has_accepted_value( hasValue );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( m_acceptedProposal[request->index_number()].value() );
-    response->set_accepted_value( m_acceptedValue[request->index_number()].value() );
+    response->set_accepted_proposal( accepted_proposal_[request->index_number()].value() );
+    response->set_accepted_value( accepted_value_[request->index_number()].value() );
   } else {
     // FIXME: Is this else block needed ?
     response->set_accepted_proposal( 0 );
@@ -60,15 +59,15 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
 
 Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response )
 {
-  std::lock_guard<std::mutex> guard( m_mutex );
+  std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n >= m_minProposal[request->index_number()]) {
-    m_acceptedProposal[request->index_number()] = n;
-    m_minProposal[request->index_number()] = n;
-    m_acceptedValue[request->index_number()] = std::move( request->value() );
+  if ( n >= min_proposal_[request->index_number()]) {
+    accepted_proposal_[request->index_number()] = n;
+    min_proposal_[request->index_number()] = n;
+    accepted_value_[request->index_number()] = std::move( request->value() );
   }
-  response->set_min_proposal( m_minProposal[request->index_number()] );
+  response->set_min_proposal( min_proposal_[request->index_number()] );
   return Status::OK;
 }
 
@@ -96,13 +95,13 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
 
 AcceptorService::AcceptorService( const std::string& address )
 {
-  m_serviceThread = std::jthread( RunServer, address, m_stopSource );
+  service_thread = std::jthread( RunServer, address, stop_source );
 }
 
 AcceptorService::~AcceptorService()
 {
-  if ( m_stopSource.stop_possible() ) {
-    m_stopSource.request_stop();
+  if ( stop_source.stop_possible() ) {
+    stop_source.request_stop();
   }
-  m_serviceThread.join();
+  service_thread.join();
 }

@@ -3,21 +3,21 @@
 
 void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value )
 {
-  bool bDone = false;
-  int retryCount = 0;
+  bool done = false;
+  int retry_count = 0;
   uint64_t index = GetIndex() + 1;
-  while (!bDone )
+  while (!done )
   {
-    uint32_t prepMajorityCount = 0;
-    uint32_t acceptMajorityCount = 0;
+    uint32_t prep_majority_count = 0;
+    uint32_t accept_majority_count = 0;
     paxos::PrepareRequest request;
-    std::string maxProposalValue = "";
-    while ( prepMajorityCount < m_majorityThreshold ) {
-      prepMajorityCount = 0;
+    std::string max_proposal_value = "";
+    while ( prep_majority_count < majority_threshold_ ) {
+      prep_majority_count = 0;
       request.set_proposal_number( getNextProposalNumber() );
       request.set_index_number( index );
 
-      uint64_t maxProposalId = 0;
+      uint64_t max_proposal_id = 0;
 
       for ( size_t i = 0; i < stubs.size(); i++ ) {
         paxos::PrepareResponse response;
@@ -28,14 +28,14 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
           continue;
         }
         if ( response.has_accepted_value() ) {
-          if ( maxProposalId < response.accepted_proposal() ) {
-            maxProposalId = response.accepted_proposal();
-            maxProposalValue = response.accepted_value();
+          if ( max_proposal_id < response.accepted_proposal() ) {
+            max_proposal_id = response.accepted_proposal();
+            max_proposal_value = response.accepted_value();
           }
-          ++prepMajorityCount;
+          ++prep_majority_count;
         } else {
-          maxProposalValue = value;
-          ++prepMajorityCount;
+          max_proposal_value = value;
+          ++prep_majority_count;
         }
       }
     }
@@ -43,7 +43,7 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
     accept_request.set_index_number( request.index_number() );
-    accept_request.set_value( maxProposalValue );
+    accept_request.set_value( max_proposal_value );
     paxos::AcceptResponse accept_response;
 
     for ( size_t i = 0; i < stubs.size(); i++ ) {
@@ -55,19 +55,19 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
         continue;
       } else {
         if ( accept_response.min_proposal() == request.proposal_number() ) {
-          ++acceptMajorityCount;
+          ++accept_majority_count;
         }
       }
     }
-    if ( acceptMajorityCount >= m_majorityThreshold ) {
-      m_acceptedProposals[request.index_number()] = maxProposalValue;
+    if ( accept_majority_count >= majority_threshold_ ) {
+      accepted_proposals_[request.index_number()] = max_proposal_value;
       std::cout << "Accepted Proposal number: "
                 << accept_response.min_proposal()
-                << ", accepted value: " << maxProposalValue
+                << ", accepted value: " << max_proposal_value
                 << ", at index: " << request.index_number() << "\n";
-      bDone = true;
+      done = true;
     }
-    else if ( retryCount > m_retryCount ) {
+    else if ( retry_count > retry_count_ ) {
       std::cerr << "Failed to reach consensus\n";
     }
   }
