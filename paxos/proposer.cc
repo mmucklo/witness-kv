@@ -7,8 +7,7 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
   bool done = false;
   int retry_count = 0;
   uint64_t index = first_uncommited_index_;
-  while (!done && retry_count < retry_count_)
-  {
+  while (!done && retry_count < retry_count_) {
     uint32_t prep_majority_count = 0;
     uint32_t accept_majority_count = 0;
     paxos::PrepareRequest request;
@@ -76,7 +75,10 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
                 << accept_response.min_proposal()
                 << ", accepted value: " << max_proposal_value
                 << ", at index: " << request.index() << "\n";
-      done = true;
+      index = first_uncommited_index_;
+      if ( value == max_proposal_value) {
+          done = true;
+      }
     }
     else if ( retry_count > retry_count_ ) {
       LOG(ERROR) << "Failed to reach consensus\n";
