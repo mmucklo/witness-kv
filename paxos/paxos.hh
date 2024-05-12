@@ -23,7 +23,9 @@ class Paxos
   Paxos( const std::string& configFileName, uint8_t nodeId );
   ~Paxos();
 
-  void Replicate( const std::string& value );
+  void Replicate( const std::string& value ) ;
+  std::string GetValue();
+  uint64_t GetIndex();
 };
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName );

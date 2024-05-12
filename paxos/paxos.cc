@@ -80,13 +80,24 @@ void Paxos::Replicate( const std::string& value )
   paxos_impl_->proposer_->Propose( this->paxos_impl_->acceptor_stubs_, value );
 }
 
+std::string Paxos::GetValue()
+{
+  return paxos_impl_->proposer_->GetValue();
+}
+
+uint64_t Paxos::GetIndex()
+{
+  return paxos_impl_->proposer_->GetIndex();
+}
+
+
 std::vector<Node> parseNodesConfig( const std::string& configFileName )
 {
   std::vector<Node> nodes {};
   std::ifstream configFile( configFileName );
 
   if ( !configFile.is_open() ) {
-    throw std::runtime_error( "Failed to open nodes configuration file" );
+    throw std::runtime_error( "Failed to open nodes configuration file ");
   }
 
   std::string line;
