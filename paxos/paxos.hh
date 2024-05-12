@@ -16,10 +16,10 @@ struct Node
 
 class Paxos
 {
-private:
-  PaxosImpl* paxos_impl_;
+ private:
+  PaxosImpl *paxos_impl_;
 
-public:
+ public:
   Paxos( const std::string& configFileName, uint8_t nodeId );
   ~Paxos();
 

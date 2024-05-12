@@ -12,7 +12,7 @@
 
 class Proposer
 {
-private:
+ private:
   // Round number should be stored to disk.
   uint64_t round_number_;
   uint8_t node_id_;
@@ -26,7 +26,7 @@ private:
     return propNum;
   }
 
-public:
+ public:
   Proposer( int num_acceptors , uint8_t nodeId) : retry_count_ { 3 },
                                                   majority_threshold_ { num_acceptors / 2 + 1 },
                                                   round_number_ { 0 },

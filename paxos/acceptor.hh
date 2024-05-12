@@ -5,12 +5,12 @@
 
 class AcceptorService
 {
-private:
+ private:
   // std::unique_ptr<AcceptorImpl> m_acceptorImpl;
   std::jthread service_thread;
   std::stop_source stop_source = {};
 
-public:
+ public:
   AcceptorService( const std::string& address );
   ~AcceptorService();
 };
