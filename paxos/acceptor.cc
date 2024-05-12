@@ -11,12 +11,16 @@ using paxos::AcceptResponse;
 using paxos::PrepareRequest;
 using paxos::PrepareResponse;
 
+struct Proposal_Data {
+  uint64_t min_proposal_;
+  uint64_t accepted_proposal_;
+  std::string accepted_value_;
+};
+
 class AcceptorImpl final : public Acceptor::Service
 {
  private:
-  std::map<uint64_t, uint64_t> min_proposal_;
-  std::map<uint64_t, std::optional<uint64_t>> accepted_proposal_;
-  std::map<uint64_t, std::optional<std::string>> accepted_value_;
+  std::map<uint64_t, Proposal_Data> proposal_data_;
   // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex mutex_;
 
@@ -33,25 +37,23 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
 {
   std::lock_guard<std::mutex> guard( mutex_ );
 
-  uint64_t n = request->proposal_number();
-  if ( n > min_proposal_[request->index_number()] ) {
-    min_proposal_[request->index_number()] = n;
-  }
-
   bool hasValue = false;
-  if ( accepted_value_.find( request->index_number() ) != accepted_value_.end()) {
-      hasValue = accepted_value_[request->index_number()].has_value(); 
+  if ( proposal_data_.find( request->index() ) != proposal_data_.end())
+  {
+    hasValue = true;
   }
 
-  response->set_has_accepted_value( hasValue );
+  uint64_t n = request->proposal_number();
+  if ( n > proposal_data_[request->index()]. min_proposal_) {
+    proposal_data_[request->index()].min_proposal_ = n;
+  }
+
+  response->set_accepted_proposal( proposal_data_[request->index()].min_proposal_ );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( accepted_proposal_[request->index_number()].value() );
-    response->set_accepted_value( accepted_value_[request->index_number()].value() );
-  } else {
-    // FIXME: Is this else block needed ?
-    response->set_accepted_proposal( 0 );
-    response->set_accepted_value( "" );
+    response->set_accepted_proposal( proposal_data_[request->index()].accepted_proposal_ );
+    response->set_accepted_value( proposal_data_[request->index()].accepted_value_ );
+    response->set_has_accepted_value( true );
   }
 
   return Status::OK;
@@ -62,12 +64,12 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n >= min_proposal_[request->index_number()]) {
-    accepted_proposal_[request->index_number()] = n;
-    min_proposal_[request->index_number()] = n;
-    accepted_value_[request->index_number()] = std::move( request->value() );
+  if ( n >= proposal_data_[request->index()].min_proposal_) {
+    proposal_data_[request->index()].accepted_proposal_ = n;
+    proposal_data_[request->index()].min_proposal_ = n;
+    proposal_data_[request->index()].accepted_value_ = std::move( request->value() );
   }
-  response->set_min_proposal( min_proposal_[request->index_number()] );
+  response->set_min_proposal( proposal_data_[request->index()].min_proposal_ );
   return Status::OK;
 }
 

@@ -12,4 +12,7 @@
 #include <vector>
 #include <semaphore>
 
+#include "absl/log/check.h"
+#include "absl/log/log.h"
+
 #endif //COMMON_HH_

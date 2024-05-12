@@ -18,6 +18,7 @@ class Proposer
   uint8_t node_id_;
   int majority_threshold_;
   int retry_count_; // For testing so we can test nodes not reaching consensus
+  uint64_t first_uncommited_index_;
   std::map<uint64_t, std::string> accepted_proposals_;  // This would come from log read, just war for now
 
   uint64_t getNextProposalNumber() {
@@ -27,7 +28,8 @@ class Proposer
   }
 
  public:
-  Proposer( int num_acceptors , uint8_t nodeId) : retry_count_ { 3 },
+  Proposer( int num_acceptors , uint8_t nodeId) : first_uncommited_index_ { 0 },
+                                                  retry_count_ { 3 },
                                                   majority_threshold_ { num_acceptors / 2 + 1 },
                                                   round_number_ { 0 },
                                                   node_id_ { nodeId }
@@ -44,10 +46,7 @@ class Proposer
     return accepted_proposals_.rbegin()->second;
   }
   std::uint64_t GetIndex() {
-    if (accepted_proposals_.empty()) {
-      return 0; // or throw an exception, depending on your requirements
-    }
-    return accepted_proposals_.rbegin()->first;
+    return first_uncommited_index_;
   }
 
   
