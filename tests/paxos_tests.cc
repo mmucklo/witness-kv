@@ -15,6 +15,7 @@ TEST( PaxosSanity, ConfigFileParseTest )
   std::vector<std::string> ports = { "10", "20", "30", "40" };
   ASSERT_EQ( addrs.size(), ports.size() );
 
+
   char filename[] = "/tmp/paxos_config_file_test";
   std::ofstream temp_file( filename );
   ASSERT_TRUE( temp_file.is_open() ) << "Failed to create temporary file\n";

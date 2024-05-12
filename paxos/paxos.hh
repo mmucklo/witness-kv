@@ -24,6 +24,8 @@ class Paxos
   ~Paxos();
 
   void Propose( const std::string& value );
+  std::string GetValue();
+  uint64_t GetIndex();
 };
 
 std::vector<Node> ParseNodesConfig( const std::string& config_file_name );

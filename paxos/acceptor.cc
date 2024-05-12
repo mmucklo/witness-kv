@@ -14,42 +14,52 @@ using paxos::PrepareResponse;
 using paxos::PingRequest;
 using paxos::PingResponse;
 
+struct Proposal_Data {
+  uint64_t min_proposal_;
+  uint64_t accepted_proposal_;
+  std::string accepted_value_;
+};
+
 class AcceptorImpl final : public Acceptor::Service
 {
  private:
-  uint64_t min_proposal_;
-  std::optional<uint64_t> accepted_proposal_;
-  std::optional<std::string> accepted_value_;
+  std::map<uint64_t, Proposal_Data> proposal_data_;
   std::mutex mutex_;
 
   uint8_t node_id_;
 
  public:
   AcceptorImpl(uint8_t node_id) 
-    : min_proposal_ { 0 }, mutex_ {}, node_id_{node_id} {}
+    : mutex_ {}, node_id_{node_id} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
   Status Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response ) override;
   Status SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) override;
+
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
 {
   std::lock_guard<std::mutex> guard( mutex_ );
 
-  uint64_t n = request->proposal_number();
-  if ( n > min_proposal_ ) {
-    min_proposal_ = n;
+  bool hasValue = false;
+  if ( proposal_data_.find( request->index() ) != proposal_data_.end())
+  {
+    hasValue = true;
   }
 
-  bool hasValue = accepted_value_.has_value();
-  response->set_has_accepted_value( hasValue );
-  response->set_min_proposal( min_proposal_ );
+  uint64_t n = request->proposal_number();
+  if ( n > proposal_data_[request->index()]. min_proposal_) {
+    proposal_data_[request->index()].min_proposal_ = n;
+  }
+
+  response->set_accepted_proposal( proposal_data_[request->index()].min_proposal_ );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( accepted_proposal_.value() );
-    response->set_accepted_value( accepted_value_.value() );
+    response->set_accepted_proposal( proposal_data_[request->index()].accepted_proposal_ );
+    response->set_accepted_value( proposal_data_[request->index()].accepted_value_ );
+    response->set_has_accepted_value( true );
   }
 
   return Status::OK;
@@ -60,16 +70,16 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n >= min_proposal_ ) {
-    accepted_proposal_ = n;
-    min_proposal_ = n;
-    accepted_value_ = request->value();
+  if ( n >= proposal_data_[request->index()].min_proposal_) {
+    proposal_data_[request->index()].accepted_proposal_ = n;
+    proposal_data_[request->index()].min_proposal_ = n;
+    proposal_data_[request->index()].accepted_value_ = std::move( request->value() );
   }
-  response->set_min_proposal( min_proposal_ );
+  response->set_min_proposal( proposal_data_[request->index()].min_proposal_ );
   return Status::OK;
 }
 
-Status 
+Status
 AcceptorImpl::SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) {
   response->set_node_id(node_id_);
   return Status::OK;
@@ -80,6 +90,7 @@ void RunServer( const std::string& address, uint8_t node_id, const std::stop_sou
   using namespace std::chrono_literals;
 
   AcceptorImpl service{node_id};
+
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
   builder.RegisterService( &service );

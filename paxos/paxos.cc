@@ -1,5 +1,4 @@
 #include "paxos.hh"
-
 #include "acceptor.hh"
 #include "proposer.hh"
 
@@ -13,7 +12,8 @@
 // Paxos Impl class
 class PaxosImpl
 {
- private:
+ //private:
+ public:
   std::vector<Node> nodes_;
   std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
@@ -162,6 +162,16 @@ Paxos::~Paxos()
 void Paxos::Propose( const std::string& value )
 {
   this->paxos_impl_->Propose( value );
+}
+
+std::string Paxos::GetValue()
+{
+  return paxos_impl_->proposer_->GetValue();
+}
+
+uint64_t Paxos::GetIndex()
+{
+  return paxos_impl_->proposer_->GetIndex();
 }
 
 std::vector<Node> ParseNodesConfig( const std::string& config_file_name )
