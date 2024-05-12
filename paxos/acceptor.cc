@@ -15,14 +15,14 @@ using paxos::PrepareResponse;
 class AcceptorImpl final : public Acceptor::Service
 {
 private:
-  uint64_t m_minProposal;
+  std::map<uint64_t, uint64_t> m_minProposal;
   std::map<uint64_t, std::optional<uint64_t>> m_acceptedProposal;
   std::map<uint64_t, std::optional<std::string>> m_acceptedValue;
   // TODO: FIXME - For now we can use a terminal mutex.
   std::mutex m_mutex;
 
 public:
-  AcceptorImpl() : m_minProposal { 0 }, m_mutex {} {}
+  AcceptorImpl() : m_mutex {} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
@@ -35,8 +35,8 @@ Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* requ
   std::lock_guard<std::mutex> guard( m_mutex );
 
   uint64_t n = request->proposal_number();
-  if ( n > m_minProposal ) {
-    m_minProposal = n;
+  if ( n > m_minProposal[request->index_number()] ) {
+    m_minProposal[request->index_number()] = n;
   }
 
   bool hasValue = false;
@@ -63,12 +63,12 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   std::lock_guard<std::mutex> guard( m_mutex );
 
   uint64_t n = request->proposal_number();
-  if ( n >= m_minProposal ) {
+  if ( n >= m_minProposal[request->index_number()]) {
     m_acceptedProposal[request->index_number()] = n;
-    m_minProposal = n;
+    m_minProposal[request->index_number()] = n;
     m_acceptedValue[request->index_number()] = std::move( request->value() );
   }
-  response->set_min_proposal( m_minProposal );
+  response->set_min_proposal( m_minProposal[request->index_number()] );
   return Status::OK;
 }
 

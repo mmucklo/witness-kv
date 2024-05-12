@@ -17,6 +17,8 @@ private:
   uint64_t m_roundNumber;
   uint8_t m_nodeId;
   int m_majorityThreshold;
+  int m_retryCount; // For testing so we can test nodes not reaching consensus
+  std::map<uint64_t, std::string> m_acceptedProposals;  // This would come from log read, just war for now
 
   uint64_t getNextProposalNumber() {
     uint64_t propNum = ((++m_roundNumber) << 8) | (uint64_t)m_nodeId;
@@ -25,7 +27,8 @@ private:
   }
 
 public:
-  Proposer( int num_acceptors , uint8_t nodeId) : m_majorityThreshold { num_acceptors / 2 + 1 },
+  Proposer( int num_acceptors , uint8_t nodeId) : m_retryCount { 3 },
+                                                  m_majorityThreshold { num_acceptors / 2 + 1 },
                                                   m_roundNumber { 0 },
                                                   m_nodeId { nodeId }
   { 
@@ -33,6 +36,20 @@ public:
   ~Proposer() = default;
 
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& m_acceptorStubs,
-                const std::string& value, const uint64_t index );
+                const std::string& value );
+  std::string GetValue() {
+    if (m_acceptedProposals.empty()) {
+      return ""; // or throw an exception, depending on your requirements
+    }
+    return m_acceptedProposals.rbegin()->second;
+  }
+  std::uint64_t GetIndex() {
+    if (m_acceptedProposals.empty()) {
+      return 0; // or throw an exception, depending on your requirements
+    }
+    return m_acceptedProposals.rbegin()->first;
+  }
+
+  
 };
 #endif // __proposer_hh__

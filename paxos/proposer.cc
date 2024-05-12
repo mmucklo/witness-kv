@@ -1,10 +1,12 @@
 #include "proposer.hh"
 
 
-void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value, const uint64_t index )
+void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& stubs, const std::string& value )
 {
   bool bDone = false;
-  while (!bDone)
+  int retryCount = 0;
+  uint64_t index = GetIndex() + 1;
+  while (!bDone )
   {
     uint32_t prepMajorityCount = 0;
     uint32_t acceptMajorityCount = 0;
@@ -58,11 +60,15 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
       }
     }
     if ( acceptMajorityCount >= m_majorityThreshold ) {
+      m_acceptedProposals[request.index_number()] = maxProposalValue;
       std::cout << "Accepted Proposal number: "
                 << accept_response.min_proposal()
                 << ", accepted value: " << maxProposalValue
                 << ", at index: " << request.index_number() << "\n";
       bDone = true;
+    }
+    else if ( retryCount > m_retryCount ) {
+      std::cerr << "Failed to reach consensus\n";
     }
   }
 }

@@ -23,7 +23,9 @@ public:
   Paxos( const std::string& configFileName, uint8_t nodeId );
   ~Paxos();
 
-  void Replicate( const std::string& value, const uint64_t& index  );
+  void Replicate( const std::string& value ) ;
+  std::string GetValue();
+  uint64_t GetIndex();
 };
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName );

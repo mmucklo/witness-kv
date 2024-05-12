@@ -78,10 +78,21 @@ Paxos::~Paxos()
   delete m_paxosImpl;
 }
 
-void Paxos::Replicate( const std::string& value, const uint64_t& index )
+void Paxos::Replicate( const std::string& value ) 
 {
-  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value, index );
+  m_paxosImpl->m_proposer->Propose( this->m_paxosImpl->m_acceptorStubs, value );
 }
+
+std::string Paxos::GetValue()
+{
+  return m_paxosImpl->m_proposer->GetValue();
+}
+
+uint64_t Paxos::GetIndex()
+{
+  return m_paxosImpl->m_proposer->GetIndex();
+}
+
 
 std::vector<Node> parseNodesConfig( const std::string& configFileName )
 {
@@ -89,7 +100,7 @@ std::vector<Node> parseNodesConfig( const std::string& configFileName )
   std::ifstream configFile( configFileName );
 
   if ( !configFile.is_open() ) {
-    throw std::runtime_error( "Failed to open nodes configuration file" );
+    throw std::runtime_error( "Failed to open nodes configuration file");
   }
 
   std::string line;

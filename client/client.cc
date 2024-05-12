@@ -40,14 +40,7 @@ int main( int argc, char* argv[] )
        if (input == "quit") {
         break;
        }
-       std::cout << "Enter index to replicate on (or 'quit' to exit): \n";
-       std::getline(std::cin, index);
-
-       if (index == "quit") {
-        break;
-       }
-
-    p.Replicate( input, std::stoull(index) );
+    p.Replicate( input );
   }
 
   return 0;
