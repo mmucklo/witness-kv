@@ -101,4 +101,3 @@ TEST(FlagTest, Smoke) {
 // TODO microbenchmark to watch flush cycles and timing.
 
 }  // namespace witnesskvs::log
-
