@@ -1,7 +1,9 @@
 # witness-kv
 
 Prerequisites
-- Install CMake 
+- Install CMake
+- Need cmake 3.29
+-  
 - Install grpc and protobuf: https://grpc.io/docs/languages/cpp/quickstart/
 
 Build Instructions
@@ -10,3 +12,5 @@ Build Instructions
     cd build; make -j`nproc`
 - To format the code
     cmake --build build --target format
+
+
