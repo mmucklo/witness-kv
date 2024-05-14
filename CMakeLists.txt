@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.29)
 project(witness-kv LANGUAGES CXX)
 
 include(etc/build_type.cmake)
