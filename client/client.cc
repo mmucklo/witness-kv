@@ -24,7 +24,7 @@ int main( int argc, char* argv[] )
       break;
     }
 
-    p.Replicate( input );
+    p.Propose( input );
   }
 
   return 0;

@@ -13,7 +13,7 @@ TEST(PaxosReplicateTest, ReplicateValue)
     std::string value = "Hello, world!";
 
     // Call the Replicate function
-    node0.Replicate(value);
+    node0.Propose(value);
 
     // Verify that the value has been replicated by the acceptor
     std::string replicatedValue = node0.GetValue();
