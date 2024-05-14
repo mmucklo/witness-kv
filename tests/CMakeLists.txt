@@ -24,6 +24,31 @@ add_executable(${This} ${Sources})
 
 target_link_libraries(${This} PUBLIC
     gtest_main
+    gmock_main
+    kvsproto
+    paxos
+)
+
+add_test(
+    NAME ${This}
+    COMMAND ${This}
+)
+
+set(This ProposerTest)
+
+set(Sources
+    test_proposer.cc
+)
+
+include_directories(${PROJECT_SOURCE_DIR}/paxos)
+
+enable_testing()
+
+add_executable(${This} ${Sources})
+
+target_link_libraries(${This} PUBLIC
+    gtest_main
+    gmock_main
     kvsproto
     paxos
 )

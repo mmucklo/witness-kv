@@ -11,45 +11,55 @@ using paxos::AcceptRequest;
 using paxos::AcceptResponse;
 using paxos::PrepareRequest;
 using paxos::PrepareResponse;
+using paxos::PingRequest;
+using paxos::PingResponse;
+
+struct Proposal_Data {
+  uint64_t min_proposal_;
+  uint64_t accepted_proposal_;
+  std::string accepted_value_;
+};
 
 class AcceptorImpl final : public Acceptor::Service
 {
  private:
-  uint64_t min_proposal_;
-  std::optional<uint64_t> accepted_proposal_;
-  std::optional<std::string> accepted_value_;
-  // TODO: FIXME - For now we can use a terminal mutex.
+  std::map<uint64_t, Proposal_Data> proposal_data_;
   std::mutex mutex_;
 
+  uint8_t node_id_;
+
  public:
-  AcceptorImpl() : min_proposal_ { 0 }, mutex_ {} {}
+  AcceptorImpl(uint8_t node_id) 
+    : mutex_ {}, node_id_{node_id} {}
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response ) override;
   Status Accept( ServerContext* context, const AcceptRequest* request, AcceptResponse* response ) override;
-  Status SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) override;
+  Status SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) override;
+
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context, const PrepareRequest* request, PrepareResponse* response )
 {
   std::lock_guard<std::mutex> guard( mutex_ );
 
-  uint64_t n = request->proposal_number();
-  if ( n > min_proposal_ ) {
-    min_proposal_ = n;
+  bool hasValue = false;
+  if ( proposal_data_.find( request->index() ) != proposal_data_.end())
+  {
+    hasValue = true;
   }
 
-  bool hasValue = accepted_value_.has_value();
+  uint64_t n = request->proposal_number();
+  if ( n > proposal_data_[request->index()]. min_proposal_) {
+    proposal_data_[request->index()].min_proposal_ = n;
+  }
 
-  response->set_has_accepted_value( hasValue );
+  response->set_accepted_proposal( proposal_data_[request->index()].min_proposal_ );
 
   if ( hasValue ) {
-    response->set_accepted_proposal( accepted_proposal_.value() );
-    response->set_accepted_value( accepted_value_.value() );
-  } else {
-    // FIXME: Is this else block needed ?
-    response->set_accepted_proposal( 0 );
-    response->set_accepted_value( "" );
+    response->set_accepted_proposal( proposal_data_[request->index()].accepted_proposal_ );
+    response->set_accepted_value( proposal_data_[request->index()].accepted_value_ );
+    response->set_has_accepted_value( true );
   }
 
   return Status::OK;
@@ -60,25 +70,27 @@ Status AcceptorImpl::Accept( ServerContext* context, const AcceptRequest* reques
   std::lock_guard<std::mutex> guard( mutex_ );
 
   uint64_t n = request->proposal_number();
-  if ( n >= min_proposal_ ) {
-    accepted_proposal_ = n;
-    min_proposal_ = n;
-    accepted_value_ = std::move( request->value() );
+  if ( n >= proposal_data_[request->index()].min_proposal_) {
+    proposal_data_[request->index()].accepted_proposal_ = n;
+    proposal_data_[request->index()].min_proposal_ = n;
+    proposal_data_[request->index()].accepted_value_ = std::move( request->value() );
   }
-  response->set_min_proposal( min_proposal_ );
+  response->set_min_proposal( proposal_data_[request->index()].min_proposal_ );
   return Status::OK;
 }
 
-Status 
-AcceptorImpl::SendPing( ServerContext* context, const google::protobuf::Empty *request, google::protobuf::Empty *response ) {
+Status
+AcceptorImpl::SendPing( ServerContext* context, const PingRequest* request, PingResponse* response ) {
+  response->set_node_id(node_id_);
   return Status::OK;
 }
 
-void RunServer( const std::string& address, const std::stop_source& stop_source )
+void RunServer( const std::string& address, uint8_t node_id, const std::stop_source& stop_source )
 {
   using namespace std::chrono_literals;
 
-  AcceptorImpl service;
+  AcceptorImpl service{node_id};
+
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
   builder.RegisterService( &service );
@@ -89,11 +101,13 @@ void RunServer( const std::string& address, const std::stop_source& stop_source 
   while ( !stoken.stop_requested() ) {
     std::this_thread::sleep_for( 300ms );
   }
+  LOG(INFO) << "Shutting down acceptor service.";
 }
 
-AcceptorService::AcceptorService( const std::string& address )
+AcceptorService::AcceptorService( const std::string& address, uint8_t node_id )
+  : node_id_{node_id}
 {
-  service_thread_ = std::jthread( RunServer, address, stop_source_ );
+  service_thread_ = std::jthread( RunServer, address, node_id, stop_source_ );
 }
 
 AcceptorService::~AcceptorService()
@@ -101,5 +115,7 @@ AcceptorService::~AcceptorService()
   if ( stop_source_.stop_possible() ) {
     stop_source_.request_stop();
   }
-  service_thread_.join();
+  if (service_thread_.joinable()) {
+    service_thread_.join();
+  }
 }

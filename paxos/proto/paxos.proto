@@ -7,24 +7,35 @@ import "google/protobuf/empty.proto";
 service Acceptor {
     rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
     rpc Accept(AcceptRequest) returns (AcceptResponse) {}
-    rpc SendPing(google.protobuf.Empty) returns (google.protobuf.Empty) {}
+    rpc SendPing(PingRequest) returns (PingResponse) {}
 }
 
 message PrepareRequest {
     uint64 proposal_number = 1;
+    uint64 index = 2;
 }
 
 message PrepareResponse {
     bool has_accepted_value = 1;
     uint64 accepted_proposal = 2;
     string accepted_value = 3;
+    uint64 min_proposal = 4;
 }
 
 message AcceptRequest {
+    uint64 index = 1;
     uint64 proposal_number = 2;
     string value = 3;
 }
 
 message AcceptResponse {
-    uint64 min_proposal = 2;
+    uint64 min_proposal = 1;
+}
+
+message PingRequest {
+    uint32 node_id = 1;
+}
+
+message PingResponse {
+    uint32 node_id = 1;
 }

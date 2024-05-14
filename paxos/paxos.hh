@@ -7,10 +7,10 @@ class PaxosImpl;
 
 struct Node
 {
-  std::string ipAddress;
+  std::string ip_address_;
   int port;
-  std::string getAddressPortStr() {
-    return this->ipAddress + ":" + std::to_string( this->port );
+  std::string GetAddressPortStr() {
+    return this->ip_address_ + ":" + std::to_string( this->port );
   }
 };
 
@@ -20,12 +20,14 @@ class Paxos
   PaxosImpl *paxos_impl_;
 
  public:
-  Paxos( const std::string& configFileName, uint8_t nodeId );
+  Paxos( const std::string& config_file_name, uint8_t node_id );
   ~Paxos();
 
-  void Replicate( const std::string& value );
+  void Propose( const std::string& value );
+  std::string GetValue();
+  uint64_t GetIndex();
 };
 
-std::vector<Node> parseNodesConfig( const std::string& configFileName );
+std::vector<Node> ParseNodesConfig( const std::string& config_file_name );
 
 #endif // PAXOS_HH_

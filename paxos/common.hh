@@ -11,5 +11,14 @@
 #include <thread>
 #include <vector>
 #include <semaphore>
+#include <fstream>
+#include <set>
+#include <sstream>
+#include <functional>
+#include <shared_mutex>
+#include <chrono>
+
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 
 #endif //COMMON_HH_

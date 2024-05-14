@@ -15,9 +15,8 @@ TEST( PaxosSanity, ConfigFileParseTest )
   std::vector<std::string> ports = { "10", "20", "30", "40" };
   ASSERT_EQ( addrs.size(), ports.size() );
 
-  char filename[L_tmpnam];
-  mkstemp( filename );
 
+  char filename[] = "/tmp/paxos_config_file_test";
   std::ofstream temp_file( filename );
   ASSERT_TRUE( temp_file.is_open() ) << "Failed to create temporary file\n";
 
@@ -26,11 +25,11 @@ TEST( PaxosSanity, ConfigFileParseTest )
   }
   temp_file << std::endl;
 
-  auto nodes = parseNodesConfig( filename );
+  auto nodes = ParseNodesConfig( filename );
   ASSERT_EQ( addrs.size(), nodes.size() );
 
   for ( size_t i = 0; i < addrs.size(); i++ ) {
-    ASSERT_EQ( addrs[i], nodes[i].ipAddress );
+    ASSERT_EQ( addrs[i], nodes[i].ip_address_ );
     ASSERT_EQ( std::stoi( ports[i] ), nodes[i].port );
   }
 
