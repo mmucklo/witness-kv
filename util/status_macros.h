@@ -42,7 +42,7 @@
   do {                                                                       \
     /* Using _status below to avoid capture problems if expr is "status". */ \
     const absl::Status _status = (expr);                                     \
-    if (ABSL_PREDICT_FALSE(!_status.ok())) return _status.status();               \
+    if (ABSL_PREDICT_FALSE(!_status.ok())) return _status.status();          \
   } while (0)
 
 // Executes an expression `rexpr` that returns a `absl::StatusOr<T>`. On
@@ -54,27 +54,27 @@
 //
 // Interface:
 //
-//   MP_ASSIGN_OR_RETURN(lhs, rexpr)
-//   MP_ASSIGN_OR_RETURN(lhs, rexpr, error_expression);
+//   ASSIGN_OR_RETURN(lhs, rexpr)
+//   ASSIGN_OR_RETURN(lhs, rexpr, error_expression);
 //
 // WARNING: expands into multiple statements; it cannot be used in a single
 // statement (e.g. as the body of an if statement without {})!
 //
 // Example: Declaring and initializing a new variable (ValueType can be anything
 //          that can be initialized with assignment, including references):
-//   MP_ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(arg));
+//   ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(arg));
 //
 // Example: Assigning to an existing variable:
 //   ValueType value;
-//   MP_ASSIGN_OR_RETURN(value, MaybeGetValue(arg));
+//   ASSIGN_OR_RETURN(value, MaybeGetValue(arg));
 //
 // Example: Assigning to an expression with side effects:
 //   MyProto data;
-//   MP_ASSIGN_OR_RETURN(*data.mutable_str(), MaybeGetValue(arg));
+//   ASSIGN_OR_RETURN(*data.mutable_str(), MaybeGetValue(arg));
 //   // No field "str" is added on error.
 //
 // Example: Assigning to a std::unique_ptr.
-//   MP_ASSIGN_OR_RETURN(std::unique_ptr<T> ptr, MaybeGetPtr(arg));
+//   ASSIGN_OR_RETURN(std::unique_ptr<T> ptr, MaybeGetPtr(arg));
 //
 // If passed, the `error_expression` is evaluated to produce the return
 // value. The expression may reference any variable visible in scope, as
@@ -85,13 +85,13 @@
 // returnable by the function, including (void). For example:
 //
 // Example: Adjusting the error message.
-//   MP_ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(query),
+//   ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(query),
 //                    _ << "while processing query " << query.DebugString());
 //
 // Example: Logging the error on failure.
-//   MP_ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(query), _.LogError());
+//   ASSIGN_OR_RETURN(ValueType value, MaybeGetValue(query), _.LogError());
 //
-#define ASSIGN_OR_RETURN(...)                                  \
+#define ASSIGN_OR_RETURN(...)                                     \
   MP_STATUS_MACROS_IMPL_GET_VARIADIC_(                            \
       (__VA_ARGS__, MP_STATUS_MACROS_IMPL_MP_ASSIGN_OR_RETURN_3_, \
        MP_STATUS_MACROS_IMPL_MP_ASSIGN_OR_RETURN_2_))             \

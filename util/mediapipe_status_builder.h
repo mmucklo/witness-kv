@@ -24,7 +24,6 @@
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "mediapipe_source_location.h"
-#include "mediapipe_status.h"
 
 namespace mediapipe {
 

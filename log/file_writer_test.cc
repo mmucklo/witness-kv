@@ -15,6 +15,7 @@
 ABSL_FLAG(std::string, file_writer_test_flag, "", "This just a test flag");
 
 namespace witnesskvs::log {
+namespace {
 
 std::string getTempFilename() {
   absl::Time now = absl::Now();
@@ -100,4 +101,5 @@ TEST(FlagTest, Smoke) {
 }
 // TODO microbenchmark to watch flush cycles and timing.
 
+}  // namespace
 }  // namespace witnesskvs::log

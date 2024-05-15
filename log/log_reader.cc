@@ -41,7 +41,11 @@ std::string checkFile(std::string filename) {
 }
 
 LogReader::LogReader(std::string filename)
-    : filename_(std::move(filename)), f_(nullptr), pos_header_(-1), pos_(0), last_pos_(0) {
+    : filename_(std::move(filename)),
+      f_(nullptr),
+      pos_header_(-1),
+      pos_(0),
+      last_pos_(0) {
   absl::MutexLock l(&lock_);
   f_ = std::fopen(filename_.c_str(), "rb");
   CHECK(f_ != nullptr);

@@ -13,7 +13,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "log.pb.h"
-  
+
 namespace witnesskvs::log {
 
 class LogWriter {
@@ -26,7 +26,7 @@ class LogWriter {
 
   // Logs msg, returns when sync'd.
   absl::Status Log(const Log::Message& msg);
-  
+
   // Returns the current filename in use.
   std::string filename() const ABSL_LOCKS_EXCLUDED(lock_);
   std::vector<std::string> filenames() const;
@@ -46,15 +46,17 @@ class LogWriter {
   std::vector<std::unique_ptr<std::string>> GetWriteQueueMsgs();
 
   absl::Mutex write_queue_lock_;  // Only locks write queue access.
-  mutable absl::Mutex lock_;              // Main lock.
+  mutable absl::Mutex lock_;      // Main lock.
   std::string dir_;
   std::string prefix_;
   std::queue<std::unique_ptr<std::string>> write_queue_ ABSL_GUARDED_BY(
       write_queue_lock_);  // TODO: maybe switch to a concurrent data structure.
   std::unique_ptr<FileWriter> file_writer_ ABSL_GUARDED_BY(lock_)
       ABSL_ACQUIRED_BEFORE(write_queue_lock_);
-  int64_t entries_count_ ABSL_GUARDED_BY(lock);  // Number of entries written to current file_writer_
-  std::vector<std::string> filenames_ ABSL_GUARDED_BY(lock);  // List of files written to.
+  int64_t entries_count_ ABSL_GUARDED_BY(
+      lock);  // Number of entries written to current file_writer_
+  std::vector<std::string> filenames_
+      ABSL_GUARDED_BY(lock);  // List of files written to.
 };
 
 }  // namespace witnesskvs::log

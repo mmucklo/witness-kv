@@ -8,8 +8,8 @@
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_format.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "byte_conversion.h"
@@ -22,8 +22,9 @@
 //   1) Compress whole file after rotation
 //   2) Compress each entry on the fly.
 //   3) Compress both entries and whole file (would this even be good?)
-//   seems like #1 would be best, but results in larger files on disk temporarily, then need a background file compressor
-//   
+//   seems like #1 would be best, but results in larger files on disk
+//   temporarily, then need a background file compressor
+//
 // TODO(mmucklo): Sortable log files - swap prefix and suffix?
 
 ABSL_FLAG(uint64_t, log_writer_max_file_size, 1 << 30,
@@ -142,7 +143,9 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
     std::string msg_str;
     msg.AppendToString(&msg_str);
     if (msg_str.size() > absl::GetFlag(FLAGS_log_writer_max_msg_size)) {
-      return absl::OutOfRangeError(absl::StrFormat("msg size when serialized '%d' is greater than max '%d'.", msg_str.size(), absl::GetFlag(FLAGS_log_writer_max_msg_size)));
+      return absl::OutOfRangeError(absl::StrFormat(
+          "msg size when serialized '%d' is greater than max '%d'.",
+          msg_str.size(), absl::GetFlag(FLAGS_log_writer_max_msg_size)));
     }
     absl::MutexLock wl(&write_queue_lock_);
     // unique_ptr used here as a hack to get around copies when going in and out
@@ -194,7 +197,9 @@ std::string LogWriter::filename() const {
   // Though file_writer_ returns a reference, we need to return
   // a copy since after the lock, the reference could go away.
   absl::MutexLock l(&lock_);
-  if (file_writer_ == nullptr) { return ""; }
+  if (file_writer_ == nullptr) {
+    return "";
+  }
   return file_writer_->filename();
 }
 

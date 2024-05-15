@@ -41,7 +41,8 @@ class FileWriter {
   // Flushes all buffers to disk.
   void Flush();
 
-  // The number of bytes received (includes bytes written to disk and bytes still buffered).
+  // The number of bytes received (includes bytes written to disk and bytes
+  // still buffered).
   ssize_t bytes_received() { return bytes_received_; }
 
   // The number of bytes actually written to disk.
@@ -56,7 +57,7 @@ class FileWriter {
   std::string filename_;
   std::unique_ptr<char[]> buffer_;  // A buffer for contents we will output.
   int buffer_size_;                 // The current filled size of the buffer.
-  const uint64_t buffer_size_max_; // The size of the buffer when full.
+  const uint64_t buffer_size_max_;  // The size of the buffer when full.
   ssize_t bytes_written_;
   ssize_t bytes_received_;
 };

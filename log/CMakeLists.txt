@@ -79,7 +79,7 @@ target_link_libraries(log_faker PRIVATE
     absl::log
     absl::status
     absl::strings
-    absl::time    
+    absl::time
 )
 
 target_link_libraries(file_writer_test PUBLIC
@@ -121,7 +121,6 @@ target_link_libraries(log_reader_test PUBLIC
     protobuf_matchers
     kvsproto
 )
-
 
 include(GoogleTest)
 gtest_discover_tests(file_writer_test log_writer_test log_reader_test)

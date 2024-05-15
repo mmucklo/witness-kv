@@ -1,13 +1,13 @@
-#include "log_reader.h"
-
-#include "log.pb.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/initialize.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "log.pb.h"
+#include "log_reader.h"
 
-ABSL_FLAG(bool, tail, false, "Sits and tails on the end of the log until killed.");
+ABSL_FLAG(bool, tail, false,
+          "Sits and tails on the end of the log until killed.");
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);

@@ -145,4 +145,4 @@ void FileWriter::Flush() {
   }
 }
 
-} // namespace witnesskvs::log
+}  // namespace witnesskvs::log

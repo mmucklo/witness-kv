@@ -1,7 +1,7 @@
 #include "log_writer.h"
 
-#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -27,6 +27,7 @@ using ::testing::Not;
 MATCHER(IsError, "") { return (!arg.ok()); }
 
 namespace witnesskvs::log {
+namespace {
 
 absl::Status Cleanup(std::vector<std::string> filenames) {
   bool success = true;
@@ -67,7 +68,8 @@ TEST(LogWriterTest, TooBig) {
     log_message.mutable_paxos()->set_value("test1234");
     absl::Status status = log_writer.Log(log_message);
     EXPECT_THAT(status, IsError());
-    EXPECT_THAT(status.ToString(), AllOf(HasSubstr("is greater than max"), HasSubstr("")));
+    EXPECT_THAT(status.ToString(),
+                AllOf(HasSubstr("is greater than max"), HasSubstr("")));
     EXPECT_EQ(log_writer.filename(), "");
     cleanup_files = log_writer.filenames();
   }
@@ -98,4 +100,5 @@ TEST(LogWriterTest, Rotation) {
   }
   ASSERT_THAT(Cleanup(cleanup_files), IsOk());
 }
+}  // namespace
 }  // namespace witnesskvs::log
