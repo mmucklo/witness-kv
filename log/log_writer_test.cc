@@ -16,7 +16,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
 #include "log.pb.h"
-#include "test_macros.h"
+#include "tests/test_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);

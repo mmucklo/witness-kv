@@ -7,6 +7,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "absl/strings/str_format.h"
+
 namespace witnesskvs::log {
 
 using enable_if_not_mixed =

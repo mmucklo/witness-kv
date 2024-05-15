@@ -14,7 +14,7 @@
 #include "absl/strings/str_format.h"
 #include "byte_conversion.h"
 #include "crc32.h"
-#include "status_macros.h"
+#include "util/status_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 
@@ -41,7 +41,7 @@ std::string checkFile(std::string filename) {
 }
 
 LogReader::LogReader(std::string filename)
-    : filename_(std::move(filename)), f_(nullptr), pos_header_(-1), pos_(0) {
+    : filename_(std::move(filename)), f_(nullptr), pos_header_(-1), pos_(0), last_pos_(0) {
   absl::MutexLock l(&lock_);
   f_ = std::fopen(filename_.c_str(), "rb");
   CHECK(f_ != nullptr);
@@ -76,9 +76,8 @@ absl::StatusOr<uint64_t> LogReader::ReadSizeBytesLocked() {
   if (size > absl::GetFlag(FLAGS_log_writer_max_msg_size)) {
     return absl::OutOfRangeError(absl::StrFormat(
         "Size of header msg is out of range (%d bytes, when max is %d bytes)",
-        bytes, absl::GetFlag(FLAGS_log_writer_max_msg_size)));
+        size, absl::GetFlag(FLAGS_log_writer_max_msg_size)));
   }
-  pos_ = std::ftell(f_);
   return size;
 }
 
@@ -91,7 +90,6 @@ absl::StatusOr<uint32_t> LogReader::ReadCRC32Locked() {
         "Not able to read crc32 of header, instead only read: %d bytes",
         bytes));
   }
-  pos_ = std::ftell(f_);
   return fromBytes<uint32_t, std::endian::little>(crc32_buf);
 }
 
@@ -99,7 +97,7 @@ absl::StatusOr<std::unique_ptr<char[]>> LogReader::ReadBufferLocked(
     const uint64_t size, const uint32_t crc32_val) {
   lock_.AssertHeld();
   std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
-  size_t bytes = std::fread(buffer.get(), sizeof(char), 4, f_);
+  size_t bytes = std::fread(buffer.get(), sizeof(char), size, f_);
   if (bytes != size) {
     return absl::DataLossError(
         absl::StrFormat("Not able to read msg of header, expected %d bytes, "
@@ -112,38 +110,21 @@ absl::StatusOr<std::unique_ptr<char[]>> LogReader::ReadBufferLocked(
         absl::StrFormat("Not crc32 invalid, expected %04x, instead got %04x",
                         crc32, crc32_buffer));
   }
-  pos_ = std::ftell(f_);
   return buffer;
 }
 
-absl::StatusOr<Log::Message> LogReader::ReadNextMessage(long from_pos,
-                                                        long& pos) {
+absl::StatusOr<Log::Message> LogReader::ReadNextMessage(long& pos) {
   absl::MutexLock l(&lock_);
-  MaybeSeekLocked(from_pos);
-  if (std::ftell(f_) == SEEK_END) {
-    return absl::OutOfRangeError("Already at EOF.");
-  }
-  CHECK_NE(nullptr, f_);
-  // Read size
-  ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
-  CHECK_NE(size, 0);
-
-  ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
-  ASSIGN_OR_RETURN(std::unique_ptr<char[]> buffer,
-                   ReadBufferLocked(size, crc32));
-  Log::Message msg;
-  bool msg_valid = msg.ParseFromString(absl::string_view(buffer.get(), size));
-  if (!msg_valid) {
-    return absl::DataLossError(
-        absl::StrFormat("Unable to ParseFromString the next msg."));
-  }
+  MaybeSeekLocked(pos);
+  absl::StatusOr<Log::Message> msg_or = NextLocked();
   pos = std::ftell(f_);
-  return msg;
+  return msg_or;
 }
 
 absl::StatusOr<long> LogReader::ReadHeader() {
   absl::MutexLock l(&lock_);
 
+  VLOG(1) << "ReadHeader";
   // TODO(mmucklo): maybe header_valid_ should store a status so we don't
   // re-read an invalid header in a loop.
   if (pos_header_ != -1) {
@@ -166,31 +147,71 @@ absl::StatusOr<long> LogReader::ReadHeader() {
     return absl::DataLossError(
         absl::StrFormat("Unable to ParseFromString the header."));
   }
-  return (pos_header_ = std::ftell(f_));
+  return (pos_ = pos_header_ = std::ftell(f_));
 }
 
 LogReader::Iterator::Iterator(LogReader* lr) : log_reader(lr), pos(0) {
+  reset();
+}
+
+void LogReader::Iterator::reset() {
   absl::StatusOr<long> pos_or = log_reader->ReadHeader();
   if (!pos_or.ok()) {
     // Invalid header on this file.
     // TODO(mmucklo): maybe log.
+    VLOG(1) << "Invalid header: " << pos_or.status().message();
     return;
   }
   pos = pos_or.value();
-  ReadNext();
+  next();
 }
 
 LogReader::Iterator::Iterator(LogReader* lr,
                               std::unique_ptr<Log::Message> sentinel)
     : log_reader(lr), pos(0), cur(std::move(sentinel)) {}
 
-void LogReader::Iterator::ReadNext() {
-  absl::StatusOr<Log::Message> msg_or = log_reader->ReadNextMessage(pos, pos);
+void LogReader::Iterator::next() {
+  VLOG(1) << "next";
+  absl::StatusOr<Log::Message> msg_or = log_reader->ReadNextMessage(pos);
   if (msg_or.ok()) {
+    VLOG(1) << "next ok";
     cur = std::make_unique<Log::Message>(std::move(msg_or.value()));
     return;
   }
+  VLOG(1) << "next not ok" << msg_or.status().message();
   cur = nullptr;
+  pos = 0;
+}
+
+absl::StatusOr<Log::Message> LogReader::next() {
+  absl::MutexLock l(&lock_);
+  return NextLocked();
+}
+
+absl::StatusOr<Log::Message> LogReader::NextLocked() {
+  if (last_pos_ == pos_) {
+    // Hack to reset the file pointer so we can continue to read off from the
+    // last position if possible.
+    MaybeSeekLocked(pos_ - 1);
+    MaybeSeekLocked(pos_ + 1);
+  }
+  last_pos_ = pos_;
+  CHECK_NE(nullptr, f_);
+  // Read size
+  ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
+  CHECK_NE(size, 0);
+
+  ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
+  ASSIGN_OR_RETURN(std::unique_ptr<char[]> buffer,
+                   ReadBufferLocked(size, crc32));
+  Log::Message msg;
+  bool msg_valid = msg.ParseFromString(absl::string_view(buffer.get(), size));
+  if (!msg_valid) {
+    return absl::DataLossError(
+        absl::StrFormat("Unable to ParseFromString the next msg."));
+  }
+  pos_ = std::ftell(f_);
+  return msg;
 }
 
 }  // namespace witnesskvs::log

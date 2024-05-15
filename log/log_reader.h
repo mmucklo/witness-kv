@@ -30,34 +30,42 @@ class LogReader {
     LogReader* log_reader;
     long pos;
     std::unique_ptr<Log::Message> cur;
-    void ReadNext();
-
+    void next();
+    void reset();
    public:
     Iterator() { LOG(FATAL) << "not implemented."; };
     Iterator(LogReader* lr);
+    Iterator(const Iterator& it) { pos = it.pos; log_reader=it.log_reader; reset(); }
+    Iterator& operator=(Iterator& other) { pos = other.pos; log_reader=other.log_reader; reset(); return *this; }
+    Iterator& operator=(Iterator&& other) { pos = other.pos; log_reader=other.log_reader; cur = std::move(other.cur); return *this; }
+    Iterator(Iterator&& it) { pos = it.pos; log_reader=it.log_reader; cur = std::move(it.cur); }
     Iterator(LogReader* lr, std::unique_ptr<Log::Message> sentinel);
-    std::unique_ptr<Log::Message>& operator*() { return cur; }
+    Log::Message& operator*() { return *cur; }
     Iterator& operator++() {
-      ReadNext();
+      next();
       return *this;
     }
     void operator++(int) { ++*this; }
+    bool operator==(const Iterator& it) const { return it.log_reader == log_reader && it.pos == pos && cur == nullptr && it.cur == nullptr; }
   };
   static_assert(std::input_or_output_iterator<Iterator>);
 
   Iterator begin() { return Iterator(this); }
   Iterator end() { return Iterator(this, nullptr); }
 
+  // Returns the next message if any, or an error if not.
+  absl::StatusOr<Log::Message> next();
  private:
   // Returns the position of the header or
+  absl::StatusOr<Log::Message> NextLocked();
   absl::StatusOr<long> ReadHeader();
   void MaybeSeekLocked(long pos);
   absl::StatusOr<uint64_t> ReadSizeBytesLocked();
   absl::StatusOr<uint32_t> ReadCRC32Locked();
   absl::StatusOr<std::unique_ptr<char[]>> ReadBufferLocked(uint64_t size,
                                                            uint32_t crc32_val);
-  // Reads the next message from the file position specified
-  absl::StatusOr<Log::Message> ReadNextMessage(long from_pos, long& pos);
+  // Reads the next message from the file position specified, incrementing the position.
+  absl::StatusOr<Log::Message> ReadNextMessage(long& pos);
   std::string filename_;
   absl::Mutex lock_;
 
@@ -73,6 +81,7 @@ class LogReader {
   long pos_header_ ABSL_GUARDED_BY(lock_);
   // Current position in f_
   long pos_ ABSL_GUARDED_BY(lock_);
+  long last_pos_ ABSL_GUARDED_BY(lock_);
   bool header_valid_ ABSL_GUARDED_BY(lock_);
   Log::Header header_ ABSL_GUARDED_BY(lock_);
 };
