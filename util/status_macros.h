@@ -20,7 +20,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// MODIFIED to 
+// MODIFIED by mmucklo some.
 
 #ifndef STATUS_MACROS_H
 #define STATUS_MACROS_H
