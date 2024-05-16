@@ -4,18 +4,25 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <cerrno>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 
 #include "absl/cleanup/cleanup.h"
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 
-constexpr int BLOCK_SIZE =
-    4096;  // TODO(mmucklo): maybe make this flag-tunable.
+constexpr int BLOCK_SIZE = 4096;
+
+ABSL_FLAG(uint64_t, file_writer_buffer_size, BLOCK_SIZE,
+          "Default buffer size for writing. It's suggested to make this a "
+          "multiple of BLOCK_SIZE");
+namespace witnesskvs::log {
 
 void verifyFilename(std::string filename) {
   // Should be a new file in an exisiting writeable directory.
@@ -40,7 +47,11 @@ void verifyFilename(std::string filename) {
 }
 
 FileWriter::FileWriter(std::string filename)
-    : filename_(std::move(filename)), buffer_size_(0), bytes_written_(0) {
+    : filename_(std::move(filename)),
+      buffer_size_(0),
+      buffer_size_max_(absl::GetFlag(FLAGS_file_writer_buffer_size)),
+      bytes_written_(0),
+      bytes_received_(0) {
   // This may crash if we have an invalid filename.
   verifyFilename(filename_);
 
@@ -49,11 +60,11 @@ FileWriter::FileWriter(std::string filename)
       open(filename_.c_str(), O_APPEND | O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
   if (fd_ == -1) {
     LOG(FATAL) << "Could not open file descriptor for " << filename_
-               << " errno: " << errno << " " << strerror(errno);
+               << " errno: " << errno << " " << std::strerror(errno);
   }
   // Initialize the buffer
   // TODO(mmucklo): do we need to initialize this to be filled with "\0"?
-  buffer_ = std::make_unique<char[]>(BLOCK_SIZE);
+  buffer_ = std::make_unique<char[]>(buffer_size_max_);
 
   // Alloc MUST succeed;
   CHECK_NE(buffer_, nullptr);
@@ -65,7 +76,7 @@ FileWriter::~FileWriter() {
   }
   if (close(fd_) == -1) {
     LOG(FATAL) << "Error closing fd: " << fd_ << " for filename " << filename_
-               << " errno: " << errno << " " << strerror(errno);
+               << " errno: " << errno << " " << std::strerror(errno);
   }
 }
 
@@ -74,9 +85,10 @@ void FileWriter::Write(const absl::Cord& msg) {
   for (absl::string_view chunk : msg.Chunks()) {
     int chunk_idx = 0;
     const int chunk_size = chunk.size();
+    bytes_received_ += chunk_size;
     // Write the largest part of the chunk to the buffer as possible.
     while (chunk_idx < chunk_size) {
-      int remaining = BLOCK_SIZE - buffer_size_;
+      int remaining = buffer_size_max_ - buffer_size_;
       int chunk_remaining = chunk_size - chunk_idx;  // off by one error?
       if (chunk_remaining <= remaining) {
         // copy entire chunk into buffer.
@@ -91,17 +103,17 @@ void FileWriter::Write(const absl::Cord& msg) {
 
       // We should never overwrite the buffer - if so, it's certainly a
       // crashable event.
-      CHECK_LE(buffer_size_, BLOCK_SIZE);
+      CHECK_LE(buffer_size_, buffer_size_max_);
 
       // Now we may want to write the buffer if it is full.
-      if (buffer_size_ == BLOCK_SIZE) {
+      if (buffer_size_ == buffer_size_max_) {
         WriteBuffer();
       }
     }
   }
 
   // If buffer_size_ was greater, we should have written above.
-  CHECK_LT(buffer_size_, BLOCK_SIZE);
+  CHECK_LT(buffer_size_, buffer_size_max_);
 }
 
 void FileWriter::WriteBuffer() {
@@ -112,7 +124,7 @@ void FileWriter::WriteBuffer() {
   ssize_t res = write(fd_, buffer_.get(), buffer_size_);
   if (res == -1) {
     LOG(FATAL) << "Error writing chunk of Cord to file, errno: " << errno
-               << ": " << strerror(errno) << ", filename: " << filename_;
+               << ": " << std::strerror(errno) << ", filename: " << filename_;
   }
   bytes_written_ += res;
   if (res < buffer_size_) {
@@ -131,6 +143,8 @@ void FileWriter::Flush() {
   // or a passable cli flag.
   if (fdatasync(fd_) == -1) {
     LOG(ERROR) << "fdatasync returned -1, errno: " << errno << ": "
-               << strerror(errno) << ", filename: " << filename_;
+               << std::strerror(errno) << ", filename: " << filename_;
   }
 }
+
+}  // namespace witnesskvs::log

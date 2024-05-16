@@ -9,6 +9,8 @@
 #include "absl/cleanup/cleanup.h"
 #include "absl/strings/cord.h"
 
+namespace witnesskvs::log {
+
 /**
  * A single writer for a single file. It will output in file system block size
  * chunks.
@@ -39,7 +41,13 @@ class FileWriter {
   // Flushes all buffers to disk.
   void Flush();
 
+  // The number of bytes received (includes bytes written to disk and bytes
+  // still buffered).
+  ssize_t bytes_received() { return bytes_received_; }
+
+  // The number of bytes actually written to disk.
   ssize_t bytes_written() { return bytes_written_; }
+
   std::string& filename() { return filename_; }
 
  private:
@@ -49,6 +57,10 @@ class FileWriter {
   std::string filename_;
   std::unique_ptr<char[]> buffer_;  // A buffer for contents we will output.
   int buffer_size_;                 // The current filled size of the buffer.
+  const uint64_t buffer_size_max_;  // The size of the buffer when full.
   ssize_t bytes_written_;
+  ssize_t bytes_received_;
 };
+
+}  // namespace witnesskvs::log
 #endif
