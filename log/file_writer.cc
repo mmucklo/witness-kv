@@ -4,6 +4,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#include <cerrno>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 
@@ -58,7 +60,7 @@ FileWriter::FileWriter(std::string filename)
       open(filename_.c_str(), O_APPEND | O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
   if (fd_ == -1) {
     LOG(FATAL) << "Could not open file descriptor for " << filename_
-               << " errno: " << errno << " " << strerror(errno);
+               << " errno: " << errno << " " << std::strerror(errno);
   }
   // Initialize the buffer
   // TODO(mmucklo): do we need to initialize this to be filled with "\0"?
@@ -74,7 +76,7 @@ FileWriter::~FileWriter() {
   }
   if (close(fd_) == -1) {
     LOG(FATAL) << "Error closing fd: " << fd_ << " for filename " << filename_
-               << " errno: " << errno << " " << strerror(errno);
+               << " errno: " << errno << " " << std::strerror(errno);
   }
 }
 
@@ -122,7 +124,7 @@ void FileWriter::WriteBuffer() {
   ssize_t res = write(fd_, buffer_.get(), buffer_size_);
   if (res == -1) {
     LOG(FATAL) << "Error writing chunk of Cord to file, errno: " << errno
-               << ": " << strerror(errno) << ", filename: " << filename_;
+               << ": " << std::strerror(errno) << ", filename: " << filename_;
   }
   bytes_written_ += res;
   if (res < buffer_size_) {
@@ -141,7 +143,7 @@ void FileWriter::Flush() {
   // or a passable cli flag.
   if (fdatasync(fd_) == -1) {
     LOG(ERROR) << "fdatasync returned -1, errno: " << errno << ": "
-               << strerror(errno) << ", filename: " << filename_;
+               << std::strerror(errno) << ", filename: " << filename_;
   }
 }
 

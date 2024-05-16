@@ -1,8 +1,10 @@
 #include "log_reader.h"
 
 #include <bit>
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <vector>
 
@@ -53,7 +55,10 @@ LogReader::LogReader(std::string filename)
 
 LogReader::~LogReader() {
   if (f_ != nullptr) {
-    std::fclose(f_);
+    if (std::fclose(f_) == EOF) {
+      LOG(FATAL) << "Error closing fd: for filename " << filename_
+            << " errno: " << errno << " " << std::strerror(errno);
+    }
   }
 }
 
