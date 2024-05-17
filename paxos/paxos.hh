@@ -9,7 +9,8 @@ struct Node
 {
   std::string ip_address_;
   int port;
-  std::string GetAddressPortStr() {
+  std::string GetAddressPortStr()
+  {
     return this->ip_address_ + ":" + std::to_string( this->port );
   }
 };
@@ -17,7 +18,7 @@ struct Node
 class Paxos
 {
  private:
-  PaxosImpl *paxos_impl_;
+  PaxosImpl* paxos_impl_;
 
  public:
   Paxos( const std::string& config_file_name, uint8_t node_id );
@@ -30,4 +31,4 @@ class Paxos
 
 std::vector<Node> ParseNodesConfig( const std::string& config_file_name );
 
-#endif // PAXOS_HH_
+#endif  // PAXOS_HH_

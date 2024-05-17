@@ -14,4 +14,4 @@ class AcceptorService
   AcceptorService( const std::string& address, uint8_t node_id );
   ~AcceptorService();
 };
-#endif // ACCEPTOR_HH_
+#endif  // ACCEPTOR_HH_
