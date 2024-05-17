@@ -5,13 +5,12 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
 {
   bool done = false;
   int retry_count = 0;
-  uint64_t index = first_uncommited_index_;
   while (!done && retry_count < retry_count_) {
     std::string value_for_accept_phase = value;
     uint32_t num_promises = 0;
 
     paxos::PrepareRequest request;
-    request.set_index( index );
+    request.set_index( first_uncommited_index_ );
     do {
       num_promises = 0;
       request.set_proposal_number( GetNextProposalNumber() );
@@ -81,7 +80,6 @@ void Proposer::Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>
                 << accept_response.min_proposal()
                 << ", accepted value: " << value_for_accept_phase
                 << ", at index: " << request.index() << "\n";
-      index = first_uncommited_index_;
       // Maybe instead check if response.has_accepted_value()? That would avoid a string compare.
       if ( value == value_for_accept_phase) {
           done = true;
