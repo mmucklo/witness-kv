@@ -14,7 +14,7 @@ void Proposer::Propose(
     uint32_t num_promises = 0;
 
     paxos::PrepareRequest request;
-    request.set_index( index );
+    request.set_index( first_uncommited_index_ );
     do {
       num_promises = 0;
       request.set_proposal_number( GetNextProposalNumber() );
@@ -79,6 +79,7 @@ void Proposer::Propose(
                     << " and accepted value: " << value_for_accept_phase;
       }
     }
+
     if ( accept_majority_count >= majority_threshold_ ) {
       accepted_proposals_[request.index()] = value_for_accept_phase;
       ++first_uncommited_index_;
@@ -87,9 +88,11 @@ void Proposer::Propose(
                   << ", accepted value: " << value_for_accept_phase
                   << ", at index: " << request.index() << "\n";
       index = first_uncommited_index_;
-      // Maybe instead check if response.has_accepted_value()? That would avoid
-      // a string compare.
-      if ( value == value_for_accept_phase ) { done = true; }
+
+      if ( value == value_for_accept_phase ) {
+        done = true;
+        VLOG( 1 ) << "Got the value of intrest committed: " << value;
+      }
     } else if ( retry_count > retry_count_ ) {
       LOG( ERROR ) << "Failed to reach consensus\n";
     }

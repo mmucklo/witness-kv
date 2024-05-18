@@ -18,12 +18,14 @@ class PaxosImpl
   std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
 
-  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
-  size_t num_active_acceptors_conns_;
-  mutable std::shared_mutex stubs_mutex_;
+  absl::Mutex paxos_mutex_;
+  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_
+      ABSL_GUARDED_BY( paxos_mutex_ );
+  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY( paxos_mutex_ );
 
+  size_t quorum_;
   uint8_t node_id_;
-  uint8_t leader_node_id_;
+  uint8_t leader_node_id_ ABSL_GUARDED_BY( paxos_mutex_ );
 
   std::jthread heartbeat_thread_;
   std::stop_source stop_source_ = {};
@@ -48,10 +50,12 @@ class PaxosImpl
 
 PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
     : num_active_acceptors_conns_ { 0 },
+      quorum_ { 0 },
       node_id_ { node_id },
       leader_node_id_ { std::numeric_limits<uint8_t>::max() }
 {
   nodes_ = ParseNodesConfig( config_file_name );
+  CHECK_NE( nodes_.size(), 0 );
 
   std::set<std::pair<std::string, int>> s;
   for ( const auto& node : nodes_ ) {
@@ -64,6 +68,8 @@ PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
   acceptor_ = std::make_unique<AcceptorService>(
       nodes_[node_id].GetAddressPortStr(), node_id );
   CHECK_NE( acceptor_, nullptr );
+
+  quorum_ = nodes_.size() / 2 + 1;
 
   acceptor_stubs_.resize( nodes_.size() );
 }
@@ -78,8 +84,8 @@ void PaxosImpl::Propose( const std::string& value )
 {
   CHECK_NE( this->proposer_, nullptr ) << "Proposer should not be NULL.";
 
-  std::shared_lock lock( stubs_mutex_ );
-  if ( this->num_active_acceptors_conns_ < ( this->nodes_.size() / 2 + 1 ) ) {
+  absl::MutexLock l( &paxos_mutex_ );
+  if ( this->num_active_acceptors_conns_ < quorum_ ) {
     // TODO [V]: Fix this with a user specified timeout/deadline for request.
     LOG( WARNING )
         << "Replication not possible, majority of the nodes are not reachable.";
@@ -103,7 +109,7 @@ void PaxosImpl::HeartbeatThread( const std::stop_source& stop_source )
         status = acceptor_stubs_[i]->SendPing( &context, request, &response );
         if ( !status.ok() ) {
           LOG( WARNING ) << "Connection lost with node: " << i;
-          std::unique_lock lock( stubs_mutex_ );
+          absl::MutexLock l( &paxos_mutex_ );
           acceptor_stubs_[i].reset();
           CHECK( num_active_acceptors_conns_ );
           num_active_acceptors_conns_--;
@@ -115,7 +121,7 @@ void PaxosImpl::HeartbeatThread( const std::stop_source& stop_source )
         status = stub->SendPing( &context, request, &response );
         if ( status.ok() ) {
           LOG( INFO ) << "Connection established with node: " << i;
-          std::unique_lock lock( stubs_mutex_ );
+          absl::MutexLock l( &paxos_mutex_ );
           acceptor_stubs_[i] = std::move( stub );
           num_active_acceptors_conns_++;
         }
@@ -127,10 +133,13 @@ void PaxosImpl::HeartbeatThread( const std::stop_source& stop_source )
       }
     }
 
-    if ( leader_node_id_ != highest_node_id ) {
-      LOG( INFO ) << "New leader elected with node id: "
-                  << static_cast<uint32_t>( highest_node_id );
-      leader_node_id_ = highest_node_id;
+    {
+      absl::MutexLock l( &paxos_mutex_ );
+      if ( leader_node_id_ != highest_node_id ) {
+        LOG( INFO ) << "New leader elected with node id: "
+                    << static_cast<uint32_t>( highest_node_id );
+        leader_node_id_ = highest_node_id;
+      }
     }
 
     std::this_thread::sleep_for( this->hb_timer_ );

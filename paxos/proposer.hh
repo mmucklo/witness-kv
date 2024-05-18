@@ -49,13 +49,13 @@ class Proposer
   void Propose( const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>&
                     m_acceptorStubs,
                 const std::string& value );
-  std::string GetValue()
+  std::string GetValue() const
   {
     if ( accepted_proposals_.empty() ) {
       return "";  // or throw an exception, depending on your requirements
     }
     return accepted_proposals_.rbegin()->second;
   }
-  std::uint64_t GetIndex() { return first_uncommited_index_; }
+  std::uint64_t GetIndex() const { return first_uncommited_index_; }
 };
 #endif  // PROPOSER_HH_
