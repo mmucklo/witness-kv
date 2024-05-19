@@ -4,10 +4,13 @@
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
 #include "proposer.hh"
+#include "replicated_log.hh"
 
 // GRPC headers
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
+
+#include <memory>
 
 // Paxos Impl class
 class PaxosImpl
@@ -15,6 +18,9 @@ class PaxosImpl
   // private:
  public:
   std::vector<Node> nodes_;
+
+  std::shared_ptr<ReplicatedLog> replicated_log_;
+
   std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
 
@@ -63,10 +69,13 @@ PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
         << "Invalid config file : Duplicate IP address and port found";
   }
 
-  proposer_ = std::make_unique<Proposer>( nodes_.size(), node_id );
+  replicated_log_ = std::make_shared<ReplicatedLog>( node_id );
+
+  proposer_
+      = std::make_unique<Proposer>( nodes_.size(), node_id, replicated_log_ );
   CHECK_NE( proposer_, nullptr );
   acceptor_ = std::make_unique<AcceptorService>(
-      nodes_[node_id].GetAddressPortStr(), node_id );
+      nodes_[node_id].GetAddressPortStr(), node_id, replicated_log_ );
   CHECK_NE( acceptor_, nullptr );
 
   quorum_ = nodes_.size() / 2 + 1;

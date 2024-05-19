@@ -9,7 +9,7 @@ struct Node
 {
   std::string ip_address_;
   int port;
-  std::string GetAddressPortStr()
+  std::string GetAddressPortStr() const
   {
     return this->ip_address_ + ":" + std::to_string( this->port );
   }

@@ -7,6 +7,7 @@ import "google/protobuf/empty.proto";
 service Acceptor {
     rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
     rpc Accept(AcceptRequest) returns (AcceptResponse) {}
+    rpc Commit(CommitRequest) returns (CommitResponse) {}
     rpc SendPing(PingRequest) returns (PingResponse) {}
 }
 
@@ -30,6 +31,16 @@ message AcceptRequest {
 
 message AcceptResponse {
     uint64 min_proposal = 1;
+    uint64 first_unchosen_index = 2;
+}
+
+message CommitRequest {
+    uint64 index = 1;
+    string value = 2;
+}
+
+message CommitResponse {
+    uint64 first_unchosen_index = 2;
 }
 
 message PingRequest {

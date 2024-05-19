@@ -10,6 +10,8 @@ using grpc::Status;
 using paxos::Acceptor;
 using paxos::AcceptRequest;
 using paxos::AcceptResponse;
+using paxos::CommitRequest;
+using paxos::CommitResponse;
 using paxos::PingRequest;
 using paxos::PingResponse;
 using paxos::PrepareRequest;
@@ -18,19 +20,12 @@ using paxos::PrepareResponse;
 class AcceptorImpl final : public Acceptor::Service
 {
  private:
-  struct Proposal_Data
-  {
-    uint64_t min_proposal_;
-    uint64_t accepted_proposal_;
-    std::string accepted_value_;
-  };
-  std::map<uint64_t, Proposal_Data> proposal_data_;
-  std::mutex mutex_;
-
   uint8_t node_id_;
+  std::shared_ptr<ReplicatedLog> replicated_log_;
 
  public:
-  AcceptorImpl( uint8_t node_id ) : mutex_ {}, node_id_ { node_id } {}
+  AcceptorImpl( uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog )
+      : node_id_ { node_id }, replicated_log_ { rlog } {};
   ~AcceptorImpl() = default;
 
   Status Prepare( ServerContext* context, const PrepareRequest* request,
@@ -39,32 +34,31 @@ class AcceptorImpl final : public Acceptor::Service
                  AcceptResponse* response ) override;
   Status SendPing( ServerContext* context, const PingRequest* request,
                    PingResponse* response ) override;
+  Status Commit( ServerContext* context, const CommitRequest* request,
+                 CommitResponse* response ) override;
 };
 
 Status AcceptorImpl::Prepare( ServerContext* context,
                               const PrepareRequest* request,
                               PrepareResponse* response )
 {
-  std::lock_guard<std::mutex> guard( mutex_ );
+  uint64_t log_min_proposal
+      = this->replicated_log_->GetMinProposalForIdx( request->index() );
 
-  bool hasValue = false;
-  if ( proposal_data_.find( request->index() ) != proposal_data_.end() ) {
-    hasValue = true;
+  bool hasValue = ( log_min_proposal != 0 );
+
+  if ( request->proposal_number() > log_min_proposal ) {
+    this->replicated_log_->UpdateMinProposalForIdx(
+        request->index(), request->proposal_number() );
   }
 
-  uint64_t n = request->proposal_number();
-  if ( n > proposal_data_[request->index()].min_proposal_ ) {
-    proposal_data_[request->index()].min_proposal_ = n;
-  }
+  auto entry = this->replicated_log_->GetLogEntryAtIdx( request->index() );
 
-  response->set_accepted_proposal(
-      proposal_data_[request->index()].min_proposal_ );
+  response->set_accepted_proposal( entry.min_proposal_ );
 
   if ( hasValue ) {
-    response->set_accepted_proposal(
-        proposal_data_[request->index()].accepted_proposal_ );
-    response->set_accepted_value(
-        proposal_data_[request->index()].accepted_value_ );
+    response->set_accepted_proposal( entry.accepted_proposal_ );
+    response->set_accepted_value( entry.accepted_value_ );
     response->set_has_accepted_value( true );
   }
 
@@ -75,16 +69,15 @@ Status AcceptorImpl::Accept( ServerContext* context,
                              const AcceptRequest* request,
                              AcceptResponse* response )
 {
-  std::lock_guard<std::mutex> guard( mutex_ );
+  ReplicatedLogEntry entry = {};
+  entry.min_proposal_ = request->proposal_number();
+  entry.accepted_proposal_ = request->proposal_number();
+  entry.accepted_value_ = request->value();
 
-  uint64_t n = request->proposal_number();
-  if ( n >= proposal_data_[request->index()].min_proposal_ ) {
-    proposal_data_[request->index()].accepted_proposal_ = n;
-    proposal_data_[request->index()].min_proposal_ = n;
-    proposal_data_[request->index()].accepted_value_
-        = std::move( request->value() );
-  }
-  response->set_min_proposal( proposal_data_[request->index()].min_proposal_ );
+  response->set_min_proposal(
+      this->replicated_log_->UpdateLogEntryAtIdx( request->index(), entry ) );
+  response->set_first_unchosen_index(
+      this->replicated_log_->GetFirstUnchosenIdx() );
   return Status::OK;
 }
 
@@ -96,12 +89,23 @@ Status AcceptorImpl::SendPing( ServerContext* context,
   return Status::OK;
 }
 
+Status AcceptorImpl::Commit( ServerContext* context,
+                             const CommitRequest* request,
+                             CommitResponse* response )
+{
+  this->replicated_log_->SetLogEntryAtIdx( request->index(), request->value() );
+  response->set_first_unchosen_index(
+      this->replicated_log_->GetFirstUnchosenIdx() );
+  return Status::OK;
+}
+
 void RunServer( const std::string& address, uint8_t node_id,
+                std::shared_ptr<ReplicatedLog> rlog,
                 const std::stop_source& stop_source )
 {
   using namespace std::chrono_literals;
 
-  AcceptorImpl service { node_id };
+  AcceptorImpl service { node_id, rlog };
 
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
@@ -114,10 +118,12 @@ void RunServer( const std::string& address, uint8_t node_id,
   LOG( INFO ) << "Shutting down acceptor service.";
 }
 
-AcceptorService::AcceptorService( const std::string& address, uint8_t node_id )
+AcceptorService::AcceptorService( const std::string& address, uint8_t node_id,
+                                  std::shared_ptr<ReplicatedLog> rlog )
     : node_id_ { node_id }
 {
-  service_thread_ = std::jthread( RunServer, address, node_id, stop_source_ );
+  service_thread_
+      = std::jthread( RunServer, address, node_id, rlog, stop_source_ );
 }
 
 AcceptorService::~AcceptorService()

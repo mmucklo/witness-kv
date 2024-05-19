@@ -2,6 +2,7 @@
 #define ACCEPTOR_HH_
 
 #include "common.hh"
+#include "replicated_log.hh"
 
 class AcceptorService
 {
@@ -11,7 +12,8 @@ class AcceptorService
   uint8_t node_id_;
 
  public:
-  AcceptorService( const std::string& address, uint8_t node_id );
+  AcceptorService( const std::string& address, uint8_t node_id,
+                   std::shared_ptr<ReplicatedLog> rlog );
   ~AcceptorService();
 };
 #endif  // ACCEPTOR_HH_

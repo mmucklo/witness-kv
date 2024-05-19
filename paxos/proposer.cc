@@ -8,16 +8,19 @@ void Proposer::Propose(
 {
   bool done = false;
   int retry_count = 0;
-  uint64_t index = first_uncommited_index_;
   while ( !done && retry_count < retry_count_ ) {
     std::string value_for_accept_phase = value;
     uint32_t num_promises = 0;
 
+    // Perform phase 1 of the paxos operation i.e. find a proposal that will be
+    // accepted by a quorum of acceptors.
     paxos::PrepareRequest request;
-    request.set_index( first_uncommited_index_ );
+    request.set_index( this->replicated_log_->GetFirstUnchosenIdx() );
+    LOG( INFO ) << "Attempting replication at index " << request.index();
     do {
       num_promises = 0;
-      request.set_proposal_number( GetNextProposalNumber() );
+      request.set_proposal_number(
+          this->replicated_log_->GetNextProposalNumber() );
 
       uint64_t max_proposal_id = 0;
       for ( size_t i = 0; i < stubs.size(); i++ ) {
@@ -34,7 +37,8 @@ void Proposer::Propose(
           }
 
           if ( response.min_proposal() > request.proposal_number() ) {
-            proposal_number_ = response.min_proposal();
+            this->replicated_log_->UpdateProposalNumber(
+                response.min_proposal() );
             num_promises = 0;
             LOG( INFO ) << "Saw a proposal number larger than what we sent, "
                            "retry Propose operation with a bigger proposal.";
@@ -44,6 +48,8 @@ void Proposer::Propose(
             if ( max_proposal_id < response.accepted_proposal() ) {
               max_proposal_id = response.accepted_proposal();
               value_for_accept_phase = response.accepted_value();
+              LOG( INFO ) << "Current index already has value: "
+                          << value_for_accept_phase;
             }
           }
           ++num_promises;
@@ -51,6 +57,8 @@ void Proposer::Propose(
       }
     } while ( num_promises < majority_threshold_ );
 
+    // Perform phase 2 of paxos operation i.e. try to get the value we
+    // determined in phase 1 to be accepted by a quorum of acceptors.
     paxos::AcceptRequest accept_request;
     accept_request.set_proposal_number( request.proposal_number() );
     accept_request.set_index( request.index() );
@@ -69,7 +77,8 @@ void Proposer::Propose(
           continue;
         }
         if ( accept_response.min_proposal() > request.proposal_number() ) {
-          proposal_number_ = accept_response.min_proposal();
+          this->replicated_log_->UpdateProposalNumber(
+              accept_response.min_proposal() );
           accept_majority_count = 0;
           break;
         }
@@ -80,14 +89,14 @@ void Proposer::Propose(
       }
     }
 
+    // Since a quorum of acceptors responded with an accept for this value,
+    // we can mark this entry as chosen.
     if ( accept_majority_count >= majority_threshold_ ) {
-      accepted_proposals_[request.index()] = value_for_accept_phase;
-      ++first_uncommited_index_;
+      this->replicated_log_->MarkLogEntryChosen( request.index() );
       LOG( INFO ) << "Accepted Proposal number: "
                   << accept_response.min_proposal()
                   << ", accepted value: " << value_for_accept_phase
                   << ", at index: " << request.index() << "\n";
-      index = first_uncommited_index_;
 
       if ( value == value_for_accept_phase ) {
         done = true;
