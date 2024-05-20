@@ -7,6 +7,7 @@ set(SOURCES
     paxos.cc
     proposer.cc
     replicated_log.cc
+    node.cc
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})
