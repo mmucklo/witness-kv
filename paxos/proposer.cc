@@ -83,9 +83,24 @@ void Proposer::Propose(
           break;
         }
         ++accept_majority_count;
-        LOG( INFO ) << "Got accept for proposal number: "
+        LOG( INFO ) << "Got accept from " << i << " for proposal number: "
                     << accept_response.min_proposal()
                     << " and accepted value: " << value_for_accept_phase;
+
+        uint64_t peer_unchosen_index = accept_response.first_unchosen_index();
+        while ( peer_unchosen_index < request.index() ) {
+          paxos::CommitRequest commit_request;
+          commit_request.set_index( peer_unchosen_index );
+          commit_request.set_value(
+              this->replicated_log_->GetLogEntryAtIdx( peer_unchosen_index )
+                  .accepted_value_ );
+          paxos::CommitResponse commit_response;
+
+          grpc::ClientContext context1;
+          status
+              = stubs[i]->Commit( &context1, commit_request, &commit_response );
+          peer_unchosen_index = commit_response.first_unchosen_index();
+        }
       }
     }
 
