@@ -34,7 +34,8 @@ class PaxosImpl
 PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
 {
   replicated_log_ = std::make_shared<ReplicatedLog>( node_id );
-  paxos_node_ = std::make_shared<PaxosNode>( config_file_name, node_id );
+  paxos_node_ = std::make_shared<PaxosNode>( config_file_name, node_id,
+                                             replicated_log_ );
 
   proposer_ = std::make_unique<Proposer>( paxos_node_->GetNumNodes(), node_id,
                                           replicated_log_, paxos_node_ );
@@ -44,7 +45,7 @@ PaxosImpl::PaxosImpl( const std::string& config_file_name, uint8_t node_id )
       paxos_node_->GetNodeAddress( node_id ), node_id, replicated_log_ );
   CHECK_NE( acceptor_, nullptr );
 
-  paxos_node_->CreateHeartbeatThread();
+  paxos_node_->MakeReady();
 }
 
 PaxosImpl::~PaxosImpl() {}

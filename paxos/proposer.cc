@@ -23,8 +23,8 @@ void Proposer::Propose( const std::string& value )
       uint64_t max_proposal_id = 0;
       for ( size_t i = 0; i < this->node_grpc_->GetNumNodes(); i++ ) {
         paxos::PrepareResponse response;
-        grpc::Status status
-            = this->node_grpc_->PrepareGrpc( i, request, &response );
+        grpc::Status status = this->node_grpc_->PrepareGrpc(
+            static_cast<uint8_t>( i ), request, &response );
         if ( !status.ok() ) {
           LOG( WARNING ) << "Prepare grpc failed for node: " << i
                          << " with error code: " << status.error_code()
@@ -60,9 +60,11 @@ void Proposer::Propose( const std::string& value )
     accept_request.set_value( value_for_accept_phase );
     paxos::AcceptResponse accept_response;
     uint32_t accept_majority_count = 0;
+    std::vector<uint64_t> peer_unchosen_idx( this->node_grpc_->GetNumNodes() );
+
     for ( size_t i = 0; i < this->node_grpc_->GetNumNodes(); i++ ) {
-      grpc::Status status
-          = this->node_grpc_->AcceptGrpc( i, accept_request, &accept_response );
+      grpc::Status status = this->node_grpc_->AcceptGrpc(
+          static_cast<uint8_t>( i ), accept_request, &accept_response );
       if ( !status.ok() ) {
         LOG( WARNING ) << "Accept grpc failed for node: " << i
                        << " with error code: " << status.error_code()
@@ -82,7 +84,7 @@ void Proposer::Propose( const std::string& value )
 
       // TODO[V]: This commit logic will be moved to a background thread.
       uint64_t peer_unchosen_index = accept_response.first_unchosen_index();
-      while ( peer_unchosen_index < request.index() ) {
+      /*while ( peer_unchosen_index < request.index() ) {
         paxos::CommitRequest commit_request;
         commit_request.set_index( peer_unchosen_index );
         commit_request.set_value(
@@ -90,10 +92,13 @@ void Proposer::Propose( const std::string& value )
                 .accepted_value_ );
         paxos::CommitResponse commit_response;
 
-        status = this->node_grpc_->CommitGrpc( i, commit_request,
-                                               &commit_response );
+        status = this->node_grpc_->CommitGrpc(
+            static_cast<uint8_t>( i ), commit_request, &commit_response );
         peer_unchosen_index = commit_response.first_unchosen_index();
-      }
+      }*/
+
+      peer_unchosen_idx[i]
+          = std::max( peer_unchosen_index, peer_unchosen_idx[i] );
     }
 
     // Since a quorum of acceptors responded with an accept for this value,
@@ -112,5 +117,7 @@ void Proposer::Propose( const std::string& value )
     } else if ( retry_count > retry_count_ ) {
       LOG( ERROR ) << "Failed to reach consensus\n";
     }
+
+    if ( done ) { this->node_grpc_->CommitInBackground( peer_unchosen_idx ); }
   }
 }

@@ -21,17 +21,20 @@ class PaxosNode
  private:
   std::vector<Node> nodes_;
 
-  absl::Mutex node_mutex_;
-  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_
-      ABSL_GUARDED_BY( node_mutex_ );
-  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY( node_mutex_ );
+  std::shared_ptr<ReplicatedLog> replicated_log_;
+
+  // absl::Mutex node_mutex_;
+  std::mutex node_mutex_;
+  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
+  // ABSL_GUARDED_BY( node_mutex_ );
+  size_t num_active_acceptors_conns_;  // ABSL_GUARDED_BY( node_mutex_ );
 
   size_t quorum_;
   uint8_t node_id_;
-  uint8_t leader_node_id_ ABSL_GUARDED_BY( node_mutex_ );
+  uint8_t leader_node_id_;  // ABSL_GUARDED_BY( node_mutex_ );
 
   std::jthread heartbeat_thread_;
-  std::stop_source stop_source_ = {};
+  std::stop_source hb_ss_ = {};
   std::chrono::seconds hb_timer_ { 3 };
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
@@ -40,24 +43,29 @@ class PaxosNode
   // and next time will attempt to establish a connection hoping the node is
   // back. If it detects a successful re-connection, reinstate the new stub in
   // the vector at the index corresponding to the node.
-  void HeartbeatThread( const std::stop_source& stop_source );
+  void HeartbeatThread( const std::stop_source& ss );
+
+  std::jthread commit_thread_;
+  std::stop_source commit_ss_ = {};
+  std::condition_variable commit_cv_ = {};
+  std::vector<uint64_t> last_requested_commit_index_;
+
+  void CommitThread( const std::stop_source& ss );
 
   grpc::Status SendPingGrpc( uint8_t node_id, paxos::PingRequest request,
                              paxos::PingResponse* response );
 
  public:
-  PaxosNode( const std::string& config_file_name, uint8_t node_id );
+  PaxosNode( const std::string& config_file_name, uint8_t node_id,
+             std::shared_ptr<ReplicatedLog> rlog );
   ~PaxosNode();
-  void CreateHeartbeatThread( void );
-  size_t GetNumNodes() const;
+
+  void MakeReady( void );
+  void CommitInBackground( const std::vector<uint64_t>& commit_idxs );
+
+  size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress( uint8_t node_id ) const;
   bool ClusterHasEnoughNodesUp();
-
-  // TODO remove
-  const std::vector<std::unique_ptr<paxos::Acceptor::Stub>>& GetStubs()
-  {
-    return acceptor_stubs_;
-  }
 
   grpc::Status PrepareGrpc( uint8_t node_id, paxos::PrepareRequest request,
                             paxos::PrepareResponse* response );

@@ -2,6 +2,7 @@
 #define COMMON_HH_
 
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
 #include <functional>
 #include <iostream>
