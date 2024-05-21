@@ -4,12 +4,11 @@
 #include <filesystem>
 #include <iterator>
 
-#include "log_reader.h"
-#include "log.pb.h"
-
 #include "absl/functional/any_invocable.h"
 #include "absl/log/log.h"
 #include "absl/strings/string_view.h"
+#include "log.pb.h"
+#include "log_reader.h"
 
 namespace witnesskvs::log {
 
@@ -17,7 +16,10 @@ class LogsLoader {
  public:
   LogsLoader() = delete;
   LogsLoader(absl::string_view dir, absl::string_view prefix);
-  LogsLoader(absl::string_view dir, absl::string_view prefix, absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)> sortfn);
+  LogsLoader(
+      absl::string_view dir, absl::string_view prefix,
+      absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)>
+          sortfn);
 
   struct iterator {
     using difference_type = std::ptrdiff_t;
@@ -62,8 +64,8 @@ class LogsLoader {
     }
     void operator++(int) { ++*this; }
     bool operator==(const iterator& it) const {
-      return it.logs_loader == logs_loader && it.counter == counter && cur == nullptr &&
-             it.cur == nullptr;
+      return it.logs_loader == logs_loader && it.counter == counter &&
+             cur == nullptr && it.cur == nullptr;
     }
   };
   static_assert(std::input_or_output_iterator<iterator>);
@@ -73,17 +75,19 @@ class LogsLoader {
 
  private:
   // Reads the list of files satisfying the prefix from dir_.
-  absl::StatusOr<std::vector<std::filesystem::path>> ReadDir(absl::string_view dir, absl::string_view prefix);
+  absl::StatusOr<std::vector<std::filesystem::path>> ReadDir(
+      absl::string_view dir, absl::string_view prefix);
   void reset();
   absl::StatusOr<Log::Message> next();
 
-  std::vector<std::filesystem::path> files_; // List of files found.
+  std::vector<std::filesystem::path> files_;  // List of files found.
 
-   // TODO(mmucklo): use this function for sorting log messages as they come out.
-  absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)> sortfn_;
+  // TODO(mmucklo): use this function for sorting log messages as they come out.
+  absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)>
+      sortfn_;
 
-  int64_t current_file_idx_; // -1 here is a sentinel value.
-  uint64_t current_counter_; // never negative.
+  int64_t current_file_idx_;  // -1 here is a sentinel value.
+  uint64_t current_counter_;  // never negative.
   std::unique_ptr<LogReader> reader_;
   std::unique_ptr<LogReader::iterator> it_;
 };
