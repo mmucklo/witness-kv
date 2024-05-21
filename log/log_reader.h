@@ -5,7 +5,6 @@
 #include <iterator>
 #include <string>
 
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "log.pb.h"
@@ -23,7 +22,7 @@ class LogReader {
 
   std::string& filename() { return filename_; }
 
-  struct Iterator {
+  struct iterator {
     using difference_type = std::ptrdiff_t;
 
    private:
@@ -34,46 +33,46 @@ class LogReader {
     void reset();
 
    public:
-    Iterator() { LOG(FATAL) << "not implemented."; };
-    Iterator(LogReader* lr);
-    Iterator(const Iterator& it) {
+    iterator() { LOG(FATAL) << "not implemented."; };
+    iterator(LogReader* lr);
+    iterator(const iterator& it) {
       pos = it.pos;
       log_reader = it.log_reader;
       reset();
     }
-    Iterator& operator=(Iterator& other) {
+    iterator& operator=(iterator& other) {
       pos = other.pos;
       log_reader = other.log_reader;
       reset();
       return *this;
     }
-    Iterator& operator=(Iterator&& other) {
+    iterator& operator=(iterator&& other) {
       pos = other.pos;
       log_reader = other.log_reader;
       cur = std::move(other.cur);
       return *this;
     }
-    Iterator(Iterator&& it) {
+    iterator(iterator&& it) {
       pos = it.pos;
       log_reader = it.log_reader;
       cur = std::move(it.cur);
     }
-    Iterator(LogReader* lr, std::unique_ptr<Log::Message> sentinel);
+    iterator(LogReader* lr, std::unique_ptr<Log::Message> sentinel);
     Log::Message& operator*() { return *cur; }
-    Iterator& operator++() {
+    iterator& operator++() {
       next();
       return *this;
     }
     void operator++(int) { ++*this; }
-    bool operator==(const Iterator& it) const {
+    bool operator==(const iterator& it) const {
       return it.log_reader == log_reader && it.pos == pos && cur == nullptr &&
              it.cur == nullptr;
     }
   };
-  static_assert(std::input_or_output_iterator<Iterator>);
+  static_assert(std::input_or_output_iterator<iterator>);
 
-  Iterator begin() { return Iterator(this); }
-  Iterator end() { return Iterator(this, nullptr); }
+  iterator begin() { return iterator(this); }
+  iterator end() { return iterator(this, nullptr); }
 
   // Returns the next message if any, or an error if not.
   absl::StatusOr<Log::Message> next();

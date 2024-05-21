@@ -12,6 +12,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "re2/re2.h"
 #include "byte_conversion.h"
 #include "crc32.h"
 #include "log.pb.h"
@@ -35,11 +36,13 @@ ABSL_FLAG(uint64_t, log_writer_max_msg_size, 1 << 20,
 
 namespace witnesskvs::log {
 
+extern constexpr char kFilenamePrefix[] = "^[A-Za-z0-9_-]+$";
+
 // TODO(mmucklo): is there a better way to do this?
-void checkDir(std::string dir) {
+void checkDir(const std::string& dir) {
   // Should be an existing writable directory.
   // Do a bunch of tests to make sure, otherwise we crash.
-  std::filesystem::file_status dir_status = std::filesystem::status(dir);
+  const std::filesystem::file_status dir_status = std::filesystem::status(dir);
   if (!std::filesystem::exists(dir_status)) {
     LOG(FATAL) << "LogWriter: dir '" << dir << "' should exist.";
   }
@@ -53,9 +56,10 @@ void checkDir(std::string dir) {
   }
 }
 
-void checkPrefix(std::string prefix) {
-  // TODO: maybe check that the filename prefix is valid here (i.e. doesn't
-  // contain any directory separators, or has only certain characters).
+void checkPrefix(const std::string& prefix) {
+  if (!re2::RE2::FullMatch(prefix, kFilenamePrefix)) {
+    LOG(FATAL) << "LogWriter: prefix should match " << kFilenamePrefix;
+  }
 }
 
 LogWriter::LogWriter(std::string dir, std::string prefix)
@@ -67,13 +71,12 @@ LogWriter::LogWriter(std::string dir, std::string prefix)
 void LogWriter::Write(absl::string_view str) {
   absl::Cord cord;
   cord.Append(byte_str(static_cast<uint64_t>(str.size())));
-  //  LOG(INFO) << "size: " << str.size() << " size_bytes_length: " <<
-  //  size_bytes(str.size()).size();
   uint32_t crc32_res = crc32(str.data(), str.size());
   cord.Append(byte_str(crc32_res));
   cord.Append(str);
-  //  LOG(INFO) << "crc32_res: " << crc32_res;
-  //  LOG(INFO) << "crc32_length: " << crc32_bytes(crc32_res).size();
+  VLOG(2) << "LogWriter::Write size bytes: " << byte_str(static_cast<uint64_t>(str.size()));
+  VLOG(2) << "LogWriter::Write crc32_res: " << crc32_res;
+  VLOG(2) << "LogWriter::Write str length: " << str.size();
   file_writer_->Write(cord);
 }
 

@@ -147,11 +147,14 @@ absl::StatusOr<long> LogReader::ReadHeader() {
 
   // Read size
   ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
+  VLOG(2) << "header after size position: " << std::ftell(f_) << " size: " << size;
   CHECK_NE(size, 0);
 
   ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
+  VLOG(2) << "header after crc32 position: " << std::ftell(f_);
   ASSIGN_OR_RETURN(std::unique_ptr<char[]> buffer,
                    ReadBufferLocked(size, crc32));
+  VLOG(2) << "header after buffer position: " << std::ftell(f_);
   if (!header_.ParseFromString(absl::string_view(buffer.get(), size))) {
     return absl::DataLossError(
         absl::StrFormat("Unable to ParseFromString the header."));
@@ -159,11 +162,11 @@ absl::StatusOr<long> LogReader::ReadHeader() {
   return (pos_ = pos_header_ = std::ftell(f_));
 }
 
-LogReader::Iterator::Iterator(LogReader* lr) : log_reader(lr), pos(0) {
+LogReader::iterator::iterator(LogReader* lr) : log_reader(lr), pos(0) {
   reset();
 }
 
-void LogReader::Iterator::reset() {
+void LogReader::iterator::reset() {
   absl::StatusOr<long> pos_or = log_reader->ReadHeader();
   if (!pos_or.ok()) {
     // Invalid header on this file.
@@ -175,11 +178,11 @@ void LogReader::Iterator::reset() {
   next();
 }
 
-LogReader::Iterator::Iterator(LogReader* lr,
+LogReader::iterator::iterator(LogReader* lr,
                               std::unique_ptr<Log::Message> sentinel)
     : log_reader(lr), pos(0), cur(std::move(sentinel)) {}
 
-void LogReader::Iterator::next() {
+void LogReader::iterator::next() {
   VLOG(1) << "next";
   absl::StatusOr<Log::Message> msg_or = log_reader->ReadNextMessage(pos);
   if (msg_or.ok()) {
@@ -201,16 +204,18 @@ absl::StatusOr<Log::Message> LogReader::NextLocked() {
   if (last_pos_ == pos_) {
     // Hack to reset the file pointer so we can continue to read off from the
     // last position if possible.
-    MaybeSeekLocked(pos_ - 1);
+    MaybeSeekLocked(pos_ - 1); // this moves pos_ back 1.
     MaybeSeekLocked(pos_ + 1);
   }
   last_pos_ = pos_;
   CHECK_NE(nullptr, f_);
   // Read size
   ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
-  CHECK_NE(size, 0);
-
   ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
+  if (size == 0) {
+    // Just a blank message.
+    return Log::Message();
+  }
   ASSIGN_OR_RETURN(std::unique_ptr<char[]> buffer,
                    ReadBufferLocked(size, crc32));
   Log::Message msg;
