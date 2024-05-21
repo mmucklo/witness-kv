@@ -107,3 +107,43 @@ TEST(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
   VerifyLogIntegrity(nodes, 2 * num_proposals);
 }
+
+TEST(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
+  const size_t num_nodes = 3;
+  const int sleep_timer = 4;
+  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  for (size_t i = 0; i < num_nodes; i++) {
+    nodes[i] = std::make_unique<Paxos>("paxos/nodes_config.txt", i);
+  }
+
+  sleep(sleep_timer);
+
+  const size_t num_proposals = 5;
+
+  // First batch of proposals, all nodes are up.
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[0]->Propose(std::to_string(i));
+  }
+
+  // Mimic node going away and some operations happening while node is down and
+  // then node comes back up.
+  nodes[num_nodes - 1].reset();
+  sleep(sleep_timer);
+
+  // Second batch of proposals, one node is not up.
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[0]->Propose(std::to_string(num_proposals + i));
+  }
+
+  nodes[num_nodes - 1] =
+      std::make_unique<Paxos>("paxos/nodes_config.txt", (num_nodes - 1));
+  sleep(sleep_timer);
+
+  // Third batch of proposals, all nodes are up again.
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[0]->Propose(std::to_string(2 * num_proposals + i));
+  }
+
+  // Log must reflect the operations from all three batch of proposals.
+  VerifyLogIntegrity(nodes, 3 * num_proposals);
+}
