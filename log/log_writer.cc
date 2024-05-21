@@ -12,10 +12,10 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "re2/re2.h"
 #include "byte_conversion.h"
 #include "crc32.h"
 #include "log.pb.h"
+#include "re2/re2.h"
 
 // TODO(mmucklo): explore encrypted at rest
 // TODO(mmucklo): compression
@@ -74,7 +74,8 @@ void LogWriter::Write(absl::string_view str) {
   uint32_t crc32_res = crc32(str.data(), str.size());
   cord.Append(byte_str(crc32_res));
   cord.Append(str);
-  VLOG(2) << "LogWriter::Write size bytes: " << byte_str(static_cast<uint64_t>(str.size()));
+  VLOG(2) << "LogWriter::Write size bytes: "
+          << byte_str(static_cast<uint64_t>(str.size()));
   VLOG(2) << "LogWriter::Write crc32_res: " << crc32_res;
   VLOG(2) << "LogWriter::Write str length: " << str.size();
   file_writer_->Write(cord);
