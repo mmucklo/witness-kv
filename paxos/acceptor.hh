@@ -4,16 +4,15 @@
 #include "common.hh"
 #include "replicated_log.hh"
 
-class AcceptorService
-{
+class AcceptorService {
  private:
   std::jthread service_thread_;
   std::stop_source stop_source_ = {};
   uint8_t node_id_;
 
  public:
-  AcceptorService( const std::string& address, uint8_t node_id,
-                   std::shared_ptr<ReplicatedLog> rlog );
+  AcceptorService(const std::string& address, uint8_t node_id,
+                  std::shared_ptr<ReplicatedLog> rlog);
   ~AcceptorService();
 };
 #endif  // ACCEPTOR_HH_

@@ -12,8 +12,7 @@
 
 #include "node.hh"
 
-class Proposer
-{
+class Proposer {
  private:
   uint8_t node_id_;
   int majority_threshold_;
@@ -23,19 +22,16 @@ class Proposer
   std::shared_ptr<PaxosNode> node_grpc_;
 
  public:
-  Proposer( int num_acceptors, uint8_t nodeId,
-            std::shared_ptr<ReplicatedLog> rlog,
-            std::shared_ptr<PaxosNode> node_grpc )
-      : retry_count_ { 3 },
-        majority_threshold_ { num_acceptors / 2 + 1 },
-        node_id_ { nodeId },
-        replicated_log_ { rlog },
-        node_grpc_ { node_grpc }
-  {}
+  Proposer(int num_acceptors, uint8_t nodeId,
+           std::shared_ptr<ReplicatedLog> rlog,
+           std::shared_ptr<PaxosNode> node_grpc)
+      : retry_count_{3},
+        majority_threshold_{num_acceptors / 2 + 1},
+        node_id_{nodeId},
+        replicated_log_{rlog},
+        node_grpc_{node_grpc} {}
   ~Proposer() = default;
 
-  void Propose( const std::string& value );
-  std::string GetValue() const { return ""; }
-  std::uint64_t GetIndex() const { return 0; }
+  void Propose(const std::string& value);
 };
 #endif  // PROPOSER_HH_

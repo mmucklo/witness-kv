@@ -117,7 +117,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
     std::this_thread::sleep_for(this->hb_timer_);
   }
 
-  LOG(INFO) << "Shutting down heartbeat thread on node: " << static_cast<uint32_t>(node_id_);
+  LOG(INFO) << "Shutting down heartbeat thread on node: "
+            << static_cast<uint32_t>(node_id_);
 }
 
 void PaxosNode::CommitThread(const std::stop_source& ss) {
@@ -179,7 +180,8 @@ void PaxosNode::CommitThread(const std::stop_source& ss) {
     }
   }
 
-  LOG(INFO) << "Shutting down Commit thread on node: " << static_cast<uint32_t>(node_id_);
+  LOG(INFO) << "Shutting down Commit thread on node: "
+            << static_cast<uint32_t>(node_id_);
 }
 
 void PaxosNode::MakeReady() {
@@ -197,8 +199,9 @@ void PaxosNode::CommitInBackground(const std::vector<uint64_t>& commit_idxs) {
   {
     std::lock_guard<std::mutex> guard(node_mutex_);
     for (size_t i = 0; i < GetNumNodes(); i++) {
-      last_requested_commit_index_[i] =
-          std::max(last_requested_commit_index_[i], commit_idxs[i]);
+      // TODO [V]: After stable log integration check that the request is never
+      // lesser than what was previously asked by this node.
+      last_requested_commit_index_[i] = commit_idxs[i];
     }
   }
   commit_cv_.notify_one();
