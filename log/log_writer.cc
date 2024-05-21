@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <type_traits>
 
 #include "absl/flags/flag.h"

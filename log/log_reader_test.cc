@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"

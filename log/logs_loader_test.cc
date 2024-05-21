@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
@@ -15,6 +16,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "log.pb.h"
@@ -31,8 +33,26 @@ using ::testing::UnorderedElementsAre;
 MATCHER(IsError, "") { return (!arg.ok()); }
 
 namespace witnesskvs::log {
+class LogWriterTestPeer {
+ public:
+  LogWriterTestPeer() = delete;
+  // Disable copy (and move) semantics.
+  LogWriterTestPeer(const LogWriterTestPeer&) = delete;
+  LogWriterTestPeer& operator=(const LogWriterTestPeer&) = delete;
+  LogWriterTestPeer(std::string dir, std::string prefix)
+      : log_writer_(dir, prefix) {
+    absl::MutexLock l(&log_writer_.lock_);
+    log_writer_.InitFileWriterLocked();
+  }
+  std::string filename() { return log_writer_.filename(); }
+
+ private:
+  LogWriter log_writer_;
+};
+
 namespace {
 
+// TODO(mmucklo): put this reused method into a common testutil file.
 absl::Status Cleanup(std::vector<std::string> filenames) {
   bool success = true;
   for (auto& filename : filenames) {
@@ -230,12 +250,9 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
     absl::SleepFor(absl::Milliseconds(1));
   }
   {
-    // Another fake blank file.
-    std::string filename =
-        absl::StrFormat("%s.%d", prefix, absl::ToUnixMicros(absl::Now()));
-    std::FILE* f = fopen(filename.c_str(), "w+");
-    std::fclose(f);
-    cleanup_files.push_back(filename);
+    // A blank file with a header only.
+    LogWriterTestPeer log_writer("/tmp", prefix);
+    cleanup_files.push_back(log_writer.filename());
     absl::SleepFor(absl::Milliseconds(1));
   }
   {

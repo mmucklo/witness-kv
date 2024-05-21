@@ -1,6 +1,7 @@
 #ifndef LOG_LOGS_LOADER_H
 #define LOG_LOGS_LOADER_H
 
+#include <cstddef>
 #include <filesystem>
 #include <iterator>
 
@@ -23,6 +24,10 @@ namespace witnesskvs::log {
 class LogsLoader {
  public:
   LogsLoader() = delete;
+
+  // Disable copy (and move) semantics.
+  LogsLoader(const LogsLoader&) = delete;
+  LogsLoader& operator=(const LogsLoader&) = delete;
 
   // dir is the directory to find the log messages
   // prefix is the file naming scheme.

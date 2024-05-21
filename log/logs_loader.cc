@@ -1,6 +1,7 @@
 #include "logs_loader.h"
 
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include "absl/flags/flag.h"

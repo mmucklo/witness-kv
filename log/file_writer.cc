@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/flags/flag.h"

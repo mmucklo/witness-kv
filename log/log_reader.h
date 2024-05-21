@@ -1,6 +1,7 @@
 #ifndef LOG_LOG_READER_H
 #define LOG_LOG_READER_H
 
+#include <cstddef>
 #include <cstdio>
 #include <iterator>
 #include <string>
@@ -16,6 +17,8 @@ class LogReader {
   LogReader() = delete;
   // Create a LogReader on the specified file.
   LogReader(std::string filename);
+
+  // Disable copy (and move) semantics.
   LogReader(const LogReader&) = delete;
   LogReader& operator=(const LogReader&) = delete;
   ~LogReader();
