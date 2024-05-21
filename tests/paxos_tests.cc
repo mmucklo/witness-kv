@@ -1,12 +1,17 @@
 // Gtest header
+// #include <absl/flags.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <ostream>
 
-#include "node.hh"
+#include "paxos.hh"
+
+// ABSL_DECLARE_FLAG( int, absl_log_min_level, 3,  // Defaults to FATAL (3)
+//                    "Minimum log level for Abseil logging." );
 
 // Simple test to sanity check file parsing logic.
 TEST( PaxosSanity, ConfigFileParseTest )
@@ -35,4 +40,35 @@ TEST( PaxosSanity, ConfigFileParseTest )
 
   temp_file.close();
   ASSERT_EQ( remove( filename ), 0 );
+}
+
+TEST( PaxosSanity, ReplicatedLogSanity )
+{
+  const size_t num_nodes = 3;
+  const int sleep_timer = 5;
+  std::vector<std::unique_ptr<Paxos>> nodes( num_nodes );
+  for ( size_t i = 0; i < num_nodes; i++ ) {
+    nodes[i] = std::make_unique<Paxos>( "paxos/nodes_config.txt", i );
+  }
+
+  sleep( sleep_timer );
+
+  const size_t num_proposals = 10;
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    nodes[0]->Propose( std::to_string( i ) );
+  }
+
+  std::vector<std::map<uint64_t, ReplicatedLogEntry>> logs( num_nodes );
+  for ( size_t i = 0; i < num_nodes; i++ ) {
+    logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+    CHECK_EQ( logs[i].size(), num_proposals );
+  }
+
+  // Ensure all the nodes see the same value in their log positions.
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    for ( size_t n = 0; n < num_nodes; n++ ) {
+      CHECK_EQ( logs[0].find( i )->second.accepted_value_,
+                logs[n].find( i )->second.accepted_value_ );
+    }
+  }
 }

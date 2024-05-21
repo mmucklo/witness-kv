@@ -47,6 +47,12 @@ class ReplicatedLog
   // new_entry. Regardless returns the proposal number needed for this entry to
   // be updated.
   uint64_t UpdateLogEntryAtIdx( uint64_t idx, ReplicatedLogEntry new_entry );
+
+  // Useful for unit testing.
+  std::map<uint64_t, ReplicatedLogEntry> GetLogEntries()
+  {
+    return log_entries_;
+  }
 };
 
 #endif  // REPLICATED_LOG_H_

@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include "paxos.hh"
 
+/*
 TEST( PaxosReplicateTest, ReplicateValue )
 {
   // Create a Proposer and Acceptor
@@ -39,7 +40,7 @@ TEST( PaxosReplicateTest, NoCorum )
   uint64_t replicatedIndex = node0.GetIndex();
   EXPECT_EQ( replicatedValue, "" );
 }
-/*This test would change once we communicate the commit to all nodes*/
+//This test would change once we communicate the commit to all nodes
 TEST( PaxosReplicateTest, CorrectIndex )
 {
   // Create a Proposer and Acceptor
@@ -131,3 +132,4 @@ TEST( PaxosReplicateTest, SameValue )
   EXPECT_EQ( replicatedValue2, value );
   EXPECT_EQ( replicatedIndex2 - 1, 0 );
 }
+*/

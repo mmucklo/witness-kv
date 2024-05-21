@@ -23,15 +23,13 @@ class PaxosNode
 
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
-  // absl::Mutex node_mutex_;
   std::mutex node_mutex_;
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
-  // ABSL_GUARDED_BY( node_mutex_ );
-  size_t num_active_acceptors_conns_;  // ABSL_GUARDED_BY( node_mutex_ );
+  size_t num_active_acceptors_conns_;
 
   size_t quorum_;
   uint8_t node_id_;
-  uint8_t leader_node_id_;  // ABSL_GUARDED_BY( node_mutex_ );
+  uint8_t leader_node_id_;
 
   std::jthread heartbeat_thread_;
   std::stop_source hb_ss_ = {};
