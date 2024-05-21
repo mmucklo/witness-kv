@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -14,6 +15,11 @@
 #include "log.pb.h"
 #include "log_reader.h"
 #include "re2/re2.h"
+
+// The maximum amount of memory we can use for loading and sorting the log
+// entries if we need to sort.
+ABSL_FLAG(uint64_t, logs_loader_max_memory_for_sorting, 1 << 30,
+          "Max memory for sorting");
 
 namespace witnesskvs::log {
 
@@ -51,16 +57,18 @@ LogsLoader::LogsLoader(
     absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)>
         sortfn)
     : current_file_idx_(-1), current_counter_(0), sortfn_(std::move(sortfn)) {
-  checkDir(dir);
-  checkPrefix(prefix);
-  absl::StatusOr<std::vector<std::filesystem::path>> entries =
-      ReadDir(dir, prefix);
-  CHECK_OK(entries) << "Bad result reading the directory: "
-                    << entries.status().ToString();
-  files_ = std::move(entries.value());
+  Init(dir, prefix);
 }
+
 LogsLoader::LogsLoader(absl::string_view dir, absl::string_view prefix)
-    : current_file_idx_(-1), current_counter_(0) {
+    : current_file_idx_(-1),
+      current_counter_(0),
+      msgs_counter_(-1),
+      sortfn_(nullptr) {
+  Init(dir, prefix);
+}
+
+void LogsLoader::Init(absl::string_view dir, absl::string_view prefix) {
   checkDir(dir);
   checkPrefix(prefix);
   absl::StatusOr<std::vector<std::filesystem::path>> entries =
@@ -111,6 +119,9 @@ absl::StatusOr<std::vector<std::filesystem::path>> LogsLoader::ReadDir(
     entries.push_back(
         FileEntry{.ext_micros = ext_micros, .path = dir_entry.path()});
   }
+
+  // Read the earliest file first. As long as we don't write parallel log
+  // streams, the files themselves should have a happens-before relationship.
   std::sort(entries.begin(), entries.end(),
             [](const FileEntry& a, const FileEntry& b) {
               return a.ext_micros < b.ext_micros;
@@ -130,6 +141,42 @@ void LogsLoader::reset() {
   current_counter_ = 0;
   reader_.reset();
   it_.reset();
+  msgs_counter_ = -1;
+  msgs_.reset();
+}
+
+// TODO(mmucklo): maybe make this more functional for clarty or have it create
+// it's own iterator.
+void LogsLoader::LoadAndSortMessages() {
+  // TODO(mmucklo): Deal with memory constraints and do external merge sort.
+  CHECK(sortfn_);
+  LogReader reader(files_[current_file_idx_].string());
+  LogReader::iterator it = reader.begin();
+  msgs_ = std::make_unique<std::vector<Log::Message>>();
+  while (it != reader.end()) {
+    msgs_->push_back(*it);
+    it++;
+  }
+  std::sort(msgs_->begin(), msgs_->end(),
+            [this](const Log::Message& a, const Log::Message& b) {
+              // TODO(mmucklo): see if there's a way we can get rid of the
+              // wrapping closure.
+              return sortfn_(a, b);
+            });
+  msgs_counter_ = 0;
+}
+
+absl::StatusOr<Log::Message> LogsLoader::next_sorted() {
+  while (msgs_ == nullptr || msgs_counter_ >= msgs_->size()) {
+    ++current_file_idx_;
+    if (current_file_idx_ >= files_.size()) {
+      return absl::OutOfRangeError("No more files (1)");
+    }
+    LoadAndSortMessages();
+  }
+  CHECK_LT(msgs_counter_, msgs_->size());
+  ++current_counter_;
+  return (std::move(msgs_->at(msgs_counter_++)));  // intentional postfix.
 }
 
 absl::StatusOr<Log::Message> LogsLoader::next() {
@@ -138,13 +185,23 @@ absl::StatusOr<Log::Message> LogsLoader::next() {
             << current_file_idx_ << " files_.size(): " << files_.size();
     return absl::OutOfRangeError("No more files");
   }
+
+  // Special sorted retrieval.
+  //
+  // TODO(mmucklo): deal with memory constraints and use external sorting
+  // if necessary, spooling to disk.
+  if (sortfn_) {
+    return next_sorted();
+  }
+
+  // Basic (unsorted retrieval). Steps through the file, uses less memory.
   if (current_file_idx_ >= 0 && *it_ != reader_->end()) {
     ++(*it_);
   }
   while (current_file_idx_ < 0 || *it_ == reader_->end()) {
     ++current_file_idx_;
     if (current_file_idx_ >= files_.size()) {
-      return absl::OutOfRangeError("(1)No more files");
+      return absl::OutOfRangeError("No more files (2)");
     }
     reader_ = std::make_unique<LogReader>(files_[current_file_idx_].string());
     it_ = std::make_unique<LogReader::iterator>(reader_->begin());
