@@ -23,21 +23,20 @@ namespace witnesskvs::log {
  * The chunk size is presently a constant in file_writer.cc but can become a
  * flag if necessary.
  */
-class FileWriter
-{
+class FileWriter {
  public:
  public:
-  FileWriter( std::string filename );
+  FileWriter(std::string filename);
   FileWriter() = delete;
-  FileWriter( const FileWriter& ) = delete;
-  FileWriter& operator=( const FileWriter& ) = delete;
+  FileWriter(const FileWriter&) = delete;
+  FileWriter& operator=(const FileWriter&) = delete;
   ~FileWriter();
 
   // TODO: maybe create a std::unique_ptr<> returning New method for storing
   // these things on the heap?
 
   // Writes the cord out, may buffer.
-  void Write( const absl::Cord& msg );
+  void Write(const absl::Cord& msg);
 
   // Flushes all buffers to disk.
   void Flush();
