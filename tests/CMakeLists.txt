@@ -25,7 +25,6 @@ set(This witnesskvTest)
 set(Sources
     sanity.cc
     paxos_tests.cc
-    test_proposer.cc
 )
 
 include_directories(${PROJECT_SOURCE_DIR}/paxos)

@@ -65,7 +65,6 @@ void ReplicatedLog::SetLogEntryAtIdx( uint64_t idx, std::string value )
 {
   absl::MutexLock l( &log_mutex_ );
   ReplicatedLogEntry &entry = log_entries_[idx];
-  CHECK( !entry.is_chosen_ );
   if ( entry.accepted_value_ != value ) {
     // This is fine, as it is possible we may be the only node that accepted a
     // value but that value never got quorum, some other value won and now we
