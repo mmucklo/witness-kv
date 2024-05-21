@@ -13,7 +13,9 @@
 #include "absl/status/status.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "log.pb.h"
 #include "log_writer.h"
@@ -185,6 +187,101 @@ TEST(LogsLoaderTest, MultiFileTest) {
   ASSERT_THAT(Cleanup(cleanup_files), IsOk());
 }
 
+TEST(LogsLoaderTest, MultiFileTestWithBlank) {
+  std::vector<std::string> cleanup_files;
+  std::string prefix = GetTempPrefix();
+  Log::Message log_message1;
+  log_message1.mutable_paxos()->set_round(4);
+  log_message1.mutable_paxos()->set_proposal_id(9);
+  log_message1.mutable_paxos()->set_value("test1234");
+  Log::Message log_message2;
+  log_message2.mutable_paxos()->set_round(5);
+  log_message2.mutable_paxos()->set_proposal_id(2);
+  log_message2.mutable_paxos()->set_value("test12344");
+  Log::Message log_message3;
+  log_message3.mutable_paxos()->set_round(6);
+  log_message3.mutable_paxos()->set_proposal_id(4);
+  log_message3.mutable_paxos()->set_value("test1234124");
+  {
+    // Fake blank file.
+    // TODO(mmucklo): Figure out a way to add a blank header file.
+    std::string filename =
+        absl::StrFormat("%s.%d", prefix, absl::ToUnixMicros(absl::Now()));
+    std::FILE* f = fopen(filename.c_str(), "w+");
+    std::fclose(f);
+    cleanup_files.push_back(filename);
+    absl::SleepFor(absl::Milliseconds(1));
+  }
+  {
+    LogWriter log_writer("/tmp", prefix);
+    EXPECT_THAT(log_writer.Log(log_message1), IsOk());
+    EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    // Another fake blank file.
+    std::string filename =
+        absl::StrFormat("%s.%d", prefix, absl::ToUnixMicros(absl::Now()));
+    std::FILE* f = fopen(filename.c_str(), "w+");
+    std::fclose(f);
+    cleanup_files.push_back(filename);
+    absl::SleepFor(absl::Milliseconds(1));
+  }
+  {
+    // Another fake blank file.
+    std::string filename =
+        absl::StrFormat("%s.%d", prefix, absl::ToUnixMicros(absl::Now()));
+    std::FILE* f = fopen(filename.c_str(), "w+");
+    std::fclose(f);
+    cleanup_files.push_back(filename);
+    absl::SleepFor(absl::Milliseconds(1));
+  }
+  {
+    LogWriter log_writer("/tmp", prefix);
+    LOG(INFO) << "second log message";
+    EXPECT_THAT(log_writer.Log(log_message2), IsOk());
+    LOG(INFO) << "third log message";
+    EXPECT_THAT(log_writer.Log(log_message3), IsOk());
+    EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    // Fake blank file.
+    // TODO(mmucklo): Figure out a way to add a blank header file.
+    std::string filename =
+        absl::StrFormat("%s.%d", prefix, absl::ToUnixMicros(absl::Now()));
+    std::FILE* f = fopen(filename.c_str(), "w+");
+    std::fclose(f);
+    cleanup_files.push_back(filename);
+  }
+  {
+    LogsLoader logs_loader("/tmp", prefix);
+    auto it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message1));
+    ++it;
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message2));
+    it++;
+    ASSERT_NE(it, logs_loader.end());
+    int count = 0;
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : logs_loader) {
+      count++;
+      msgs.push_back(log_msg);
+    }
+    EXPECT_EQ(count, 3);
+    EXPECT_THAT(
+        msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
+                          EqualsProto(log_message3)));
+  }
+  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+}
+
 TEST(LogsLoaderTest, SortingTest) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
@@ -224,9 +321,10 @@ TEST(LogsLoaderTest, SortingTest) {
   }
   {
     // Try a logs loader that sorts by round.
-    LogsLoader logs_loader("/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
-      return a.paxos().round() < b.paxos().round();
-    });
+    LogsLoader logs_loader("/tmp", prefix,
+                           [](const Log::Message& a, const Log::Message& b) {
+                             return a.paxos().round() < b.paxos().round();
+                           });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message1));
@@ -245,6 +343,92 @@ TEST(LogsLoaderTest, SortingTest) {
     EXPECT_THAT(
         msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
                           EqualsProto(log_message3)));
+  }
+}
+
+TEST(LogsLoaderTest, SortingMultiFileTest) {
+  std::vector<std::string> cleanup_files;
+  std::string prefix = GetTempPrefix();
+  Log::Message log_message1;
+  log_message1.mutable_paxos()->set_round(4);
+  log_message1.mutable_paxos()->set_proposal_id(9);
+  log_message1.mutable_paxos()->set_value("test1234");
+  Log::Message log_message2;
+  log_message2.mutable_paxos()->set_round(5);
+  log_message2.mutable_paxos()->set_proposal_id(2);
+  log_message2.mutable_paxos()->set_value("test12344");
+  Log::Message log_message3;
+  log_message3.mutable_paxos()->set_round(6);
+  log_message3.mutable_paxos()->set_proposal_id(4);
+  log_message3.mutable_paxos()->set_value("test1234124");
+  Log::Message log_message4;
+  Log::Message log_message5;
+  log_message5.mutable_paxos()->set_round(3);
+  log_message5.mutable_paxos()->set_proposal_id(4);
+  log_message5.mutable_paxos()->set_value("test1234124");
+  Log::Message log_message6;
+  log_message6.mutable_paxos()->set_round(2);
+  log_message6.mutable_paxos()->set_proposal_id(4);
+  log_message6.mutable_paxos()->set_value("test1234124");
+  {
+    LogWriter log_writer("/tmp", prefix);
+    LOG(INFO) << "second log message";
+    EXPECT_THAT(log_writer.Log(log_message3), IsOk());
+    LOG(INFO) << "third log message";
+    EXPECT_THAT(log_writer.Log(log_message2), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message1), IsOk());
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    LogWriter log_writer("/tmp", prefix);
+    EXPECT_THAT(log_writer.Log(log_message4), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message5), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message6), IsOk());
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    // Unsorted should return 3, 2, 1, 4, 6, 5 in terms of message order.
+    LogsLoader logs_loader("/tmp", prefix);
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : logs_loader) {
+      msgs.push_back(log_msg);
+    }
+    EXPECT_THAT(
+        msgs,
+        ElementsAre(EqualsProto(log_message3), EqualsProto(log_message2),
+                    EqualsProto(log_message1), EqualsProto(log_message4),
+                    EqualsProto(log_message5), EqualsProto(log_message6)));
+  }
+  {
+    // Try a logs loader that sorts by round.
+    LogsLoader logs_loader("/tmp", prefix,
+                           [](const Log::Message& a, const Log::Message& b) {
+                             return a.paxos().round() < b.paxos().round();
+                           });
+    auto it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message1));
+    ++it;
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message2));
+    it++;
+    ASSERT_NE(it, logs_loader.end());
+    int count = 0;
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : logs_loader) {
+      count++;
+      msgs.push_back(log_msg);
+    }
+    EXPECT_EQ(count, 6);
+    EXPECT_THAT(
+        msgs,
+        ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
+                    EqualsProto(log_message3), EqualsProto(log_message4),
+                    EqualsProto(log_message6), EqualsProto(log_message5)));
   }
 }
 
