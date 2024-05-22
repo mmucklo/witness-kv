@@ -53,8 +53,9 @@ class LogWriter {
   mutable absl::Mutex lock_;      // Main lock.
   std::string dir_;
   std::string prefix_;
-  std::queue<std::unique_ptr<std::string>> write_queue_ ABSL_GUARDED_BY(
-      write_queue_lock_);  // TODO: maybe switch to a concurrent data structure.
+  std::queue<std::unique_ptr<std::string>> write_queue_
+      ABSL_GUARDED_BY(write_queue_lock_);  // TODO: maybe switch to a
+                                           // concurrent data structure.
   std::unique_ptr<FileWriter> file_writer_ ABSL_GUARDED_BY(lock_)
       ABSL_ACQUIRED_BEFORE(write_queue_lock_);
   int64_t entries_count_ ABSL_GUARDED_BY(

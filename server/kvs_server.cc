@@ -1,10 +1,11 @@
+#include <grpcpp/grpcpp.h>
+
 #include <iostream>
 #include <map>
 #include <memory>
 #include <string>
 
 #include "kvs.grpc.pb.h"
-#include <grpcpp/grpcpp.h>
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -31,13 +32,15 @@ class KvsServiceImpl final : public Kvs::Service
     return Status::OK;
   }
 
-  Status Set( ServerContext* context, const KvsSetRequest* request, google::protobuf::Empty* response ) override
+  Status Set( ServerContext* context, const KvsSetRequest* request,
+              google::protobuf::Empty* response ) override
   {
     globalMap[request->key()] = request->value();
     return Status::OK;
   }
 
-  Status Delete( ServerContext* context, const KvsKey* k, google::protobuf::Empty* response ) override
+  Status Delete( ServerContext* context, const KvsKey* k,
+                 google::protobuf::Empty* response ) override
   {
     return Status::OK;
   }
@@ -46,7 +49,7 @@ class KvsServiceImpl final : public Kvs::Service
 void RunServer( uint16_t port )
 {
   // FIXME: Hard-coded port for now.
-  std::string server_address = "0.0.0.0:50051";
+  std::string server_address = "0.0.0.0:50054";
   KvsServiceImpl service;
 
   ServerBuilder builder;

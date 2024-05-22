@@ -10,44 +10,47 @@
 #include <grpcpp/create_channel.h>
 
 // std headers
-#include <iostream>
-#include <memory>
-
 #include <sys/wait.h>
 #include <unistd.h>
 
-struct SanityTests
-    : public ::testing::Test
+#include <iostream>
+#include <memory>
+
+struct SanityTests : public ::testing::Test
 {
-    pid_t server_pid;
-    virtual void SetUp() override {
-        server_pid = fork();
-        ASSERT_NE( server_pid, -1 );
+  pid_t server_pid;
+  virtual void SetUp() override
+  {
+    server_pid = fork();
+    ASSERT_NE( server_pid, -1 );
 
-        if ( server_pid == 0 ) {
-            // Child process: Run the server executable
-            char serverName[] = "build/server/kvs_server";
-            char* server_args[] = { serverName, nullptr };
-            ASSERT_NE( execvp( server_args[0], server_args ), -1 );
-        }
-
-        // Probably not needed, but wait a bit just to be safe.
-        std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
+    if ( server_pid == 0 ) {
+      // Child process: Run the server executable
+      char serverName[] = "build/server/kvs_server";
+      char* server_args[] = { serverName, nullptr };
+      ASSERT_NE( execvp( server_args[0], server_args ), -1 );
     }
 
-    virtual void TearDown() override {
-        if (server_pid != 0) {
-            ASSERT_EQ(kill(server_pid, SIGINT), 0);
-            int status;
-            waitpid(server_pid, &status, 0);
-        }
+    // Probably not needed, but wait a bit just to be safe.
+    std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
+  }
+
+  virtual void TearDown() override
+  {
+    if ( server_pid != 0 ) {
+      ASSERT_EQ( kill( server_pid, SIGINT ), 0 );
+      int status;
+      waitpid( server_pid, &status, 0 );
     }
+  }
 };
 
 TEST_F( SanityTests, BasicSanityTest )
 {
-  auto channel = grpc::CreateChannel( "localhost:50051", grpc::InsecureChannelCredentials() );
-  std::unique_ptr<KeyValueStore::Kvs::Stub> stub = KeyValueStore::Kvs::NewStub( channel );
+  auto channel = grpc::CreateChannel( "0.0.0.0:50054",
+                                      grpc::InsecureChannelCredentials() );
+  std::unique_ptr<KeyValueStore::Kvs::Stub> stub
+      = KeyValueStore::Kvs::NewStub( channel );
   grpc::ClientContext context;
 
   // 1. Test "Get" on empty kvs
