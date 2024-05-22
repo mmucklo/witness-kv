@@ -6,18 +6,15 @@
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
 
-struct Node
-{
+struct Node {
   std::string ip_address_;
   int port_;
-  std::string GetAddressPortStr() const
-  {
-    return this->ip_address_ + ":" + std::to_string( this->port_ );
+  std::string GetAddressPortStr() const {
+    return this->ip_address_ + ":" + std::to_string(this->port_);
   }
 };
 
-class PaxosNode
-{
+class PaxosNode {
  private:
   std::vector<Node> nodes_;
 
@@ -33,7 +30,7 @@ class PaxosNode
 
   std::jthread heartbeat_thread_;
   std::stop_source hb_ss_ = {};
-  std::chrono::seconds hb_timer_ { 3 };
+  std::chrono::seconds hb_timer_{3};
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
   // This thread then goes to sleep for `hb_timer_` number of seconds.
@@ -41,37 +38,37 @@ class PaxosNode
   // and next time will attempt to establish a connection hoping the node is
   // back. If it detects a successful re-connection, reinstate the new stub in
   // the vector at the index corresponding to the node.
-  void HeartbeatThread( const std::stop_source& ss );
+  void HeartbeatThread(const std::stop_source& ss);
 
   std::jthread commit_thread_;
   std::stop_source commit_ss_ = {};
   std::condition_variable commit_cv_ = {};
   std::vector<uint64_t> last_requested_commit_index_;
 
-  void CommitThread( const std::stop_source& ss );
+  void CommitThread(const std::stop_source& ss);
 
-  grpc::Status SendPingGrpc( uint8_t node_id, paxos::PingRequest request,
-                             paxos::PingResponse* response );
+  grpc::Status SendPingGrpc(uint8_t node_id, paxos::PingRequest request,
+                            paxos::PingResponse* response);
 
  public:
-  PaxosNode( const std::string& config_file_name, uint8_t node_id,
-             std::shared_ptr<ReplicatedLog> rlog );
+  PaxosNode(const std::string& config_file_name, uint8_t node_id,
+            std::shared_ptr<ReplicatedLog> rlog);
   ~PaxosNode();
 
-  void MakeReady( void );
-  void CommitInBackground( const std::vector<uint64_t>& commit_idxs );
+  void MakeReady(void);
+  void CommitInBackground(const std::vector<uint64_t>& commit_idxs);
 
   size_t GetNumNodes() const { return nodes_.size(); };
-  std::string GetNodeAddress( uint8_t node_id ) const;
+  std::string GetNodeAddress(uint8_t node_id) const;
   bool ClusterHasEnoughNodesUp();
 
-  grpc::Status PrepareGrpc( uint8_t node_id, paxos::PrepareRequest request,
-                            paxos::PrepareResponse* response );
-  grpc::Status AcceptGrpc( uint8_t node_id, paxos::AcceptRequest request,
-                           paxos::AcceptResponse* response );
-  grpc::Status CommitGrpc( uint8_t node_id, paxos::CommitRequest request,
-                           paxos::CommitResponse* response );
+  grpc::Status PrepareGrpc(uint8_t node_id, paxos::PrepareRequest request,
+                           paxos::PrepareResponse* response);
+  grpc::Status AcceptGrpc(uint8_t node_id, paxos::AcceptRequest request,
+                          paxos::AcceptResponse* response);
+  grpc::Status CommitGrpc(uint8_t node_id, paxos::CommitRequest request,
+                          paxos::CommitResponse* response);
 };
 
-std::vector<Node> ParseNodesConfig( const std::string& config_file_name );
+std::vector<Node> ParseNodesConfig(const std::string& config_file_name);
 #endif  // NODE_HH_
