@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/flags/flag.h"
@@ -19,9 +20,13 @@
 
 constexpr int BLOCK_SIZE = 4096;
 
+// TODO(mmucklo): maybe make this a bit bigger to encourage sequential writing,
+// but not so big as to take up a significant portion of the available memory
+// which we want to instead reserve for the KV store itself.
 ABSL_FLAG(uint64_t, file_writer_buffer_size, BLOCK_SIZE,
           "Default buffer size for writing. It's suggested to make this a "
           "multiple of BLOCK_SIZE");
+
 namespace witnesskvs::log {
 
 void verifyFilename(std::string filename) {

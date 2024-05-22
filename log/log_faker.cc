@@ -1,15 +1,18 @@
 #include "log_writer.h"
 
 // Creates fake log entries.
+#include <string>
+
+#include "log.pb.h"
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
 #include "absl/log/initialize.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_format.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "log.pb.h"
 
 ABSL_FLAG(uint16_t, num, 1, "Number of entries to create.");
 ABSL_FLAG(absl::Duration, pause, absl::Seconds(1),

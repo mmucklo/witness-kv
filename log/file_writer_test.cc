@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <string>
 
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"

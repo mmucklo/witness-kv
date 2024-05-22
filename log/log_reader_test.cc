@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
@@ -51,6 +52,40 @@ TEST(LogReaderTest, Basic) {
   log_message.mutable_paxos()->set_round(4);
   log_message.mutable_paxos()->set_proposal_id(9);
   log_message.mutable_paxos()->set_value("test1234");
+  {
+    LogWriter log_writer("/tmp", "log_reader_test");
+    EXPECT_THAT(log_writer.Log(log_message), IsOk());
+    EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
+    cleanup_files = log_writer.filenames();
+    filename = log_writer.filename();
+  }
+  {
+    LogReader log_reader(filename);
+    auto it = log_reader.begin();
+    ASSERT_NE(it, log_reader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message));
+    it++;  // Test postfix notation.
+    EXPECT_EQ(it, log_reader.end());
+    // Reset iterator.
+    it = log_reader.begin();
+    ASSERT_NE(it, log_reader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message));
+    ++it;  // Test prefix notation.
+    EXPECT_EQ(it, log_reader.end());
+    int count = 0;
+    for (auto& log_msg : log_reader) {
+      count++;
+      EXPECT_THAT(log_msg, EqualsProto(log_message));
+    }
+    EXPECT_EQ(count, 1);
+  }
+  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+}
+
+TEST(LogReaderTest, BlankMessage) {
+  std::vector<std::string> cleanup_files;
+  std::string filename;
+  Log::Message log_message;
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
