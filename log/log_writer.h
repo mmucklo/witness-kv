@@ -16,11 +16,15 @@
 
 namespace witnesskvs::log {
 
+class LogWriterTestPeer;
+
 class LogWriter {
  public:
   LogWriter() = delete;
   // Create a LogWriter with directory and filename prefix as specified.
   LogWriter(std::string dir, std::string prefix);
+
+  // Disable copy (and move) semantics.
   LogWriter(const LogWriter&) = delete;
   LogWriter& operator=(const LogWriter&) = delete;
 
@@ -58,6 +62,8 @@ class LogWriter {
       lock);  // Number of entries written to current file_writer_
   std::vector<std::string> filenames_
       ABSL_GUARDED_BY(lock);  // List of files written to.
+
+  friend LogWriterTestPeer;
 };
 
 }  // namespace witnesskvs::log

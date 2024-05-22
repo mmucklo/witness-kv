@@ -28,6 +28,8 @@ class FileWriter {
  public:
   FileWriter(std::string filename);
   FileWriter() = delete;
+
+  // Disable copy (and move) semantics.
   FileWriter(const FileWriter&) = delete;
   FileWriter& operator=(const FileWriter&) = delete;
   ~FileWriter();
