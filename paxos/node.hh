@@ -12,6 +12,11 @@ struct Node {
   std::string GetAddressPortStr() const {
     return this->ip_address_ + ":" + std::to_string(this->port_);
   }
+
+  std::string GetLeaderAddressPortStr(uint64_t nodes_size) const {
+    int leader_port = this->port_ + nodes_size;
+    return this->ip_address_ + ":" + std::to_string( leader_port );
+  }
 };
 
 class PaxosNode {
@@ -60,6 +65,8 @@ class PaxosNode {
 
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
+  std::string GetLeaderAddress( uint8_t nodes_id ) const;
+  std::unique_ptr<paxos::Leader::Stub> GetLeaderStub() const;
   bool ClusterHasEnoughNodesUp();
 
   grpc::Status PrepareGrpc(uint8_t node_id, paxos::PrepareRequest request,

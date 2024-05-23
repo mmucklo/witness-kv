@@ -8,6 +8,7 @@ set(SOURCES
     proposer.cc
     replicated_log.cc
     node.cc
+    leader.cc
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})

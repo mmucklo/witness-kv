@@ -20,6 +20,7 @@ void Proposer::Propose(const std::string& value) {
           this->replicated_log_->GetNextProposalNumber());
 
       uint64_t max_proposal_id = 0;
+      LOG(INFO) << "Starting proposal from node: " << static_cast<uint32_t>(this->node_id_);
       for (size_t i = 0; i < this->node_grpc_->GetNumNodes(); i++) {
         paxos::PrepareResponse response;
         grpc::Status status = this->node_grpc_->PrepareGrpc(

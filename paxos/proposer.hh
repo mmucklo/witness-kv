@@ -31,6 +31,10 @@ class Proposer {
         replicated_log_{rlog},
         node_grpc_{node_grpc} {}
   ~Proposer() = default;
+  
+  void SetMajorityThreshold( int num_acceptors ) {
+    majority_threshold_ = num_acceptors / 2 + 1;
+  }
 
   void Propose(const std::string& value);
 };

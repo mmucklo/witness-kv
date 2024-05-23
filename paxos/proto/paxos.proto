@@ -11,6 +11,14 @@ service Acceptor {
     rpc SendPing(PingRequest) returns (PingResponse) {}
 }
 
+service Leader {
+    rpc Propose(ProposeRequest) returns (google.protobuf.Empty) {}
+}
+
+message ProposeRequest {
+    string value = 1;
+}
+
 message PrepareRequest {
     uint64 proposal_number = 1;
     uint64 index = 2;

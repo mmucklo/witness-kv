@@ -121,6 +121,16 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
             << static_cast<uint32_t>(node_id_);
 }
 
+std::unique_ptr<paxos::Leader::Stub> PaxosNode::GetLeaderStub() const {
+  google::protobuf::Empty response;
+  grpc::ClientContext context;
+  auto leader_channel = grpc::CreateChannel(
+      nodes_[leader_node_id_].GetLeaderAddressPortStr( nodes_.size() ),
+      grpc::InsecureChannelCredentials() );
+  auto leader_stub_ = paxos::Leader::NewStub( leader_channel );
+  return std::move(leader_stub_);
+}
+
 void PaxosNode::CommitThread(const std::stop_source& ss) {
   std::stop_token stoken = ss.get_token();
   std::unique_lock lk(node_mutex_);
@@ -209,6 +219,10 @@ void PaxosNode::CommitInBackground(const std::vector<uint64_t>& commit_idxs) {
 
 std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
   return nodes_[node_id].GetAddressPortStr();
+}
+
+std::string PaxosNode::GetLeaderAddress( uint8_t node_id ) const {
+  return nodes_[node_id].GetLeaderAddressPortStr( nodes_.size() );
 }
 
 bool PaxosNode::ClusterHasEnoughNodesUp() {

@@ -5,13 +5,12 @@ Paxos::Paxos(const std::string& config_file_name, uint8_t node_id) {
   paxos_node_ =
       std::make_shared<PaxosNode>(config_file_name, node_id, replicated_log_);
 
-  proposer_ = std::make_unique<Proposer>(paxos_node_->GetNumNodes(), node_id,
-                                         replicated_log_, paxos_node_);
-  CHECK_NE(proposer_, nullptr);
-
   acceptor_ = std::make_unique<AcceptorService>(
       paxos_node_->GetNodeAddress(node_id), node_id, replicated_log_);
   CHECK_NE(acceptor_, nullptr);
+  leader_ = std::make_unique<LeaderService>( paxos_node_->GetLeaderAddress(node_id), 
+                                             node_id, replicated_log_, paxos_node_);
+  CHECK_NE(leader_, nullptr);
 
   paxos_node_->MakeReady();
 }
@@ -19,8 +18,6 @@ Paxos::Paxos(const std::string& config_file_name, uint8_t node_id) {
 Paxos::~Paxos() { acceptor_.reset(); }
 
 void Paxos::Propose(const std::string& value) {
-  CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
-
   // absl::MutexLock l( &paxos_mutex_ );
   // if ( this->num_active_acceptors_conns_ < quorum_ ) {
   //  TODO [V]: Fix this with a user specified timeout/deadline for request.
@@ -28,5 +25,9 @@ void Paxos::Propose(const std::string& value) {
   //    << "Replication not possible, majority of the nodes are not reachable.";
   //}
   // else {
-  this->proposer_->Propose(value);
+  grpc::ClientContext context;
+  paxos::ProposeRequest request;
+  google::protobuf::Empty response;
+  request.set_value(value);
+  paxos_node_->GetLeaderStub()->Propose(&context, request, &response);
 }
