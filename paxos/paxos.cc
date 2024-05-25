@@ -24,12 +24,11 @@ Paxos::~Paxos() {
 void Paxos::Propose(const std::string& value) {
   CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
 
-  // absl::MutexLock l( &paxos_mutex_ );
-  // if ( this->num_active_acceptors_conns_ < quorum_ ) {
-  //  TODO [V]: Fix this with a user specified timeout/deadline for request.
-  // LOG( WARNING )
-  //    << "Replication not possible, majority of the nodes are not reachable.";
-  //}
-  // else {
-  this->proposer_->Propose(value);
+  if (!paxos_node_->ClusterHasEnoughNodesUp()) {
+    // TODO [V]: Fix this with a user specified timeout/deadline for request.
+    LOG(WARNING)
+        << "Replication not possible, majority of the nodes are not reachable.";
+  } else {
+    this->proposer_->Propose(value);
+  }
 }
