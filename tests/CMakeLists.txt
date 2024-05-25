@@ -39,9 +39,13 @@ target_link_libraries(${This} PUBLIC
     gmock_main
     kvsproto
     paxos
+    absl::flags
 )
 
 add_test(
     NAME ${This}
     COMMAND ${This}
 )
+
+include(GoogleTest)
+gtest_discover_tests(${This})

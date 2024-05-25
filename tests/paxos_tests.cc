@@ -1,5 +1,4 @@
 // Gtest header
-// #include <absl/flags.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
@@ -8,13 +7,16 @@
 #include <memory>
 #include <ostream>
 
+#include "absl/flags/flag.h"
 #include "paxos.hh"
 
-// ABSL_DECLARE_FLAG( int, absl_log_min_level, 3,  // Defaults to FATAL (3)
-//                    "Minimum log level for Abseil logging." );
+ABSL_DECLARE_FLAG(uint64_t, absl_log_min_level);
+
+ABSL_DECLARE_FLAG(std::string, paxos_log_directory);
+ABSL_DECLARE_FLAG(std::string, paxos_log_file_prefix);
 
 // Simple test to sanity check file parsing logic.
-TEST(PaxosSanity, ConfigFileParseTest) {
+TEST(FileParseTest, ConfigFileParseTest) {
   std::vector<std::string> addrs = {"0.0.0.0", "0.1.2.3", "8.7.6.5",
                                     "10.10.10.10"};
   std::vector<std::string> ports = {"10", "20", "30", "40"};
@@ -63,7 +65,22 @@ void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
   }
 }
 
-TEST(PaxosSanity, ReplicatedLogSanity) {
+struct PaxosSanity : public ::testing::Test {
+  virtual void SetUp() override {
+    absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
+    absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
+  }
+
+  virtual void TearDown() override {
+    std::string file = absl::GetFlag(FLAGS_paxos_log_directory) + "/" +
+                       absl::GetFlag(FLAGS_paxos_log_file_prefix);
+
+    std::string command = "rm -f " + file + "*";
+    CHECK_EQ(system(command.c_str()), 0);
+  }
+};
+
+TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -81,7 +98,7 @@ TEST(PaxosSanity, ReplicatedLogSanity) {
   VerifyLogIntegrity(nodes, num_proposals);
 }
 
-TEST(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
+TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -108,7 +125,7 @@ TEST(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   VerifyLogIntegrity(nodes, 2 * num_proposals);
 }
 
-TEST(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
+TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);

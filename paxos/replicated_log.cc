@@ -1,7 +1,5 @@
 #include "replicated_log.hh"
 
-#include <memory>
-
 #include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "log/logs_loader.h"
@@ -47,7 +45,8 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
     first_unchosen_index_++;
   }
 
-  VLOG(1) << "Constructed Replicated log with first unchosen index : "
+  VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
+          << "] Constructed Replicated log with first unchosen index : "
           << first_unchosen_index_ << " and proposal number "
           << proposal_number_;
 
@@ -67,7 +66,8 @@ uint64_t ReplicatedLog::GetNextProposalNumber() {
   proposal_number_ =
       ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) |
       (uint64_t)node_id_;
-  LOG(INFO) << "Generated proposal number: " << proposal_number_;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Generated proposal number: " << proposal_number_;
   return proposal_number_;
 }
 
@@ -91,8 +91,8 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
     }
     first_unchosen_index_++;
   }
-  LOG(INFO) << "First unchosen index after UpdateFirstUnchosenIdx: "
-            << first_unchosen_index_;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] updated First unchosen index: " << first_unchosen_index_;
 }
 
 void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
@@ -103,10 +103,9 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
   log_message.mutable_paxos()->set_accepted_value(entry.accepted_value_);
   log_message.mutable_paxos()->set_is_chosen(entry.is_chosen_);
 
-  LOG(INFO) << "Making a stable entry at idx: " << entry.idx_
-            << " with value: " << entry.accepted_value_
-            << " and is_chosen: " << entry.is_chosen_;
-
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] stable entry at idx: " << entry.idx_ << " with value: "
+            << entry.accepted_value_ << " with chosenness: " << entry.is_chosen_;
   auto status = log_writer_->Log(log_message);
   CHECK_EQ(status, absl::OkStatus());
 }
@@ -128,7 +127,8 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
     // This is fine, as it is possible we may be the only node that accepted a
     // value but that value never got quorum, some other value won and now we
     // are learning about it.
-    LOG(INFO) << "Choosing a different value (" << value
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_) 
+              << "] Choosing a different value (" << value
               << ") than what was previously accepted ("
               << entry.accepted_value_ << ")";
   }
@@ -157,6 +157,7 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
   CHECK(new_min_proposal > it->second.min_proposal_)
       << "Cannot attempt to make an update to min proposal with a lower value.";
 
+  it->second.idx_ = idx;
   it->second.min_proposal_ = new_min_proposal;
   MakeLogEntryStable(it->second);
 }
@@ -172,7 +173,10 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   absl::MutexLock l(&log_mutex_);
   ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
-    current_entry = new_entry;
+    current_entry.min_proposal_ = new_entry.min_proposal_;
+    current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
+    current_entry.accepted_value_ = new_entry.accepted_value_;
+    current_entry.is_chosen_ = new_entry.is_chosen_;
     MakeLogEntryStable(current_entry);
   }
   return current_entry.min_proposal_;

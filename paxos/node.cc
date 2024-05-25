@@ -76,7 +76,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
   auto timeout = static_cast<std::chrono::seconds>(
       absl::GetFlag(FLAGS_paxos_node_heartbeat));
 
-  LOG(INFO) << "Node Heartbeat Timeout " << timeout;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Heartbeat Timeout " << timeout;
 
   std::stop_token stoken = ss.get_token();
 
@@ -90,7 +91,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       if (acceptor_stubs_[i]) {
         status = acceptor_stubs_[i]->SendPing(&context, request, &response);
         if (!status.ok()) {
-          LOG(WARNING) << "Connection lost with node: " << i;
+          LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                       << "] Connection lost with node: " << i;
           std::lock_guard<std::mutex> guard(node_mutex_);
           acceptor_stubs_[i].reset();
           CHECK(num_active_acceptors_conns_);
@@ -102,7 +104,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
         auto stub = paxos::Acceptor::NewStub(channel);
         status = stub->SendPing(&context, request, &response);
         if (status.ok()) {
-          LOG(INFO) << "Connection established with node: " << i;
+          LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                    << "] Connection established with node: " << i;
           std::lock_guard<std::mutex> guard(node_mutex_);
           acceptor_stubs_[i] = std::move(stub);
           num_active_acceptors_conns_++;
@@ -118,7 +121,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
     {
       std::lock_guard<std::mutex> guard(node_mutex_);
       if (leader_node_id_ != highest_node_id) {
-        LOG(INFO) << "New leader elected with node id: "
+        LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                  << "] New leader elected with node id: "
                   << static_cast<uint32_t>(highest_node_id);
         leader_node_id_ = highest_node_id;
       }
@@ -127,8 +131,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
     std::this_thread::sleep_for(timeout);
   }
 
-  LOG(INFO) << "Shutting down heartbeat thread on node: "
-            << static_cast<uint32_t>(node_id_);
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Shutting down heartbeat thread";
 }
 
 void PaxosNode::CommitThread(const std::stop_source& ss) {
@@ -138,13 +142,15 @@ void PaxosNode::CommitThread(const std::stop_source& ss) {
     if (stoken.stop_requested()) {
       break;
     }
-    VLOG(1) << "Commit thread going to sleep.";
+    VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Commit thread going to sleep.";
     commit_cv_.wait(lk);
     if (stoken.stop_requested()) {
       break;
     }
 
-    VLOG(1) << "Commit thread woken up..";
+    VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Commit thread woken up..";
 
     // For each peer node attempt to get all their unchosen indices chosen
     // that you know are chosen.
@@ -179,7 +185,8 @@ void PaxosNode::CommitThread(const std::stop_source& ss) {
 
         CHECK_LT(last_requested_commit_index_[i],
                  commit_response.first_unchosen_index())
-            << "This index was just committed, the response must return an "
+            << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] This index was just committed, the response must return an "
                "index beyond it";
         last_requested_commit_index_[i] =
             commit_response.first_unchosen_index();
@@ -187,8 +194,8 @@ void PaxosNode::CommitThread(const std::stop_source& ss) {
     }
   }
 
-  LOG(INFO) << "Shutting down Commit thread on node: "
-            << static_cast<uint32_t>(node_id_);
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Shutting down Commit thread";
 }
 
 void PaxosNode::MakeReady() {

@@ -112,7 +112,7 @@ void RunServer(const std::string& address, uint8_t node_id,
   while (!stoken.stop_requested()) {
     std::this_thread::sleep_for(300ms);
   }
-  LOG(INFO) << "Shutting down acceptor service on " << node_id;
+  LOG(INFO) << "NODE: [" << node_id << "] Shutting down acceptor service";
 }
 
 AcceptorService::AcceptorService(const std::string& address, uint8_t node_id,
