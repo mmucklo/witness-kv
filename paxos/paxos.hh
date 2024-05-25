@@ -15,7 +15,6 @@ class Paxos {
   std::unique_ptr<AcceptorService> acceptor_;
 
  public:
-  Paxos(const std::string& config_file_name, uint8_t node_id);
   Paxos(uint8_t node_id);
   ~Paxos();
 

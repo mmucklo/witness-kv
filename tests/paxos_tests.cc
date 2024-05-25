@@ -1,5 +1,4 @@
 // Gtest header
-// #include <absl/flags.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
