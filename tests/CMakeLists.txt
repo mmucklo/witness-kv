@@ -20,7 +20,7 @@ target_link_libraries(protobuf_matchers PUBLIC
     $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
 )
 
-set(This witnesskvTest)
+set(This paxos_tests)
 
 set(Sources
     sanity.cc
