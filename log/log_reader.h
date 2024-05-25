@@ -10,7 +10,7 @@
 #include "absl/status/statusor.h"
 #include "log.pb.h"
 
-namespace witnesskvs::log {
+namespace witnesskv::log {
 
 class LogReader {
  public:

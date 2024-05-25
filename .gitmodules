@@ -8,3 +8,6 @@
 [submodule "protobuf-matchers"]
 	path = protobuf-matchers
 	url = https://github.com/inazarenko/protobuf-matchers
+[submodule "third_party/rocksdb"]
+	path = third_party/rocksdb
+	url = https://github.com/mmucklo/rocksdb

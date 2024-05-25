@@ -21,7 +21,7 @@
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 
-namespace witnesskvs::log {
+namespace witnesskv::log {
 
 // TODO(mmucklo): is there a better way to do this?
 std::string checkFile(std::string filename) {

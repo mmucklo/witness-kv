@@ -27,7 +27,7 @@ using ::testing::HasSubstr;
 using ::testing::Not;
 MATCHER(IsError, "") { return (!arg.ok()); }
 
-namespace witnesskvs::log {
+namespace witnesskv::log {
 namespace {
 
 absl::Status Cleanup(std::vector<std::string> filenames) {

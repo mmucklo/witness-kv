@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <sys/types.h>
-namespace witnesskvs::log {
+namespace witnesskv::log {
 
 // Computes a crc32 - PUBLIC DOMAIN from https://csbruce.com/software/crc32.c
 //

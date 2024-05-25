@@ -22,7 +22,7 @@
 ABSL_FLAG(uint64_t, logs_loader_max_memory_for_sorting, 1 << 30,
           "Max memory for sorting");
 
-namespace witnesskvs::log {
+namespace witnesskv::log {
 
 extern const char kFilenamePrefix[];
 

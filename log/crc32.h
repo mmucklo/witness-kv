@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include <sys/types.h>
-namespace witnesskvs::log {
+namespace witnesskv::log {
 
 // Returns a crc32 of the buffer passed in.
 uint32_t crc32(const char *buf, size_t bufLen);

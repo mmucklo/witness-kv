@@ -32,7 +32,7 @@ using ::testing::UnorderedElementsAre;
 
 MATCHER(IsError, "") { return (!arg.ok()); }
 
-namespace witnesskvs::log {
+namespace witnesskv::log {
 class LogWriterTestPeer {
  public:
   LogWriterTestPeer() = delete;
