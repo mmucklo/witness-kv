@@ -4,6 +4,11 @@
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
 
+#include "absl/flags/flag.h"
+
+ABSL_FLAG(uint64_t, paxos_node_heartbeat, 3,
+          "Heartbeat timeout for paxos node");
+
 std::vector<Node> ParseNodesConfig(const std::string& config_file_name) {
   std::vector<Node> nodes{};
   std::ifstream config_file(config_file_name);
@@ -68,6 +73,11 @@ PaxosNode::~PaxosNode() {
 }
 
 void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
+  auto timeout = static_cast<std::chrono::seconds>(
+      absl::GetFlag(FLAGS_paxos_node_heartbeat));
+
+  LOG(INFO) << "Node Heartbeat Timeout " << timeout;
+
   std::stop_token stoken = ss.get_token();
 
   while (!stoken.stop_requested()) {
@@ -114,7 +124,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       }
     }
 
-    std::this_thread::sleep_for(this->hb_timer_);
+    std::this_thread::sleep_for(timeout);
   }
 
   LOG(INFO) << "Shutting down heartbeat thread on node: "
@@ -167,13 +177,10 @@ void PaxosNode::CommitThread(const std::stop_source& ss) {
           break;
         }
 
-        // TODO[V]: We can't satisfy this invariant right now because nodes
-        // going down and coming back up are not using the stable log yet, once
-        // we have that this should always be true.
-        // CHECK_LT( last_requested_commit_index_[i],
-        //          commit_response.first_unchosen_index() )
-        //    << "This index was just committed, the response must return an "
-        //       "index beyond it";
+        CHECK_LT(last_requested_commit_index_[i],
+                 commit_response.first_unchosen_index())
+            << "This index was just committed, the response must return an "
+               "index beyond it";
         last_requested_commit_index_[i] =
             commit_response.first_unchosen_index();
       }
@@ -199,8 +206,6 @@ void PaxosNode::CommitInBackground(const std::vector<uint64_t>& commit_idxs) {
   {
     std::lock_guard<std::mutex> guard(node_mutex_);
     for (size_t i = 0; i < GetNumNodes(); i++) {
-      // TODO [V]: After stable log integration check that the request is never
-      // lesser than what was previously asked by this node.
       last_requested_commit_index_[i] = commit_idxs[i];
     }
   }

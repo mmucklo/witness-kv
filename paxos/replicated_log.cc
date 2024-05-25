@@ -2,23 +2,26 @@
 
 #include <memory>
 
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "log/logs_loader.h"
 
-constexpr std::string getLogDirectory() { return "/tmp"; }
-constexpr std::string getLogFilePrefix() { return "replication_log"; }
+ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id) : node_id_{node_id} {
+ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
+          "Paxos log file prefix");
+
+ReplicatedLog::ReplicatedLog(uint8_t node_id)
+    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-
-  first_unchosen_index_ = 0;
-  proposal_number_ = 0;
 
   bool has_atleast_one_chosen = false;
 
-  const std::string prefix = getLogFilePrefix() + std::to_string(node_id);
+  const std::string prefix =
+      absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
 
-  witnesskvs::log::LogsLoader log_loader{getLogDirectory(), prefix};
+  witnesskvs::log::LogsLoader log_loader{
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix};
   for (auto &log_msg : log_loader) {
     ReplicatedLogEntry &entry = log_entries_[log_msg.paxos().idx()];
     entry.idx_ = log_msg.paxos().idx();
@@ -37,16 +40,19 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id) : node_id_{node_id} {
         std::max(proposal_number_, log_msg.paxos().min_proposal());
   }
 
+  // If there was atleast one previously known to be chosen entry in the log,
+  // the `first_unchosen_index` will be the index one beyond the max we've
+  // stored in the log.
   if (log_entries_.size() && has_atleast_one_chosen) {
     first_unchosen_index_++;
   }
 
-  LOG(INFO) << "Constructed Replicated log first_unchosen_index_ : "
-            << first_unchosen_index_ << " and proposal_number_ "
-            << proposal_number_;
+  VLOG(1) << "Constructed Replicated log with first unchosen index : "
+          << first_unchosen_index_ << " and proposal number "
+          << proposal_number_;
 
-  log_writer_ =
-      std::make_unique<witnesskvs::log::LogWriter>(getLogDirectory(), prefix);
+  log_writer_ = std::make_unique<witnesskvs::log::LogWriter>(
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix);
 }
 
 ReplicatedLog::~ReplicatedLog() {}
@@ -162,7 +168,7 @@ ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
   return it->second;
 }
 
-uint64_t ReplicatedLog::UpdateLogEntry(ReplicatedLogEntry new_entry) {
+uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   absl::MutexLock l(&log_mutex_);
   ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {

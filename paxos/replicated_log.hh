@@ -50,7 +50,7 @@ class ReplicatedLog {
   // Updates the log entry if the existing entry has a lower min_proposal than
   // new_entry. Regardless returns the proposal number needed for this entry to
   // be updated.
-  uint64_t UpdateLogEntry(ReplicatedLogEntry new_entry);
+  uint64_t UpdateLogEntry(const ReplicatedLogEntry &new_entry);
 
   // Useful for unit testing.
   std::map<uint64_t, ReplicatedLogEntry> GetLogEntries() {
