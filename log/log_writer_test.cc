@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <string>
 
+#include "log.pb.h"
+
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -16,7 +18,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
-#include "log.pb.h"
+#include "tests/test_util.h"
 #include "tests/test_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
@@ -29,19 +31,6 @@ MATCHER(IsError, "") { return (!arg.ok()); }
 
 namespace witnesskvs::log {
 namespace {
-
-absl::Status Cleanup(std::vector<std::string> filenames) {
-  bool success = true;
-  for (auto& filename : filenames) {
-    success =
-        success && std::filesystem::remove(std::filesystem::path(filename));
-  }
-  if (success) {
-    return absl::OkStatus();
-  }
-  return absl::UnknownError(
-      absl::StrCat("Could not delete files: ", absl::StrJoin(filenames, ",")));
-}
 
 TEST(LogWriterTest, Basic) {
   std::vector<std::string> cleanup_files;
@@ -56,7 +45,7 @@ TEST(LogWriterTest, Basic) {
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogWriterTest, TooBig) {
@@ -76,7 +65,7 @@ TEST(LogWriterTest, TooBig) {
     EXPECT_EQ(log_writer.filename(), "");
     cleanup_files = log_writer.filenames();
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogWriterTest, Rotation) {
@@ -107,7 +96,7 @@ TEST(LogWriterTest, Rotation) {
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 }  // namespace

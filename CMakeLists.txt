@@ -6,7 +6,6 @@ include(etc/cflags.cmake)
 include(etc/format.cmake)
 
 enable_testing()
-
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
@@ -26,3 +25,4 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/paxos")
 add_subdirectory("${PROJECT_SOURCE_DIR}/client")
 add_subdirectory("${PROJECT_SOURCE_DIR}/log")
 add_subdirectory("${PROJECT_SOURCE_DIR}/util")
+add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/rocksdb")
