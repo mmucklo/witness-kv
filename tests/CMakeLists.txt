@@ -58,8 +58,6 @@ add_test(
     COMMAND ${This}
 )
 
-
-
 target_link_libraries(rocksdb_test PUBLIC 
     test_main
     gmock
