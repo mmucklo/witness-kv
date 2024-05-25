@@ -1,6 +1,8 @@
 
 find_package(Threads)
 
+include_directories(${PROJECT_SOURCE_DIR})
+
 set(SOURCES
     client.cc
 )

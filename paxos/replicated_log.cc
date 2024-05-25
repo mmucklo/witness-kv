@@ -1,11 +1,52 @@
 #include "replicated_log.hh"
 
+#include <memory>
+
+#include "absl/status/status.h"
+#include "log/logs_loader.h"
+
+constexpr std::string getLogDirectory() { return "/tmp"; }
+constexpr std::string getLogFilePrefix() { return "replication_log"; }
+
 ReplicatedLog::ReplicatedLog(uint8_t node_id) : node_id_{node_id} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-  // TODO[V]: Read `first_unchosen_index_` and `log_entries_` from the actual
-  // log.
+
   first_unchosen_index_ = 0;
   proposal_number_ = 0;
+
+  bool has_atleast_one_chosen = false;
+
+  const std::string prefix = getLogFilePrefix() + std::to_string(node_id);
+
+  witnesskvs::log::LogsLoader log_loader{getLogDirectory(), prefix};
+  for (auto &log_msg : log_loader) {
+    ReplicatedLogEntry &entry = log_entries_[log_msg.paxos().idx()];
+    entry.idx_ = log_msg.paxos().idx();
+    entry.min_proposal_ = log_msg.paxos().min_proposal();
+    entry.accepted_proposal_ = log_msg.paxos().accepted_proposal();
+    entry.accepted_value_ = log_msg.paxos().accepted_value();
+    entry.is_chosen_ = log_msg.paxos().is_chosen();
+
+    if (entry.is_chosen_) {
+      has_atleast_one_chosen = true;
+      first_unchosen_index_ =
+          std::max(first_unchosen_index_, log_msg.paxos().idx());
+    }
+
+    proposal_number_ =
+        std::max(proposal_number_, log_msg.paxos().min_proposal());
+  }
+
+  if (log_entries_.size() && has_atleast_one_chosen) {
+    first_unchosen_index_++;
+  }
+
+  LOG(INFO) << "Constructed Replicated log first_unchosen_index_ : "
+            << first_unchosen_index_ << " and proposal_number_ "
+            << proposal_number_;
+
+  log_writer_ =
+      std::make_unique<witnesskvs::log::LogWriter>(getLogDirectory(), prefix);
 }
 
 ReplicatedLog::~ReplicatedLog() {}
@@ -48,12 +89,29 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
             << first_unchosen_index_;
 }
 
+void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
+  Log::Message log_message;
+  log_message.mutable_paxos()->set_idx(entry.idx_);
+  log_message.mutable_paxos()->set_min_proposal(entry.min_proposal_);
+  log_message.mutable_paxos()->set_accepted_proposal(entry.accepted_proposal_);
+  log_message.mutable_paxos()->set_accepted_value(entry.accepted_value_);
+  log_message.mutable_paxos()->set_is_chosen(entry.is_chosen_);
+
+  LOG(INFO) << "Making a stable entry at idx: " << entry.idx_
+            << " with value: " << entry.accepted_value_
+            << " and is_chosen: " << entry.is_chosen_;
+
+  auto status = log_writer_->Log(log_message);
+  CHECK_EQ(status, absl::OkStatus());
+}
+
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   absl::MutexLock l(&log_mutex_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   CHECK(!entry.is_chosen_);
   entry.is_chosen_ = true;
 
+  MakeLogEntryStable(entry);
   UpdateFirstUnchosenIdx();
 }
 
@@ -69,9 +127,11 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
               << entry.accepted_value_ << ")";
   }
 
+  entry.idx_ = idx;
   entry.accepted_value_ = value;
   entry.is_chosen_ = true;
 
+  MakeLogEntryStable(entry);
   UpdateFirstUnchosenIdx();
 }
 
@@ -92,6 +152,7 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
       << "Cannot attempt to make an update to min proposal with a lower value.";
 
   it->second.min_proposal_ = new_min_proposal;
+  MakeLogEntryStable(it->second);
 }
 
 ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
@@ -101,14 +162,12 @@ ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
   return it->second;
 }
 
-uint64_t ReplicatedLog::UpdateLogEntryAtIdx(uint64_t idx,
-                                            ReplicatedLogEntry new_entry) {
+uint64_t ReplicatedLog::UpdateLogEntry(ReplicatedLogEntry new_entry) {
   absl::MutexLock l(&log_mutex_);
-  ReplicatedLogEntry &current_entry = log_entries_[idx];
+  ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
-    current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
-    current_entry.min_proposal_ = new_entry.min_proposal_;
-    current_entry.accepted_value_ = new_entry.accepted_value_;
+    current_entry = new_entry;
+    MakeLogEntryStable(current_entry);
   }
   return current_entry.min_proposal_;
 }

@@ -16,7 +16,11 @@ Paxos::Paxos(const std::string& config_file_name, uint8_t node_id) {
   paxos_node_->MakeReady();
 }
 
-Paxos::~Paxos() { acceptor_.reset(); }
+Paxos::~Paxos() {
+  acceptor_.reset();
+  proposer_.reset();
+  replicated_log_.reset();
+}
 
 void Paxos::Propose(const std::string& value) {
   CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
