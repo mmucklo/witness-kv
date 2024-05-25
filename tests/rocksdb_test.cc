@@ -37,4 +37,4 @@ TEST(RocksDb, Basic) {
 }
 
 }  // namespace
-}  // namespace witnesskv::test
+}  // namespace witnesskvs::test

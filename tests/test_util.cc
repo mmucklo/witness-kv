@@ -22,6 +22,4 @@ absl::Status Cleanup(std::vector<std::string> filenames) {
   return absl::UnknownError(
       absl::StrCat("Could not delete files: ", absl::StrJoin(filenames, ",")));
 }
-
-
-}
+}  // namespace witnesskvs::test
