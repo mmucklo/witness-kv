@@ -11,13 +11,12 @@ using grpc::Status;
 using paxos::Proposer;
 using paxos::ProposeRequest;
 
-ABSL_FLAG(absl::Duration, paxos_server_sleep, absl::Seconds(3),
+ABSL_FLAG(absl::Duration, paxos_server_sleep, absl::Seconds(1),
           "Sleep time for paxos server");
 
 class ProposerImpl final : public Proposer::Service
 {
  private:
-    std::mutex mutex_;
     std::unique_ptr<Proposer> proposer_;
 
     uint8_t node_id_;
@@ -55,7 +54,6 @@ Status ProposerImpl::Propose( ServerContext* context,
                               const ProposeRequest* request,
                               google::protobuf::Empty* response )
 {
-  std::lock_guard<std::mutex> guard( mutex_ );
   ProposeLocal( request->value() );
   return Status::OK;
 }
@@ -107,7 +105,6 @@ ProposerService::~ProposerService() {
 
 void ProposerImpl::ProposeLocal(const std::string& value) {
   bool done = false;
-  int retry_count = 0;
   while (!done) {
     std::string value_for_accept_phase = value;
     uint32_t num_promises = 0;

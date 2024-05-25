@@ -25,9 +25,8 @@ void Paxos::Propose(const std::string& value) {
   //    << "Replication not possible, majority of the nodes are not reachable.";
   //}
   // else {
-  grpc::ClientContext context;
   paxos::ProposeRequest request;
   google::protobuf::Empty response;
   request.set_value(value);
-  paxos_node_->GetLeaderStub()->Propose(&context, request, &response);
+  paxos_node_->SendProposeGrpc(request, &response);
 }
