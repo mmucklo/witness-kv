@@ -17,12 +17,11 @@ class Paxos {
  public:
   Paxos(const std::string& config_file_name, uint8_t node_id);
   ~Paxos();
-
+  
   void Propose(const std::string& value);
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
-
 };
 
 #endif  // PAXOS_HH_

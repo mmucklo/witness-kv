@@ -1,6 +1,7 @@
 #include "proposer.hh"
 
 #include "absl/log/check.h"
+#include "absl/flags/flag.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -9,6 +10,9 @@ using grpc::Status;
 
 using paxos::Proposer;
 using paxos::ProposeRequest;
+
+ABSL_FLAG(absl::Duration, paxos_server_sleep, absl::Seconds(3),
+          "Sleep time for paxos server");
 
 class ProposerImpl final : public Proposer::Service
 {
@@ -21,7 +25,6 @@ class ProposerImpl final : public Proposer::Service
     std::shared_ptr<PaxosNode> paxos_node_;
     int majority_threshold_;
 
-
  public:
     ProposerImpl() = delete;
     ProposerImpl( uint8_t node_id,
@@ -33,33 +36,42 @@ class ProposerImpl final : public Proposer::Service
 
     void ProposeLocal(const std::string& value);
 
-    Status Propose( ServerContext* context, const ProposeRequest* request, google::protobuf::Empty* response ) override;
+    Status Propose( ServerContext* context, const ProposeRequest* request,
+                    google::protobuf::Empty* response ) override;
 };
 
 ProposerImpl::ProposerImpl( uint8_t node_id,
                             std::shared_ptr<ReplicatedLog> replicated_log,
                             std::shared_ptr<PaxosNode> paxos_node,
                             int majority_threshold )
-    : node_id_{node_id}, replicated_log_{replicated_log}, paxos_node_{paxos_node}, majority_threshold_{majority_threshold}
+    : node_id_ { node_id },
+      replicated_log_ { replicated_log },
+      paxos_node_ { paxos_node },
+      majority_threshold_ { majority_threshold }
 {
 }
 
-
-Status ProposerImpl::Propose( ServerContext* context, const ProposeRequest* request, google::protobuf::Empty* response )
+Status ProposerImpl::Propose( ServerContext* context,
+                              const ProposeRequest* request,
+                              google::protobuf::Empty* response )
 {
   std::lock_guard<std::mutex> guard( mutex_ );
   ProposeLocal( request->value() );
   return Status::OK;
 }
 
-void RunProposerServer( const std::string& address, uint8_t node_id, const std::stop_source& stop_source, 
-                      std::shared_ptr<ReplicatedLog> replicated_log, std::shared_ptr<PaxosNode> paxos_node)
+void RunProposerServer( const std::string& address, uint8_t node_id,
+                        const std::stop_source& stop_source,
+                        std::shared_ptr<ReplicatedLog> replicated_log,
+                        std::shared_ptr<PaxosNode> paxos_node )
 {
   LOG(INFO) << "Starting Proposer service. " << address;
-  using namespace std::chrono_literals;
+  auto sleep_time = absl::GetFlag(FLAGS_paxos_server_sleep);
   using grpc::ServerBuilder;
 
-  ProposerImpl service{node_id, replicated_log, paxos_node, static_cast<int>(paxos_node->GetNumNodes() / 2 + 1)};
+  ProposerImpl service {
+      node_id, replicated_log, paxos_node,
+      static_cast<int>( paxos_node->GetNumNodes() / 2 + 1 ) };
 
   grpc::ServerBuilder builder;
   builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
@@ -69,7 +81,7 @@ void RunProposerServer( const std::string& address, uint8_t node_id, const std::
 
   std::stop_token stoken = stop_source.get_token();
   while ( !stoken.stop_requested() ) {
-    std::this_thread::sleep_for( 1s );
+    absl::SleepFor(sleep_time);
   }
 
   server->Shutdown();
