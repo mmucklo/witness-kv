@@ -121,9 +121,10 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
             << static_cast<uint32_t>(node_id_);
 }
 
-std::unique_ptr<paxos::Proposer::Stub> PaxosNode::GetLeaderStub() const {
+std::unique_ptr<paxos::Proposer::Stub> PaxosNode::GetLeaderStub() {
   google::protobuf::Empty response;
   grpc::ClientContext context;
+  std::lock_guard<std::mutex> guard(node_mutex_);
   auto proposer_channel = grpc::CreateChannel(
       nodes_[leader_node_id_].GetLeaderAddressPortStr( nodes_.size() ),
       grpc::InsecureChannelCredentials() );
