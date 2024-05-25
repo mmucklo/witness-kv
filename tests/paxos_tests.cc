@@ -79,10 +79,10 @@ struct PaxosSanity : public ::testing::Test {
   }
 
   virtual void TearDown() override {
-    std::string file = absl::GetFlag(FLAGS_paxos_log_directory) + "/" +
-                       absl::GetFlag(FLAGS_paxos_log_file_prefix);
+    std::string log_files = absl::GetFlag(FLAGS_paxos_log_directory) + "/" +
+                            absl::GetFlag(FLAGS_paxos_log_file_prefix) + "*";
 
-    std::string command = "rm -f " + file + "*";
+    std::string command = "rm -f " + log_files;
     CHECK_EQ(system(command.c_str()), 0);
   }
 };
@@ -105,7 +105,7 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
   VerifyLogIntegrity(nodes, num_proposals);
 }
 
-TEST_F(PaxosSanity, BasicLogSanity) {
+TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
   const int sleep_timer = 2 * heartbeat_timer;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -125,6 +125,7 @@ TEST_F(PaxosSanity, BasicLogSanity) {
   nodes[0] = std::make_unique<Paxos>(0);
   sleep(sleep_timer);
 
+  // After node 0 comes back up it should have all the committed entires intact.
   std::map<uint64_t, ReplicatedLogEntry> log =
       nodes[0]->GetReplicatedLog()->GetLogEntries();
   CHECK_EQ(log.size(), num_proposals);
@@ -132,11 +133,18 @@ TEST_F(PaxosSanity, BasicLogSanity) {
   for (size_t i = 0; i < log.size(); i++) {
     auto entry = log.find(i)->second;
     CHECK_EQ(entry.accepted_value_, std::to_string(i))
-        << "Log values do not match at index: " << i << " on nodes 0("
+        << "Log values do not match at index: " << i << " observed: ("
         << entry.accepted_value_ << ") and expected: (" << std::to_string(i)
         << ")";
     CHECK(entry.is_chosen_);
   }
+
+  // Make node 0 propose some values and verify that all nodes see the same log.
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[0]->Propose(std::to_string(num_proposals + i));
+  }
+
+  VerifyLogIntegrity(nodes, 2 * num_proposals);
 }
 
 TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
