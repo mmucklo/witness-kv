@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     return -1;
   }
   std::string filename(argv[1]);
-  witnesskv::log::LogReader reader(filename);
+  witnesskvs::log::LogReader reader(filename);
   for (const auto& msg : reader) {
     absl::PrintF("%s", msg.DebugString());
   }

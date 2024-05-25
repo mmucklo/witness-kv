@@ -6,7 +6,7 @@
 
 #include "absl/status/status.h"
 
-namespace witnesskv::test {
+namespace witnesskvs::test {
 
 absl::Status Cleanup(std::vector<std::string> filenames);
 

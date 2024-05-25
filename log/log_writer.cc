@@ -35,7 +35,7 @@ ABSL_FLAG(uint64_t, log_writer_max_file_size, 1 << 30,
 ABSL_FLAG(uint64_t, log_writer_max_msg_size, 1 << 20,
           "Maximum message size in bytes (when coded to string).");
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 extern constexpr char kFilenamePrefix[] = "^[A-Za-z0-9_-]+$";
 

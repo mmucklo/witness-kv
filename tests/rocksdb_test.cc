@@ -8,7 +8,7 @@
 #include "tests/test_macros.h"
 #include "tests/test_util.h"
 
-namespace witnesskv::test {
+namespace witnesskvs::test {
 namespace {
 
 TEST(RocksDb, Basic) {
@@ -37,4 +37,4 @@ TEST(RocksDb, Basic) {
 }
 
 }  // namespace
-}  // namespace witnesskvs::test
+}  // namespace witnesskv::test

@@ -27,7 +27,7 @@ ABSL_FLAG(uint64_t, file_writer_buffer_size, BLOCK_SIZE,
           "Default buffer size for writing. It's suggested to make this a "
           "multiple of BLOCK_SIZE");
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 void verifyFilename(std::string filename) {
   // Should be a new file in an exisiting writeable directory.

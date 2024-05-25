@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
   }
   std::string dir(argv[1]);
   std::string prefix(argv[2]);
-  witnesskv::log::LogWriter writer(dir, prefix);
+  witnesskvs::log::LogWriter writer(dir, prefix);
   std::string filename;
   for (uint16_t i = 0; i < absl::GetFlag(FLAGS_num); i++) {
     Log::Message log_message;

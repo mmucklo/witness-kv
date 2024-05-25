@@ -11,7 +11,7 @@
 #include "log.pb.h"
 #include "log_reader.h"
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 /**
  * A LogsLoader that takes in a directory and a prefix and provides an

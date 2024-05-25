@@ -9,7 +9,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "absl/strings/cord.h"
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 /**
  * A single writer for a single file. It will output in file system block size

@@ -14,7 +14,7 @@
 #include "absl/synchronization/mutex.h"
 #include "log.pb.h"
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 class LogWriterTestPeer;
 

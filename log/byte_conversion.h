@@ -9,7 +9,7 @@
 
 #include "absl/strings/str_format.h"
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 
 using enable_if_not_mixed =
     std::enable_if_t<std::endian::native == std::endian::little ||

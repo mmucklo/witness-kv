@@ -15,7 +15,7 @@
 
 ABSL_FLAG(std::string, file_writer_test_flag, "", "This just a test flag");
 
-namespace witnesskv::log {
+namespace witnesskvs::log {
 namespace {
 
 std::string getTempFilename() {
