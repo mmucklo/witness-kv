@@ -2,8 +2,10 @@
 #define REPLICATED_LOG_H_
 
 #include "common.hh"
+#include "log/log_writer.h"
 
 struct ReplicatedLogEntry {
+  uint64_t idx_{};
   uint64_t min_proposal_{};
   uint64_t accepted_proposal_{};
   std::string accepted_value_{};
@@ -25,7 +27,11 @@ class ReplicatedLog {
   static constexpr uint8_t max_node_id_ = (1ull << num_bits_for_node_id_) - 1;
   static constexpr uint64_t mask_ = ~(max_node_id_);
 
+  std::unique_ptr<witnesskvs::log::LogWriter> log_writer_;
+
   void UpdateFirstUnchosenIdx();
+
+  void MakeLogEntryStable(const ReplicatedLogEntry &entry);
 
  public:
   ReplicatedLog(uint8_t node_id);
@@ -44,7 +50,7 @@ class ReplicatedLog {
   // Updates the log entry if the existing entry has a lower min_proposal than
   // new_entry. Regardless returns the proposal number needed for this entry to
   // be updated.
-  uint64_t UpdateLogEntryAtIdx(uint64_t idx, ReplicatedLogEntry new_entry);
+  uint64_t UpdateLogEntry(const ReplicatedLogEntry &new_entry);
 
   // Useful for unit testing.
   std::map<uint64_t, ReplicatedLogEntry> GetLogEntries() {

@@ -20,13 +20,14 @@ target_link_libraries(protobuf_matchers PUBLIC
     $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
 )
 
-set(This witnesskvTest)
+set(This paxos_tests)
 
 set(Sources
     sanity.cc
     paxos_tests.cc
 )
 
+include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/paxos)
 
 enable_testing()
@@ -38,9 +39,14 @@ target_link_libraries(${This} PUBLIC
     gmock_main
     kvsproto
     paxos
+    absl::flags
 )
 
 add_test(
     NAME ${This}
     COMMAND ${This}
 )
+
+include(GoogleTest)
+
+gtest_discover_tests(${This})

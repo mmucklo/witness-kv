@@ -67,12 +67,13 @@ Status AcceptorImpl::Accept(ServerContext* context,
                             const AcceptRequest* request,
                             AcceptResponse* response) {
   ReplicatedLogEntry entry = {};
+  entry.idx_ = request->index();
   entry.min_proposal_ = request->proposal_number();
   entry.accepted_proposal_ = request->proposal_number();
   entry.accepted_value_ = request->value();
+  entry.is_chosen_ = false;
 
-  response->set_min_proposal(
-      this->replicated_log_->UpdateLogEntryAtIdx(request->index(), entry));
+  response->set_min_proposal(this->replicated_log_->UpdateLogEntry(entry));
   response->set_first_unchosen_index(
       this->replicated_log_->GetFirstUnchosenIdx());
   return Status::OK;
@@ -111,7 +112,8 @@ void RunServer(const std::string& address, uint8_t node_id,
   while (!stoken.stop_requested()) {
     std::this_thread::sleep_for(300ms);
   }
-  LOG(INFO) << "Shutting down acceptor service on " << node_id;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id)
+            << "] Shutting down acceptor service";
 }
 
 AcceptorService::AcceptorService(const std::string& address, uint8_t node_id,

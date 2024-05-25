@@ -1,11 +1,57 @@
 #include "replicated_log.hh"
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id) : node_id_{node_id} {
+#include "absl/flags/flag.h"
+#include "absl/status/status.h"
+#include "log/logs_loader.h"
+
+ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
+
+ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
+          "Paxos log file prefix");
+
+ReplicatedLog::ReplicatedLog(uint8_t node_id)
+    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-  // TODO[V]: Read `first_unchosen_index_` and `log_entries_` from the actual
-  // log.
-  first_unchosen_index_ = 0;
-  proposal_number_ = 0;
+
+  bool has_atleast_one_chosen = false;
+
+  const std::string prefix =
+      absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
+
+  witnesskvs::log::LogsLoader log_loader{
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix};
+  for (auto &log_msg : log_loader) {
+    ReplicatedLogEntry &entry = log_entries_[log_msg.paxos().idx()];
+    entry.idx_ = log_msg.paxos().idx();
+    entry.min_proposal_ = log_msg.paxos().min_proposal();
+    entry.accepted_proposal_ = log_msg.paxos().accepted_proposal();
+    entry.accepted_value_ = log_msg.paxos().accepted_value();
+    entry.is_chosen_ = log_msg.paxos().is_chosen();
+
+    if (entry.is_chosen_) {
+      has_atleast_one_chosen = true;
+      first_unchosen_index_ =
+          std::max(first_unchosen_index_, log_msg.paxos().idx());
+    }
+
+    proposal_number_ =
+        std::max(proposal_number_, log_msg.paxos().min_proposal());
+  }
+
+  // If there was atleast one previously known to be chosen entry in the log,
+  // the `first_unchosen_index` will be the index one beyond the max we've
+  // stored in the log.
+  if (log_entries_.size() && has_atleast_one_chosen) {
+    first_unchosen_index_++;
+  }
+
+  VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
+          << "] Constructed Replicated log with first unchosen index : "
+          << first_unchosen_index_ << " and proposal number "
+          << proposal_number_;
+
+  log_writer_ = std::make_unique<witnesskvs::log::LogWriter>(
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix);
 }
 
 ReplicatedLog::~ReplicatedLog() {}
@@ -20,7 +66,8 @@ uint64_t ReplicatedLog::GetNextProposalNumber() {
   proposal_number_ =
       ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) |
       (uint64_t)node_id_;
-  LOG(INFO) << "Generated proposal number: " << proposal_number_;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Generated proposal number: " << proposal_number_;
   return proposal_number_;
 }
 
@@ -44,8 +91,24 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
     }
     first_unchosen_index_++;
   }
-  LOG(INFO) << "First unchosen index after UpdateFirstUnchosenIdx: "
-            << first_unchosen_index_;
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] updated First unchosen index: " << first_unchosen_index_;
+}
+
+void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
+  Log::Message log_message;
+  log_message.mutable_paxos()->set_idx(entry.idx_);
+  log_message.mutable_paxos()->set_min_proposal(entry.min_proposal_);
+  log_message.mutable_paxos()->set_accepted_proposal(entry.accepted_proposal_);
+  log_message.mutable_paxos()->set_accepted_value(entry.accepted_value_);
+  log_message.mutable_paxos()->set_is_chosen(entry.is_chosen_);
+
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] stable entry at idx: " << entry.idx_
+            << " with value: " << entry.accepted_value_
+            << " with chosenness: " << entry.is_chosen_;
+  absl::Status status = log_writer_->Log(log_message);
+  CHECK_EQ(status, absl::OkStatus());
 }
 
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
@@ -54,6 +117,7 @@ void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   CHECK(!entry.is_chosen_);
   entry.is_chosen_ = true;
 
+  MakeLogEntryStable(entry);
   UpdateFirstUnchosenIdx();
 }
 
@@ -64,14 +128,17 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
     // This is fine, as it is possible we may be the only node that accepted a
     // value but that value never got quorum, some other value won and now we
     // are learning about it.
-    LOG(INFO) << "Choosing a different value (" << value
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+              << "] Choosing a different value (" << value
               << ") than what was previously accepted ("
               << entry.accepted_value_ << ")";
   }
 
+  entry.idx_ = idx;
   entry.accepted_value_ = value;
   entry.is_chosen_ = true;
 
+  MakeLogEntryStable(entry);
   UpdateFirstUnchosenIdx();
 }
 
@@ -91,7 +158,9 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
   CHECK(new_min_proposal > it->second.min_proposal_)
       << "Cannot attempt to make an update to min proposal with a lower value.";
 
+  it->second.idx_ = idx;
   it->second.min_proposal_ = new_min_proposal;
+  MakeLogEntryStable(it->second);
 }
 
 ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
@@ -101,14 +170,15 @@ ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
   return it->second;
 }
 
-uint64_t ReplicatedLog::UpdateLogEntryAtIdx(uint64_t idx,
-                                            ReplicatedLogEntry new_entry) {
+uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   absl::MutexLock l(&log_mutex_);
-  ReplicatedLogEntry &current_entry = log_entries_[idx];
+  ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
-    current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.min_proposal_ = new_entry.min_proposal_;
+    current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.accepted_value_ = new_entry.accepted_value_;
+    current_entry.is_chosen_ = new_entry.is_chosen_;
+    MakeLogEntryStable(current_entry);
   }
   return current_entry.min_proposal_;
 }
