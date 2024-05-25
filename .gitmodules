@@ -11,5 +11,4 @@
 [submodule "third_party/rocksdb"]
 	path = third_party/rocksdb
 	url = https://github.com/mmucklo/rocksdb
-[submodule "rocksdb"]
 	branch = mmucklo-build
