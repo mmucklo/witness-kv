@@ -4,16 +4,15 @@
 
 #include "paxos.hh"
 
-int main( int argc, char* argv[] )
-{
+int main(int argc, char* argv[]) {
   using namespace std::chrono_literals;
 
-  if ( argc != 2 ) {
+  if (argc != 2) {
     std::cout << "Invalid argc\n";
-    exit( EXIT_FAILURE );
+    exit(EXIT_FAILURE);
   }
 
-  Paxos p { "paxos/nodes_config.txt", static_cast<uint8_t>(std::atoi( argv[1] )) };
+  Paxos p{static_cast<uint8_t>(std::atoi(argv[1]))};
 
   std::string input;
   while (true) {
@@ -24,7 +23,7 @@ int main( int argc, char* argv[] )
       break;
     }
 
-    p.Propose( input );
+    p.Propose(input);
   }
 
   return 0;

@@ -1,9 +1,8 @@
 #include "paxos.hh"
 
-Paxos::Paxos(const std::string& config_file_name, uint8_t node_id) {
+Paxos::Paxos(uint8_t node_id) {
   replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
-  paxos_node_ =
-      std::make_shared<PaxosNode>(config_file_name, node_id, replicated_log_);
+  paxos_node_ = std::make_shared<PaxosNode>(node_id, replicated_log_);
 
   proposer_ = std::make_unique<Proposer>(paxos_node_->GetNumNodes(), node_id,
                                          replicated_log_, paxos_node_);

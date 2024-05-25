@@ -9,9 +9,12 @@
 ABSL_FLAG(uint64_t, paxos_node_heartbeat, 3,
           "Heartbeat timeout for paxos node");
 
-std::vector<Node> ParseNodesConfig(const std::string& config_file_name) {
+ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
+          "Paxos config file for nodes ip addresses and ports");
+
+std::vector<Node> ParseNodesConfig() {
   std::vector<Node> nodes{};
-  std::ifstream config_file(config_file_name);
+  std::ifstream config_file(absl::GetFlag(FLAGS_paxos_node_config_file));
 
   CHECK(config_file.is_open()) << "Failed to open nodes configuration file";
 
@@ -35,10 +38,9 @@ std::vector<Node> ParseNodesConfig(const std::string& config_file_name) {
   return nodes;
 }
 
-PaxosNode::PaxosNode(const std::string& config_file_name, uint8_t node_id,
-                     std::shared_ptr<ReplicatedLog> rlog)
+PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
     : num_active_acceptors_conns_{}, replicated_log_{rlog} {
-  nodes_ = ParseNodesConfig(config_file_name);
+  nodes_ = ParseNodesConfig();
   CHECK_NE(nodes_.size(), 0);
 
   std::set<std::pair<std::string, int>> s;

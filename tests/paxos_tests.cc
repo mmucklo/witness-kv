@@ -15,6 +15,8 @@ ABSL_DECLARE_FLAG(uint64_t, absl_log_min_level);
 ABSL_DECLARE_FLAG(std::string, paxos_log_directory);
 ABSL_DECLARE_FLAG(std::string, paxos_log_file_prefix);
 
+ABSL_DECLARE_FLAG(std::string, paxos_node_config_file);
+
 // Simple test to sanity check file parsing logic.
 TEST(FileParseTest, ConfigFileParseTest) {
   std::vector<std::string> addrs = {"0.0.0.0", "0.1.2.3", "8.7.6.5",
@@ -23,6 +25,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   ASSERT_EQ(addrs.size(), ports.size());
 
   char filename[] = "/tmp/paxos_config_file_test";
+  absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/paxos_config_file_test");
   std::ofstream temp_file(filename);
   ASSERT_TRUE(temp_file.is_open()) << "Failed to create temporary file\n";
 
@@ -31,7 +34,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  auto nodes = ParseNodesConfig(filename);
+  auto nodes = ParseNodesConfig();
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {
@@ -85,7 +88,7 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>("paxos/nodes_config.txt", i);
+    nodes[i] = std::make_unique<Paxos>(i);
   }
 
   sleep(sleep_timer);
@@ -103,7 +106,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>("paxos/nodes_config.txt", i);
+    nodes[i] = std::make_unique<Paxos>(i);
   }
 
   sleep(sleep_timer);
@@ -115,7 +118,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
-  nodes[0] = std::make_unique<Paxos>("paxos/nodes_config.txt", 0);
+  nodes[0] = std::make_unique<Paxos>(0);
   sleep(sleep_timer);
 
   for (size_t i = 0; i < num_proposals; i++) {
@@ -130,7 +133,7 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const int sleep_timer = 4;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>("paxos/nodes_config.txt", i);
+    nodes[i] = std::make_unique<Paxos>(i);
   }
 
   sleep(sleep_timer);
@@ -152,8 +155,7 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
     nodes[0]->Propose(std::to_string(num_proposals + i));
   }
 
-  nodes[num_nodes - 1] =
-      std::make_unique<Paxos>("paxos/nodes_config.txt", (num_nodes - 1));
+  nodes[num_nodes - 1] = std::make_unique<Paxos>((num_nodes - 1));
   sleep(sleep_timer);
 
   // Third batch of proposals, all nodes are up again.

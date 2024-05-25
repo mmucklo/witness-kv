@@ -50,8 +50,7 @@ class PaxosNode {
                             paxos::PingResponse* response);
 
  public:
-  PaxosNode(const std::string& config_file_name, uint8_t node_id,
-            std::shared_ptr<ReplicatedLog> rlog);
+  PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog);
   ~PaxosNode();
 
   void MakeReady(void);
@@ -69,5 +68,7 @@ class PaxosNode {
                           paxos::CommitResponse* response);
 };
 
-std::vector<Node> ParseNodesConfig(const std::string& config_file_name);
+// This helper function will parse the node config file specified
+// by flag `paxos_node_config_file`.
+std::vector<Node> ParseNodesConfig();
 #endif  // NODE_HH_
