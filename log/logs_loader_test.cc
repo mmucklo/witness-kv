@@ -78,9 +78,11 @@ TEST(LogsLoader, Basic) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message;
-  log_message.mutable_paxos()->set_round(4);
-  log_message.mutable_paxos()->set_proposal_id(9);
-  log_message.mutable_paxos()->set_value("test1234");
+  log_message.mutable_paxos()->set_idx(0);
+  log_message.mutable_paxos()->set_min_proposal(4);
+  log_message.mutable_paxos()->set_accepted_proposal(9);
+  log_message.mutable_paxos()->set_accepted_value("test1234");
+  log_message.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", prefix);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
@@ -114,13 +116,17 @@ TEST(LogsLoaderTest, MultiTest) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", prefix);
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
@@ -155,17 +161,23 @@ TEST(LogsLoaderTest, MultiFileTest) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message3;
-  log_message3.mutable_paxos()->set_round(6);
-  log_message3.mutable_paxos()->set_proposal_id(4);
-  log_message3.mutable_paxos()->set_value("test1234124");
+  log_message3.mutable_paxos()->set_idx(2);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", prefix);
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
@@ -211,17 +223,23 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message3;
-  log_message3.mutable_paxos()->set_round(6);
-  log_message3.mutable_paxos()->set_proposal_id(4);
-  log_message3.mutable_paxos()->set_value("test1234124");
+  log_message3.mutable_paxos()->set_idx(2);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
   {
     // Fake blank file.
     // TODO(mmucklo): Figure out a way to add a blank header file.
@@ -303,17 +321,23 @@ TEST(LogsLoaderTest, SortingTest) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message3;
-  log_message3.mutable_paxos()->set_round(6);
-  log_message3.mutable_paxos()->set_proposal_id(4);
-  log_message3.mutable_paxos()->set_value("test1234124");
+  log_message3.mutable_paxos()->set_idx(2);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", prefix);
     LOG(INFO) << "second log message";
@@ -337,10 +361,10 @@ TEST(LogsLoaderTest, SortingTest) {
                           EqualsProto(log_message1)));
   }
   {
-    // Try a logs loader that sorts by round.
+    // Try a logs loader that sorts by idx.
     LogsLoader logs_loader("/tmp", prefix,
                            [](const Log::Message& a, const Log::Message& b) {
-                             return a.paxos().round() < b.paxos().round();
+                             return a.paxos().idx() < b.paxos().idx();
                            });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
@@ -367,26 +391,36 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
   std::vector<std::string> cleanup_files;
   std::string prefix = GetTempPrefix();
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(2);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message2.mutable_paxos()->set_idx(3);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message3;
-  log_message3.mutable_paxos()->set_round(6);
-  log_message3.mutable_paxos()->set_proposal_id(4);
-  log_message3.mutable_paxos()->set_value("test1234124");
+  log_message3.mutable_paxos()->set_idx(4);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message4;
   Log::Message log_message5;
-  log_message5.mutable_paxos()->set_round(3);
-  log_message5.mutable_paxos()->set_proposal_id(4);
-  log_message5.mutable_paxos()->set_value("test1234124");
+  log_message5.mutable_paxos()->set_idx(1);
+  log_message5.mutable_paxos()->set_min_proposal(7);
+  log_message5.mutable_paxos()->set_accepted_proposal(12);
+  log_message5.mutable_paxos()->set_accepted_value("test1234124");
+  log_message5.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message6;
-  log_message6.mutable_paxos()->set_round(2);
-  log_message6.mutable_paxos()->set_proposal_id(4);
-  log_message6.mutable_paxos()->set_value("test1234124");
+  log_message6.mutable_paxos()->set_idx(0);
+  log_message6.mutable_paxos()->set_min_proposal(8);
+  log_message6.mutable_paxos()->set_accepted_proposal(13);
+  log_message6.mutable_paxos()->set_accepted_value("test1234124");
+  log_message6.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", prefix);
     LOG(INFO) << "second log message";
@@ -421,10 +455,10 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
                     EqualsProto(log_message5), EqualsProto(log_message6)));
   }
   {
-    // Try a logs loader that sorts by round.
+    // Try a logs loader that sorts by idx.
     LogsLoader logs_loader("/tmp", prefix,
                            [](const Log::Message& a, const Log::Message& b) {
-                             return a.paxos().round() < b.paxos().round();
+                             return a.paxos().idx() < b.paxos().idx();
                            });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());

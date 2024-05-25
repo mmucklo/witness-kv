@@ -37,9 +37,10 @@ TEST(LogWriterTest, Basic) {
   {
     LogWriter log_writer("/tmp", "log_writer_test");
     Log::Message log_message;
-    log_message.mutable_paxos()->set_round(4);
-    log_message.mutable_paxos()->set_proposal_id(9);
-    log_message.mutable_paxos()->set_value("test1234");
+    log_message.mutable_paxos()->set_min_proposal(4);
+    log_message.mutable_paxos()->set_accepted_proposal(9);
+    log_message.mutable_paxos()->set_accepted_value("test1234");
+    log_message.mutable_paxos()->set_is_chosen(true);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
@@ -53,9 +54,10 @@ TEST(LogWriterTest, TooBig) {
     absl::SetFlag(&FLAGS_log_writer_max_msg_size, 1);
     LogWriter log_writer("/tmp", "log_writer_test");
     Log::Message log_message;
-    log_message.mutable_paxos()->set_round(4);
-    log_message.mutable_paxos()->set_proposal_id(9);
-    log_message.mutable_paxos()->set_value("test1234");
+    log_message.mutable_paxos()->set_min_proposal(4);
+    log_message.mutable_paxos()->set_accepted_proposal(9);
+    log_message.mutable_paxos()->set_accepted_value("test1234");
+    log_message.mutable_paxos()->set_is_chosen(true);
     absl::Status status = log_writer.Log(log_message);
     EXPECT_THAT(status, IsError());
     EXPECT_THAT(status.ToString(),
@@ -73,15 +75,21 @@ TEST(LogWriterTest, Rotation) {
     absl::SetFlag(&FLAGS_log_writer_max_file_size, 100);
     LogWriter log_writer("/tmp", "log_writer_test_rotation");
     Log::Message log_message;
-    log_message.mutable_paxos()->set_round(4);
-    log_message.mutable_paxos()->set_proposal_id(9);
-    log_message.mutable_paxos()->set_value("test1234");
+    log_message.mutable_paxos()->set_idx(0);
+    log_message.mutable_paxos()->set_min_proposal(4);
+    log_message.mutable_paxos()->set_accepted_proposal(9);
+    log_message.mutable_paxos()->set_accepted_value("test1234");
+    log_message.mutable_paxos()->set_is_chosen(true);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     std::string filename = log_writer.filename();
-    log_message.mutable_paxos()->set_round(5);
-    log_message.mutable_paxos()->set_proposal_id(10);
-    log_message.mutable_paxos()->set_value("12345678901234567890");
+    log_message.mutable_paxos()->set_idx(1);
+    log_message.mutable_paxos()->set_min_proposal(5);
+    log_message.mutable_paxos()->set_accepted_proposal(10);
+    log_message.mutable_paxos()->set_accepted_value("12345678901234567890");
+    log_message.mutable_paxos()->set_is_chosen(true);
+
+    log_message.mutable_paxos()->set_min_proposal(1);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     // Log should have rotated.
     EXPECT_NE(log_writer.filename(), filename);
@@ -90,5 +98,6 @@ TEST(LogWriterTest, Rotation) {
   }
   ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
+
 }  // namespace
 }  // namespace witnesskvs::log

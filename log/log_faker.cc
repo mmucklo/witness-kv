@@ -3,8 +3,6 @@
 // Creates fake log entries.
 #include <string>
 
-#include "log.pb.h"
-
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
@@ -13,6 +11,7 @@
 #include "absl/strings/str_format.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "log.pb.h"
 
 ABSL_FLAG(uint16_t, num, 1, "Number of entries to create.");
 ABSL_FLAG(absl::Duration, pause, absl::Seconds(1),
@@ -31,10 +30,13 @@ int main(int argc, char** argv) {
   std::string filename;
   for (uint16_t i = 0; i < absl::GetFlag(FLAGS_num); i++) {
     Log::Message log_message;
-    log_message.mutable_paxos()->set_round(i);
-    log_message.mutable_paxos()->set_proposal_id(i * i / 2);
-    log_message.mutable_paxos()->set_value(
+    log_message.mutable_paxos()->set_idx(i);
+    log_message.mutable_paxos()->set_min_proposal(i * i / 2);
+    log_message.mutable_paxos()->set_accepted_proposal(i * i / 2);
+    log_message.mutable_paxos()->set_accepted_value(
         absl::StrFormat("test value %d", i + 1));
+    log_message.mutable_paxos()->set_is_chosen(true);
+
     absl::Status status = writer.Log(log_message);
     CHECK_OK(status) << status.message();
     absl::PrintF("Msg %d written.\n", i + 1);

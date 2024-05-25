@@ -31,13 +31,14 @@ target_link_libraries(test_util_lib PUBLIC
     absl::strings
 )
 
-set(This witnesskvTest)
+set(This paxos_tests)
 
 set(Sources
     sanity.cc
     paxos_tests.cc
 )
 
+include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/paxos)
 
 enable_testing()
@@ -49,12 +50,15 @@ target_link_libraries(${This} PUBLIC
     gmock_main
     kvsproto
     paxos
+    absl::flags
 )
 
 add_test(
     NAME ${This}
     COMMAND ${This}
 )
+
+
 
 target_link_libraries(rocksdb_test PUBLIC 
     test_main
@@ -69,3 +73,7 @@ target_link_libraries(rocksdb_test PUBLIC
     protobuf::libprotobuf
     rocksdb
 )
+
+include(GoogleTest)
+
+gtest_discover_tests(${This} rocksdb_test)

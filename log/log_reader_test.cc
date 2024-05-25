@@ -38,9 +38,11 @@ TEST(LogReaderTest, Basic) {
   std::vector<std::string> cleanup_files;
   std::string filename;
   Log::Message log_message;
-  log_message.mutable_paxos()->set_round(4);
-  log_message.mutable_paxos()->set_proposal_id(9);
-  log_message.mutable_paxos()->set_value("test1234");
+  log_message.mutable_paxos()->set_idx(0);
+  log_message.mutable_paxos()->set_min_proposal(4);
+  log_message.mutable_paxos()->set_accepted_proposal(9);
+  log_message.mutable_paxos()->set_accepted_value("test1234");
+  log_message.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
@@ -109,13 +111,17 @@ TEST(LogReaderTest, MultiTest) {
   std::vector<std::string> cleanup_files;
   std::string filename;
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message1.mutable_paxos()->set_idx(1);
+  log_message1.mutable_paxos()->set_min_proposal(5);
+  log_message1.mutable_paxos()->set_accepted_proposal(10);
+  log_message1.mutable_paxos()->set_accepted_value("test12345");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
