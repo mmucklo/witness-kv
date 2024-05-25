@@ -2,10 +2,101 @@
 
 #include "absl/log/check.h"
 
-void Proposer::Propose(const std::string& value) {
+using grpc::Server;
+using grpc::ServerBuilder;
+using grpc::ServerContext;
+using grpc::Status;
+
+using paxos::Proposer;
+using paxos::ProposeRequest;
+
+class ProposerImpl final : public Proposer::Service
+{
+ private:
+    std::mutex mutex_;
+    std::unique_ptr<Proposer> proposer_;
+
+    uint8_t node_id_;
+    std::shared_ptr<ReplicatedLog> replicated_log_;
+    std::shared_ptr<PaxosNode> paxos_node_;
+    int majority_threshold_;
+
+
+ public:
+    ProposerImpl() = delete;
+    ProposerImpl( uint8_t node_id,
+                  std::shared_ptr<ReplicatedLog> replicated_log,
+                  std::shared_ptr<PaxosNode> paxos_node,
+                  int majority_threshold);
+
+    ~ProposerImpl() = default;
+
+    void ProposeLocal(const std::string& value);
+
+    Status Propose( ServerContext* context, const ProposeRequest* request, google::protobuf::Empty* response ) override;
+};
+
+ProposerImpl::ProposerImpl( uint8_t node_id,
+                            std::shared_ptr<ReplicatedLog> replicated_log,
+                            std::shared_ptr<PaxosNode> paxos_node,
+                            int majority_threshold )
+    : node_id_{node_id}, replicated_log_{replicated_log}, paxos_node_{paxos_node}, majority_threshold_{majority_threshold}
+{
+}
+
+
+Status ProposerImpl::Propose( ServerContext* context, const ProposeRequest* request, google::protobuf::Empty* response )
+{
+  std::lock_guard<std::mutex> guard( mutex_ );
+  ProposeLocal( request->value() );
+  return Status::OK;
+}
+
+void RunProposerServer( const std::string& address, uint8_t node_id, const std::stop_source& stop_source, 
+                      std::shared_ptr<ReplicatedLog> replicated_log, std::shared_ptr<PaxosNode> paxos_node)
+{
+  LOG(INFO) << "Starting Proposer service. " << address;
+  using namespace std::chrono_literals;
+  using grpc::ServerBuilder;
+
+  ProposerImpl service{node_id, replicated_log, paxos_node, static_cast<int>(paxos_node->GetNumNodes() / 2 + 1)};
+
+  grpc::ServerBuilder builder;
+  builder.AddListeningPort( address, grpc::InsecureServerCredentials() );
+  builder.RegisterService( &service );
+
+  std::unique_ptr<grpc::Server> server( builder.BuildAndStart() );
+
+  std::stop_token stoken = stop_source.get_token();
+  while ( !stoken.stop_requested() ) {
+    std::this_thread::sleep_for( 1s );
+  }
+
+  server->Shutdown();
+}
+
+ProposerService::ProposerService(const std::string& address, uint8_t node_id,
+                                 std::shared_ptr<ReplicatedLog> rlog,
+                                 std::shared_ptr<PaxosNode> paxos_node)
+    : node_id_(node_id)
+{
+  service_thread_ = std::jthread(
+      RunProposerServer, address, node_id, stop_source_, rlog, paxos_node);
+}
+
+ProposerService::~ProposerService() {
+  if ( stop_source_.stop_possible() ) {
+    stop_source_.request_stop();
+  }
+  if (service_thread_.joinable()) {
+    service_thread_.join();
+  }
+}
+
+void ProposerImpl::ProposeLocal(const std::string& value) {
   bool done = false;
   int retry_count = 0;
-  while (!done && retry_count < retry_count_) {
+  while (!done) {
     std::string value_for_accept_phase = value;
     uint32_t num_promises = 0;
 
@@ -21,9 +112,9 @@ void Proposer::Propose(const std::string& value) {
 
       uint64_t max_proposal_id = 0;
       LOG(INFO) << "Starting proposal from node: " << static_cast<uint32_t>(this->node_id_);
-      for (size_t i = 0; i < this->node_grpc_->GetNumNodes(); i++) {
+      for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
         paxos::PrepareResponse response;
-        grpc::Status status = this->node_grpc_->PrepareGrpc(
+        grpc::Status status = this->paxos_node_->PrepareGrpc(
             static_cast<uint8_t>(i), request, &response);
         if (!status.ok()) {
           LOG(WARNING) << "Prepare grpc failed for node: " << i
@@ -59,10 +150,10 @@ void Proposer::Propose(const std::string& value) {
     accept_request.set_value(value_for_accept_phase);
     paxos::AcceptResponse accept_response;
     uint32_t accept_majority_count = 0;
-    std::vector<uint64_t> peer_unchosen_idx(this->node_grpc_->GetNumNodes());
+    std::vector<uint64_t> peer_unchosen_idx(this->paxos_node_->GetNumNodes());
 
-    for (size_t i = 0; i < this->node_grpc_->GetNumNodes(); i++) {
-      grpc::Status status = this->node_grpc_->AcceptGrpc(
+    for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
+      grpc::Status status = this->paxos_node_->AcceptGrpc(
           static_cast<uint8_t>(i), accept_request, &accept_response);
       if (!status.ok()) {
         LOG(WARNING) << "Accept grpc failed for node: " << i
@@ -97,12 +188,10 @@ void Proposer::Propose(const std::string& value) {
         done = true;
         VLOG(1) << "Got the value of interest committed: " << value;
       }
-    } else if (retry_count > retry_count_) {
-      LOG(ERROR) << "Failed to reach consensus\n";
     }
 
     if (done) {
-      this->node_grpc_->CommitInBackground(peer_unchosen_idx);
+      this->paxos_node_->CommitInBackground(peer_unchosen_idx);
     }
   }
 }

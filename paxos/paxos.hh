@@ -6,15 +6,13 @@
 #include "node.hh"
 #include "proposer.hh"
 #include "replicated_log.hh"
-#include "leader.hh"
 
 class Paxos {
  private:
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
-  std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
-  std::unique_ptr<LeaderService> leader_;
+  std::unique_ptr<ProposerService> proposer_;
 
  public:
   Paxos(const std::string& config_file_name, uint8_t node_id);

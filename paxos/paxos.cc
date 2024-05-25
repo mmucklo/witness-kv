@@ -8,9 +8,9 @@ Paxos::Paxos(const std::string& config_file_name, uint8_t node_id) {
   acceptor_ = std::make_unique<AcceptorService>(
       paxos_node_->GetNodeAddress(node_id), node_id, replicated_log_);
   CHECK_NE(acceptor_, nullptr);
-  leader_ = std::make_unique<LeaderService>( paxos_node_->GetLeaderAddress(node_id), 
+  proposer_ = std::make_unique<ProposerService>( paxos_node_->GetLeaderAddress(node_id), 
                                              node_id, replicated_log_, paxos_node_);
-  CHECK_NE(leader_, nullptr);
+  CHECK_NE(proposer_, nullptr);
 
   paxos_node_->MakeReady();
 }

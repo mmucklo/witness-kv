@@ -66,7 +66,7 @@ class PaxosNode {
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
   std::string GetLeaderAddress( uint8_t nodes_id ) const;
-  std::unique_ptr<paxos::Leader::Stub> GetLeaderStub() const;
+  std::unique_ptr<paxos::Proposer::Stub> GetLeaderStub() const;
   bool ClusterHasEnoughNodesUp();
 
   grpc::Status PrepareGrpc(uint8_t node_id, paxos::PrepareRequest request,

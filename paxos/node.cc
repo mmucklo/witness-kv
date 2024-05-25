@@ -121,14 +121,14 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
             << static_cast<uint32_t>(node_id_);
 }
 
-std::unique_ptr<paxos::Leader::Stub> PaxosNode::GetLeaderStub() const {
+std::unique_ptr<paxos::Proposer::Stub> PaxosNode::GetLeaderStub() const {
   google::protobuf::Empty response;
   grpc::ClientContext context;
-  auto leader_channel = grpc::CreateChannel(
+  auto proposer_channel = grpc::CreateChannel(
       nodes_[leader_node_id_].GetLeaderAddressPortStr( nodes_.size() ),
       grpc::InsecureChannelCredentials() );
-  auto leader_stub_ = paxos::Leader::NewStub( leader_channel );
-  return std::move(leader_stub_);
+  auto proposer_stub = paxos::Proposer::NewStub( proposer_channel );
+  return std::move(proposer_stub);
 }
 
 void PaxosNode::CommitThread(const std::stop_source& ss) {
