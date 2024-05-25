@@ -104,8 +104,9 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
   log_message.mutable_paxos()->set_is_chosen(entry.is_chosen_);
 
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-            << "] stable entry at idx: " << entry.idx_ << " with value: "
-            << entry.accepted_value_ << " with chosenness: " << entry.is_chosen_;
+            << "] stable entry at idx: " << entry.idx_
+            << " with value: " << entry.accepted_value_
+            << " with chosenness: " << entry.is_chosen_;
   auto status = log_writer_->Log(log_message);
   CHECK_EQ(status, absl::OkStatus());
 }
@@ -127,7 +128,7 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
     // This is fine, as it is possible we may be the only node that accepted a
     // value but that value never got quorum, some other value won and now we
     // are learning about it.
-    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_) 
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
               << "] Choosing a different value (" << value
               << ") than what was previously accepted ("
               << entry.accepted_value_ << ")";
