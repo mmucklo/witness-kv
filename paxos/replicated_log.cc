@@ -107,7 +107,7 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
             << "] stable entry at idx: " << entry.idx_
             << " with value: " << entry.accepted_value_
             << " with chosenness: " << entry.is_chosen_;
-  auto status = log_writer_->Log(log_message);
+  absl::Status status = log_writer_->Log(log_message);
   CHECK_EQ(status, absl::OkStatus());
 }
 

@@ -6,7 +6,7 @@
 
 #include "absl/flags/flag.h"
 
-ABSL_FLAG(uint64_t, paxos_node_heartbeat, 3,
+ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
           "Heartbeat timeout for paxos node");
 
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
@@ -75,11 +75,10 @@ PaxosNode::~PaxosNode() {
 }
 
 void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
-  auto timeout = static_cast<std::chrono::seconds>(
-      absl::GetFlag(FLAGS_paxos_node_heartbeat));
+  auto sleep_time = absl::GetFlag(FLAGS_paxos_node_heartbeat);
 
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-            << "] Heartbeat Timeout " << timeout;
+            << "] Heartbeat Timeout " << sleep_time;
 
   std::stop_token stoken = ss.get_token();
 
@@ -130,7 +129,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       }
     }
 
-    std::this_thread::sleep_for(timeout);
+    absl::SleepFor(sleep_time);
   }
 
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)

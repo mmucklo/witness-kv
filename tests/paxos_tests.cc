@@ -16,7 +16,7 @@ ABSL_DECLARE_FLAG(std::string, paxos_log_directory);
 ABSL_DECLARE_FLAG(std::string, paxos_log_file_prefix);
 
 ABSL_DECLARE_FLAG(std::string, paxos_node_config_file);
-ABSL_DECLARE_FLAG(uint64_t, paxos_node_heartbeat);
+ABSL_DECLARE_FLAG(absl::Duration, paxos_node_heartbeat);
 
 // Simple test to sanity check file parsing logic.
 TEST(FileParseTest, ConfigFileParseTest) {
@@ -53,7 +53,7 @@ void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
   std::vector<std::map<uint64_t, ReplicatedLogEntry>> logs(nodes.size());
   for (size_t i = 0; i < nodes.size(); i++) {
     logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
-    CHECK_EQ(logs[i].size(), total_proposals);
+    ASSERT_EQ(logs[i].size(), total_proposals);
   }
 
   // Ensure all the nodes see the same value in their log positions.
@@ -61,7 +61,7 @@ void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
     for (size_t n = 1; n < nodes.size() - 1; n++) {
       auto left = logs[0].find(i)->second;
       auto right = logs[n].find(i)->second;
-      CHECK_EQ(left.accepted_value_, right.accepted_value_)
+      ASSERT_EQ(left.accepted_value_, right.accepted_value_)
           << "Log values do not match at index: " << i << " on nodes 0("
           << left.accepted_value_ << ") and " << n << "("
           << right.accepted_value_ << ")";
@@ -69,15 +69,15 @@ void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
   }
 }
 
-static constexpr uint64_t heartbeat_timer = 1;
-
 struct PaxosSanity : public ::testing::Test {
+  static constexpr uint64_t heartbeat_timer = 300;  // ms
   // Setup up abseil flags for paxos library to suit these test.
   // Log directory and prefix are chosen such that they do not collide with
   // existing default logs.
   // Heartbeat timer is set so that the tests can run faster.
   virtual void SetUp() override {
-    absl::SetFlag(&FLAGS_paxos_node_heartbeat, heartbeat_timer);
+    absl::SetFlag(&FLAGS_paxos_node_heartbeat,
+                  absl::Milliseconds(heartbeat_timer));
     absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
     absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
   }
@@ -87,6 +87,8 @@ struct PaxosSanity : public ::testing::Test {
     std::string log_files = absl::GetFlag(FLAGS_paxos_log_directory) + "/" +
                             absl::GetFlag(FLAGS_paxos_log_file_prefix) + "*";
 
+    // TODO [V]: Use a more portable std::filesystem (or something) to remove
+    // these files
     std::string command = "rm -f " + log_files;
     CHECK_EQ(system(command.c_str()), 0);
   }
@@ -94,13 +96,13 @@ struct PaxosSanity : public ::testing::Test {
 
 TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 2 * heartbeat_timer;
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
 
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   const size_t num_proposals = 10;
   for (size_t i = 0; i < num_proposals; i++) {
@@ -112,13 +114,13 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
 
 TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 2 * heartbeat_timer;
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
 
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
@@ -128,16 +130,16 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
   nodes[0] = std::make_unique<Paxos>(0);
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   // After node 0 comes back up it should have all the committed entires intact.
   std::map<uint64_t, ReplicatedLogEntry> log =
       nodes[0]->GetReplicatedLog()->GetLogEntries();
-  CHECK_EQ(log.size(), num_proposals);
+  ASSERT_EQ(log.size(), num_proposals);
 
   for (size_t i = 0; i < log.size(); i++) {
     auto entry = log.find(i)->second;
-    CHECK_EQ(entry.accepted_value_, std::to_string(i))
+    ASSERT_EQ(entry.accepted_value_, std::to_string(i))
         << "Log values do not match at index: " << i << " observed: ("
         << entry.accepted_value_ << ") and expected: (" << std::to_string(i)
         << ")";
@@ -154,13 +156,13 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 
 TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 2 * heartbeat_timer;
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
 
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
@@ -170,7 +172,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
   nodes[0] = std::make_unique<Paxos>(0);
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   for (size_t i = 0; i < num_proposals; i++) {
     nodes[num_nodes - 1]->Propose(std::to_string(num_proposals + i));
@@ -181,13 +183,13 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
 TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 2 * heartbeat_timer;
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
 
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   const size_t num_proposals = 5;
 
@@ -199,7 +201,7 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   // Mimic node going away and some operations happening while node is down and
   // then node comes back up.
   nodes[num_nodes - 1].reset();
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   // Second batch of proposals, one node is not up.
   for (size_t i = 0; i < num_proposals; i++) {
@@ -207,7 +209,7 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   }
 
   nodes[num_nodes - 1] = std::make_unique<Paxos>((num_nodes - 1));
-  sleep(sleep_timer);
+  absl::SleepFor(sleep_timer);
 
   // Third batch of proposals, all nodes are up again.
   for (size_t i = 0; i < num_proposals; i++) {
