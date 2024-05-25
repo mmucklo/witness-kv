@@ -410,13 +410,13 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
   log_message3.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message4;
   Log::Message log_message5;
-  log_message5.mutable_paxos()->set_idx(0);
+  log_message5.mutable_paxos()->set_idx(1);
   log_message5.mutable_paxos()->set_min_proposal(7);
   log_message5.mutable_paxos()->set_accepted_proposal(12);
   log_message5.mutable_paxos()->set_accepted_value("test1234124");
   log_message5.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message6;
-  log_message6.mutable_paxos()->set_idx(1);
+  log_message6.mutable_paxos()->set_idx(0);
   log_message6.mutable_paxos()->set_min_proposal(8);
   log_message6.mutable_paxos()->set_accepted_proposal(13);
   log_message6.mutable_paxos()->set_accepted_value("test1234124");
