@@ -16,6 +16,7 @@ ABSL_DECLARE_FLAG(std::string, paxos_log_directory);
 ABSL_DECLARE_FLAG(std::string, paxos_log_file_prefix);
 
 ABSL_DECLARE_FLAG(std::string, paxos_node_config_file);
+ABSL_DECLARE_FLAG(uint64_t, paxos_node_heartbeat);
 
 // Simple test to sanity check file parsing logic.
 TEST(FileParseTest, ConfigFileParseTest) {
@@ -68,8 +69,11 @@ void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
   }
 }
 
+static constexpr uint64_t heartbeat_timer = 1;
+
 struct PaxosSanity : public ::testing::Test {
   virtual void SetUp() override {
+    absl::SetFlag(&FLAGS_paxos_node_heartbeat, heartbeat_timer);
     absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
     absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
   }
@@ -85,7 +89,7 @@ struct PaxosSanity : public ::testing::Test {
 
 TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 4;
+  const int sleep_timer = 2 * heartbeat_timer;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
@@ -101,9 +105,43 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
   VerifyLogIntegrity(nodes, num_proposals);
 }
 
+TEST_F(PaxosSanity, BasicLogSanity) {
+  const size_t num_nodes = 3;
+  const int sleep_timer = 2 * heartbeat_timer;
+  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  for (size_t i = 0; i < num_nodes; i++) {
+    nodes[i] = std::make_unique<Paxos>(i);
+  }
+
+  sleep(sleep_timer);
+
+  const size_t num_proposals = 5;
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[num_nodes - 1]->Propose(std::to_string(i));
+  }
+
+  // Mimic node 0 going away and coming back up.
+  nodes[0].reset();
+  nodes[0] = std::make_unique<Paxos>(0);
+  sleep(sleep_timer);
+
+  std::map<uint64_t, ReplicatedLogEntry> log =
+      nodes[0]->GetReplicatedLog()->GetLogEntries();
+  CHECK_EQ(log.size(), num_proposals);
+
+  for (size_t i = 0; i < log.size(); i++) {
+    auto entry = log.find(i)->second;
+    CHECK_EQ(entry.accepted_value_, std::to_string(i))
+        << "Log values do not match at index: " << i << " on nodes 0("
+        << entry.accepted_value_ << ") and expected: (" << std::to_string(i)
+        << ")";
+    CHECK(entry.is_chosen_);
+  }
+}
+
 TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 4;
+  const int sleep_timer = 2 * heartbeat_timer;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
@@ -130,7 +168,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
 TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
-  const int sleep_timer = 4;
+  const int sleep_timer = 2 * heartbeat_timer;
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
