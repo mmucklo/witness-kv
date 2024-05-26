@@ -3,6 +3,7 @@
 
 #include <file_writer.h>
 
+#include <list>
 #include <memory>
 #include <queue>
 #include <string>
@@ -36,23 +37,31 @@ class LogWriter {
   std::vector<std::string> filenames() const;
 
  private:
+  struct ListEntry {
+    std::list<std::shared_ptr<ListEntry>>::iterator it;
+    std::unique_ptr<std::string> msg;
+    explicit ListEntry(std::unique_ptr<std::string> m) : msg(std::move(m)) {}
+  };
+
   // Initializes a new FileWriter.
   void InitFileWriterLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Writes a raw str to the log, preceeding with size, and ending with a 32-bit
   // checksum.
-  void Write(absl::string_view str) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  uint64_t Write(absl::string_view str) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Maybe rotate the log file.
   void MaybeRotate(uint64_t size_est) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Gets all messages off the queue, popping the queue until it's empty.
-  std::vector<std::unique_ptr<std::string>> GetWriteQueueMsgs();
+  std::vector<std::unique_ptr<std::string>> GetWriteQueueMsgs(
+      std::weak_ptr<ListEntry> entry);
 
   absl::Mutex write_queue_lock_;  // Only locks write queue access.
   mutable absl::Mutex lock_;      // Main lock.
   std::string dir_;
   std::string prefix_;
+  std::list<std::shared_ptr<ListEntry>> write_list_;
   std::queue<std::unique_ptr<std::string>> write_queue_
       ABSL_GUARDED_BY(write_queue_lock_);  // TODO: maybe switch to a
                                            // concurrent data structure.
