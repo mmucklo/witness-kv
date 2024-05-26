@@ -76,7 +76,7 @@ LogWriter::LogWriter(std::string dir, std::string prefix)
   checkPrefix(prefix);
 }
 
-uint64_t LogWriter::Write(absl::string_view str) {
+void LogWriter::Write(absl::string_view str) {
   absl::Cord cord;
   cord.Append(byte_str(static_cast<uint64_t>(str.size())));
   uint32_t crc32_res = static_cast<uint32_t>(absl::ComputeCrc32c(str));

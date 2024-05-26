@@ -47,7 +47,7 @@ class LogWriter {
 
   // Writes a raw str to the log, preceeding with size, and ending with a 32-bit
   // checksum.
-  uint64_t Write(absl::string_view str) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  void Write(absl::string_view str) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Maybe rotate the log file.
   void MaybeRotate(uint64_t size_est) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
