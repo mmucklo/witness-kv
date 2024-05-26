@@ -88,7 +88,7 @@ void LogWriter::Write(absl::string_view str) {
   VLOG(2) << "LogWriter::Write crc32_res: " << crc32_res;
   VLOG(2) << "LogWriter::Write str length: " << str.size();
   file_writer_->Write(cord);
-  return cord.size();
+  return;
 }
 
 void LogWriter::InitFileWriterLocked() {
