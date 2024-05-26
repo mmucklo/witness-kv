@@ -35,7 +35,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  auto nodes = ParseNodesConfig();
+  auto nodes = witnesskvs::paxoslibrary::ParseNodesConfig();
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {
@@ -48,9 +48,11 @@ TEST(FileParseTest, ConfigFileParseTest) {
 }
 
 // Helper function to check replicated log on all nodes.
-void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
-                        size_t total_proposals) {
-  std::vector<std::map<uint64_t, ReplicatedLogEntry>> logs(nodes.size());
+void VerifyLogIntegrity(
+    const std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> &nodes,
+    size_t total_proposals) {
+  std::vector<std::map<uint64_t, witnesskvs::paxoslibrary::ReplicatedLogEntry>>
+      logs(nodes.size());
   for (size_t i = 0; i < nodes.size(); i++) {
     logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
     ASSERT_EQ(logs[i].size(), total_proposals);
@@ -97,9 +99,10 @@ struct PaxosSanity : public ::testing::Test {
 TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(
+      num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -115,9 +118,10 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
 TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(
+      num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -129,11 +133,11 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
-  nodes[0] = std::make_unique<Paxos>(0);
+  nodes[0] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(0);
   absl::SleepFor(sleep_timer);
 
   // After node 0 comes back up it should have all the committed entires intact.
-  std::map<uint64_t, ReplicatedLogEntry> log =
+  std::map<uint64_t, witnesskvs::paxoslibrary::ReplicatedLogEntry> log =
       nodes[0]->GetReplicatedLog()->GetLogEntries();
   ASSERT_EQ(log.size(), num_proposals);
 
@@ -157,9 +161,10 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(
+      num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -171,7 +176,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
-  nodes[0] = std::make_unique<Paxos>(0);
+  nodes[0] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(0);
   absl::SleepFor(sleep_timer);
 
   for (size_t i = 0; i < num_proposals; i++) {
@@ -184,9 +189,9 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -208,7 +213,8 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
     nodes[0]->Propose(std::to_string(num_proposals + i));
   }
 
-  nodes[num_nodes - 1] = std::make_unique<Paxos>((num_nodes - 1));
+  nodes[num_nodes - 1] =
+      std::make_unique<witnesskvs::paxoslibrary::Paxos>((num_nodes - 1));
   absl::SleepFor(sleep_timer);
 
   // Third batch of proposals, all nodes are up again.

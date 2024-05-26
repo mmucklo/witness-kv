@@ -12,7 +12,7 @@ int main(int argc, char* argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  Paxos p{static_cast<uint8_t>(std::atoi(argv[1]))};
+  witnesskvs::paxoslibrary::Paxos p{static_cast<uint8_t>(std::atoi(argv[1]))};
 
   std::string input;
   while (true) {

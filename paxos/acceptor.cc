@@ -17,6 +17,8 @@ using paxos::PingResponse;
 using paxos::PrepareRequest;
 using paxos::PrepareResponse;
 
+namespace witnesskvs::paxoslibrary {
+
 class AcceptorImpl final : public Acceptor::Service {
  private:
   uint8_t node_id_;
@@ -131,3 +133,5 @@ AcceptorService::~AcceptorService() {
     service_thread_.join();
   }
 }
+
+}  // namespace witnesskvs::paxoslibrary

@@ -5,6 +5,9 @@
 #include "common.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
+#include "replicated_log.hh"
+
+namespace witnesskvs::paxoslibrary {
 
 struct Node {
   std::string ip_address_;
@@ -79,4 +82,6 @@ class PaxosNode {
 // This helper function will parse the node config file specified
 // by flag `paxos_node_config_file`.
 std::vector<Node> ParseNodesConfig();
+
+}  // namespace witnesskvs::paxoslibrary
 #endif  // NODE_HH_

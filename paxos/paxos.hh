@@ -7,6 +7,8 @@
 #include "proposer.hh"
 #include "replicated_log.hh"
 
+namespace witnesskvs::paxoslibrary {
+
 class Paxos {
  private:
   std::shared_ptr<ReplicatedLog> replicated_log_;
@@ -17,11 +19,12 @@ class Paxos {
  public:
   Paxos(uint8_t node_id);
   ~Paxos();
-  
+
   void Propose(const std::string& value);
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
 };
 
+}  // namespace witnesskvs::paxoslibrary
 #endif  // PAXOS_HH_

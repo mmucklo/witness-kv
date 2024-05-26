@@ -10,20 +10,23 @@
 #include <grpc/grpc.h>
 #include <grpcpp/server_builder.h>
 
-
-#include "node.hh"
 #include "common.hh"
+#include "node.hh"
+
+namespace witnesskvs::paxoslibrary {
 
 class ProposerService {
-  private:
-    std::jthread service_thread_;
-    std::stop_source stop_source_ = {};
-    uint8_t node_id_;
- 
-  public:
-    ProposerService(const std::string& address, uint8_t node_id,
-                    std::shared_ptr<ReplicatedLog> rlog,
-                    std::shared_ptr<PaxosNode> paxos_node);
-    ~ProposerService();
+ private:
+  std::jthread service_thread_;
+  std::stop_source stop_source_ = {};
+  uint8_t node_id_;
+
+ public:
+  ProposerService(const std::string& address, uint8_t node_id,
+                  std::shared_ptr<ReplicatedLog> rlog,
+                  std::shared_ptr<PaxosNode> paxos_node);
+  ~ProposerService();
 };
+
+}  // namespace witnesskvs::paxoslibrary
 #endif  // PROPOSER_HH_

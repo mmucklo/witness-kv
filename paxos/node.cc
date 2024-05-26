@@ -12,6 +12,8 @@ ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
           "Paxos config file for nodes ip addresses and ports");
 
+namespace witnesskvs::paxoslibrary {
+
 std::vector<Node> ParseNodesConfig() {
   std::vector<Node> nodes{};
   std::ifstream config_file(absl::GetFlag(FLAGS_paxos_node_config_file));
@@ -278,3 +280,5 @@ grpc::Status PaxosNode::SendProposeGrpc(paxos::ProposeRequest request,
                         "Proposer not available right now.");
   }
 }
+
+}  // namespace witnesskvs::paxoslibrary
