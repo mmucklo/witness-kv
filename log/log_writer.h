@@ -67,7 +67,7 @@ class LogWriter {
   int64_t entries_count_ ABSL_GUARDED_BY(
       lock);  // Number of entries written to current file_writer_
   std::vector<std::string> filenames_
-      ABSL_GUARDED_BY(lock);  // List of files written to.
+      ABSL_GUARDED_BY(lock_);  // List of files written to.
 
   friend LogWriterTestPeer;
 };
