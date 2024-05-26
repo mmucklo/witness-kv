@@ -12,6 +12,10 @@ ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
           "Paxos config file for nodes ip addresses and ports");
 
+ABSL_FLAG(bool, witness_support, true, "Enable witness support");
+
+ABSL_FLAG(bool, lower_node_witness, false, "Lower nodes are witnesses");
+
 std::vector<Node> ParseNodesConfig() {
   std::vector<Node> nodes{};
   std::ifstream config_file(absl::GetFlag(FLAGS_paxos_node_config_file));
@@ -51,6 +55,21 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
 
   node_id_ = node_id;
   quorum_ = nodes_.size() / 2 + 1;
+
+  // Determine the number of witnesses based on the total number of nodes
+  size_t num_witnesses = nodes_.size() / 3;
+
+  for (size_t i = 0; i < nodes_.size(); ++i) {
+    nodes_[i].is_witness_ = false;
+    if ( absl::GetFlag( FLAGS_witness_support ) ) {
+      if ( i >= nodes_.size() - num_witnesses  && !absl::GetFlag( FLAGS_lower_node_witness ) ) {
+        nodes_[i].is_witness_ = true;
+      }
+      if ( i < num_witnesses && absl::GetFlag( FLAGS_lower_node_witness ) ) {
+        nodes_[i].is_witness_ = true;
+      }
+    }
+  }
 
   acceptor_stubs_.resize(nodes_.size());
 }
@@ -114,10 +133,15 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       }
 
       if (status.ok()) {
-        highest_node_id =
-            std::max(highest_node_id, static_cast<uint8_t>(response.node_id()));
+        if (!nodes_[response.node_id()].is_witness_) {
+          highest_node_id = std::max(
+              highest_node_id, static_cast<uint8_t>( response.node_id() ) );
+        }
       }
     }
+
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+              << "] IS WITNESS: " << nodes_[node_id_].IsWitness();
 
     {
       std::lock_guard<std::mutex> guard(node_mutex_);

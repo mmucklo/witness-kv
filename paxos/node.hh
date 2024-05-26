@@ -9,6 +9,8 @@
 struct Node {
   std::string ip_address_;
   int port_;
+  bool is_witness_;
+  bool IsWitness() const { return is_witness_; }  
   std::string GetAddressPortStr() const {
     return this->ip_address_ + ":" + std::to_string(this->port_);
   }
