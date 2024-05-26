@@ -2,6 +2,8 @@ find_package(Threads)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
+include_directories(${PROJECT_SOURCE_DIR})
+
 set(SOURCES
     acceptor.cc
     paxos.cc
@@ -18,4 +20,5 @@ add_library(paxos STATIC ${SOURCES})
 target_link_libraries(paxos
     PUBLIC
 	paxosproto
+    logs_loader_lib
 )

@@ -119,6 +119,7 @@ target_link_libraries(log_writer_test PUBLIC
     test_main
     gmock
     log_writer_lib
+    test_util_lib
     absl::core_headers
     absl::flags
     absl::log
@@ -133,6 +134,7 @@ target_link_libraries(log_reader_test PUBLIC
     gmock
     log_writer_lib
     log_reader_lib
+    test_util_lib
     absl::core_headers
     absl::flags
     absl::log

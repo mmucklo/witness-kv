@@ -7,6 +7,9 @@
 #include <filesystem>
 #include <string>
 
+#include "log.pb.h"
+#include "log_writer.h"
+
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -16,9 +19,8 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
-#include "log.pb.h"
-#include "log_writer.h"
 #include "tests/protobuf_matchers.h"
+#include "tests/test_util.h"
 #include "tests/test_macros.h"
 
 using ::protobuf_matchers::EqualsProto;
@@ -32,26 +34,15 @@ MATCHER(IsError, "") { return (!arg.ok()); }
 namespace witnesskvs::log {
 namespace {
 
-absl::Status Cleanup(std::vector<std::string> filenames) {
-  bool success = true;
-  for (auto& filename : filenames) {
-    success =
-        success && std::filesystem::remove(std::filesystem::path(filename));
-  }
-  if (success) {
-    return absl::OkStatus();
-  }
-  return absl::UnknownError(
-      absl::StrCat("Could not delete files: ", absl::StrJoin(filenames, ",")));
-}
-
 TEST(LogReaderTest, Basic) {
   std::vector<std::string> cleanup_files;
   std::string filename;
   Log::Message log_message;
-  log_message.mutable_paxos()->set_round(4);
-  log_message.mutable_paxos()->set_proposal_id(9);
-  log_message.mutable_paxos()->set_value("test1234");
+  log_message.mutable_paxos()->set_idx(0);
+  log_message.mutable_paxos()->set_min_proposal(4);
+  log_message.mutable_paxos()->set_accepted_proposal(9);
+  log_message.mutable_paxos()->set_accepted_value("test1234");
+  log_message.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
@@ -79,7 +70,7 @@ TEST(LogReaderTest, Basic) {
     }
     EXPECT_EQ(count, 1);
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogReaderTest, BlankMessage) {
@@ -113,20 +104,24 @@ TEST(LogReaderTest, BlankMessage) {
     }
     EXPECT_EQ(count, 1);
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogReaderTest, MultiTest) {
   std::vector<std::string> cleanup_files;
   std::string filename;
   Log::Message log_message1;
-  log_message1.mutable_paxos()->set_round(4);
-  log_message1.mutable_paxos()->set_proposal_id(9);
-  log_message1.mutable_paxos()->set_value("test1234");
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message2.mutable_paxos()->set_round(5);
-  log_message2.mutable_paxos()->set_proposal_id(2);
-  log_message2.mutable_paxos()->set_value("test12344");
+  log_message1.mutable_paxos()->set_idx(1);
+  log_message1.mutable_paxos()->set_min_proposal(5);
+  log_message1.mutable_paxos()->set_accepted_proposal(10);
+  log_message1.mutable_paxos()->set_accepted_value("test12345");
+  log_message1.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
@@ -155,7 +150,7 @@ TEST(LogReaderTest, MultiTest) {
     EXPECT_THAT(msgs, ElementsAre(EqualsProto(log_message1),
                                   EqualsProto(log_message2)));
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 }  // namespace

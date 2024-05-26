@@ -113,7 +113,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
     // accepted by a quorum of acceptors.
     paxos::PrepareRequest request;
     request.set_index(this->replicated_log_->GetFirstUnchosenIdx());
-    LOG(INFO) << "Attempting replication at index " << request.index();
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+              << "] Attempting replication at index " << request.index();
     do {
       num_promises = 0;
       request.set_proposal_number(
@@ -126,7 +127,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
         grpc::Status status = this->paxos_node_->PrepareGrpc(
             static_cast<uint8_t>(i), request, &response);
         if (!status.ok()) {
-          LOG(WARNING) << "Prepare grpc failed for node: " << i
+          LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                       << "] Prepare grpc failed for node: " << i
                        << " with error code: " << status.error_code()
                        << " and error message: " << status.error_message();
           continue;
@@ -135,7 +137,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
         if (response.min_proposal() > request.proposal_number()) {
           this->replicated_log_->UpdateProposalNumber(response.min_proposal());
           num_promises = 0;
-          LOG(INFO) << "Saw a proposal number larger than what we sent, "
+          LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                    << "] Saw a proposal number larger than what we sent, "
                        "retry Propose operation with a bigger proposal.";
           break;
         }
@@ -143,7 +146,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
           if (max_proposal_id < response.accepted_proposal()) {
             max_proposal_id = response.accepted_proposal();
             value_for_accept_phase = response.accepted_value();
-            LOG(INFO) << "Current index already has value: "
+            LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                      << "] Current index already has value: "
                       << value_for_accept_phase;
           }
         }
@@ -165,7 +169,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       grpc::Status status = this->paxos_node_->AcceptGrpc(
           static_cast<uint8_t>(i), accept_request, &accept_response);
       if (!status.ok()) {
-        LOG(WARNING) << "Accept grpc failed for node: " << i
+        LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                     << "] Accept grpc failed for node: " << i
                      << " with error code: " << status.error_code()
                      << " and error message: " << status.error_message();
         continue;
@@ -177,7 +182,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
         break;
       }
       ++accept_majority_count;
-      LOG(INFO) << "Got accept from " << i
+      LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                << "] Got accept from " << i
                 << " for proposal number: " << accept_response.min_proposal()
                 << " and accepted value: " << value_for_accept_phase;
 
@@ -188,14 +194,16 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
     // we can mark this entry as chosen.
     if (accept_majority_count >= majority_threshold_) {
       this->replicated_log_->MarkLogEntryChosen(request.index());
-      LOG(INFO) << "Accepted Proposal number: "
+      LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                << "] Accepted Proposal number: "
                 << accept_response.min_proposal()
                 << ", accepted value: " << value_for_accept_phase
                 << ", at index: " << request.index() << "\n";
 
       if (value == value_for_accept_phase) {
         done = true;
-        VLOG(1) << "Got the value of interest committed: " << value;
+        VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                << "] Got the value of interest committed: " << value;
       }
     }
 

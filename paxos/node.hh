@@ -38,14 +38,13 @@ class PaxosNode {
 
   std::jthread heartbeat_thread_;
   std::stop_source hb_ss_ = {};
-  std::chrono::seconds hb_timer_{3};
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
-  // This thread then goes to sleep for `hb_timer_` number of seconds.
-  // If it detects failure/timeout, it removes that stub from the vector,
-  // and next time will attempt to establish a connection hoping the node is
-  // back. If it detects a successful re-connection, reinstate the new stub in
-  // the vector at the index corresponding to the node.
+  // This thread then goes to sleep for `paxos_node_heartbeat` number of
+  // seconds. If it detects failure/timeout, it removes that stub from the
+  // vector, and next time will attempt to establish a connection hoping the
+  // node is back. If it detects a successful re-connection, reinstate the new
+  // stub in the vector at the index corresponding to the node.
   void HeartbeatThread(const std::stop_source& ss);
 
   std::jthread commit_thread_;
@@ -59,8 +58,7 @@ class PaxosNode {
                             paxos::PingResponse* response);
 
  public:
-  PaxosNode(const std::string& config_file_name, uint8_t node_id,
-            std::shared_ptr<ReplicatedLog> rlog);
+  PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog);
   ~PaxosNode();
 
   void MakeReady(void);
@@ -81,5 +79,7 @@ class PaxosNode {
                                 google::protobuf::Empty* response );
 };
 
-std::vector<Node> ParseNodesConfig(const std::string& config_file_name);
+// This helper function will parse the node config file specified
+// by flag `paxos_node_config_file`.
+std::vector<Node> ParseNodesConfig();
 #endif  // NODE_HH_
