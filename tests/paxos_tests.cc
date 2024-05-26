@@ -253,7 +253,21 @@ TEST_F(PaxosSanity, WitnessNotLeader) {
 }
 
 TEST_F(PaxosSanity, WitnessCount) {
-  absl::SetFlag(&FLAGS_paxos_node_config_file, "paxos/nodes_config_5nodes.txt");
+  std::vector<std::string> addrs = {"localhost", "localhost", "localhost",
+                                    "localhost", "localhost"};
+  std::vector<std::string> ports = {"50051", "50052", "50053", "50054", "50055"};
+  ASSERT_EQ(addrs.size(), ports.size());
+
+  char filename[] = "/tmp/nodes_config_5nodes";
+  absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
+  std::ofstream temp_file(filename);
+  ASSERT_TRUE(temp_file.is_open()) << "Failed to create temporary file\n";
+
+  for (size_t i = 0; i < addrs.size(); i++) {
+    temp_file << addrs[i] << ":" << ports[i] << "\n";
+  }
+  temp_file << std::endl;
+  absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
   const size_t num_nodes = 5;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
