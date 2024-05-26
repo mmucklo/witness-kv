@@ -4,6 +4,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include "rocksdb/db.h"
 
 #include "kvs.grpc.pb.h"
 
@@ -13,44 +14,80 @@ using grpc::ServerContext;
 using grpc::Status;
 
 using KeyValueStore::Kvs;
-using KeyValueStore::KvsKey;
-using KeyValueStore::KvsSetRequest;
-using KeyValueStore::KvsValue;
+using KeyValueStore::GetRequest;
+using KeyValueStore::GetResponse;
+using KeyValueStore::PutRequest;
+using KeyValueStore::PutResponse;
+using KeyValueStore::DeleteRequest;
+using KeyValueStore::DeleteResponse;
 
 std::map<std::string, std::string> globalMap {};
 
 class KvsServiceImpl final : public Kvs::Service
 {
-  Status Get( ServerContext* context, const KvsKey* k, KvsValue* v ) override
-  {
-    auto it = globalMap.find( k->key() );
-    if ( it == globalMap.end() ) {
-      return grpc::Status( grpc::StatusCode::NOT_FOUND, "Key does not exist!" );
-    }
+  public:
+   KvsServiceImpl( const std::string& db_path )
+   {
+     rocksdb::Options options;
+     options.create_if_missing = true;
+     rocksdb::Status status = rocksdb::DB::Open( options, db_path, &db_ );
+     if ( !status.ok() ) {
+       throw std::runtime_error( "Failed to open RocksDB: "
+                                 + status.ToString() );
+     }
+   }
 
-    v->set_value( it->second );
-    return Status::OK;
-  }
+   ~KvsServiceImpl() { delete db_; }
 
-  Status Set( ServerContext* context, const KvsSetRequest* request,
-              google::protobuf::Empty* response ) override
-  {
-    globalMap[request->key()] = request->value();
-    return Status::OK;
-  }
+   Status Get( ServerContext* context, const GetRequest* request,
+               GetResponse* response ) override
+   {
+     std::string value;
+     rocksdb::Status status
+         = db_->Get( rocksdb::ReadOptions(), request->key(), &value );
+     if ( status.ok() ) {
+       response->set_value( value );
+       return Status::OK;
+     } else {
+       return Status::CANCELLED;
+     }
+   }
 
-  Status Delete( ServerContext* context, const KvsKey* k,
-                 google::protobuf::Empty* response ) override
-  {
-    return Status::OK;
-  }
+   Status Put( ServerContext* context, const PutRequest* request,
+               PutResponse* response ) override
+   {
+     rocksdb::Status status = db_->Put( rocksdb::WriteOptions(), request->key(),
+                                        request->value() );
+     if ( status.ok() ) {
+       response->set_status( "OK" );
+       return Status::OK;
+     } else {
+       return Status::CANCELLED;
+     }
+   }
+
+   Status Delete( ServerContext* context, const DeleteRequest* request,
+                  DeleteResponse* response ) override
+   {
+     rocksdb::Status status
+         = db_->Delete( rocksdb::WriteOptions(), request->key() );
+     if ( status.ok() ) {
+       response->set_status( "OK" );
+       return Status::OK;
+     } else {
+       return Status::CANCELLED;
+     }
+   }
+
+ private:
+  rocksdb::DB* db_;
 };
 
-void RunServer( uint16_t port )
+void RunServer( uint16_t port, const std::string& db_path)
 {
   // FIXME: Hard-coded port for now.
-  std::string server_address = "0.0.0.0:50054";
-  KvsServiceImpl service;
+  std::string server_address = "0.0.0.0:50061";
+  KvsServiceImpl service( db_path );
 
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
@@ -70,6 +107,7 @@ void RunServer( uint16_t port )
 
 int main( int argc, char** argv )
 {
-  RunServer( 50051 );
+  std::string dirname = "/tmp/rocksdb";
+  RunServer( 50051, dirname );
   return 0;
 }
