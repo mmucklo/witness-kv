@@ -21,7 +21,9 @@ class Paxos {
   void Propose(const std::string& value);
 
   // Helper functions for unit testing.
-  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
+  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_;  }
+  bool IsLeader( uint8_t node_id )  { return paxos_node_->IsLeader( node_id );  }
+  bool IsWitness( uint8_t node_id ) { return paxos_node_->IsWitness( node_id ); }
 };
 
 #endif  // PAXOS_HH_
