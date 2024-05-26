@@ -60,7 +60,8 @@ class LogWriter {
   mutable absl::Mutex lock_;      // Main lock.
   std::string dir_;
   std::string prefix_;
-  std::list<std::shared_ptr<ListEntry>> write_list_ ABSL_GUARDED_BY(write_list_lock_);
+  std::list<std::shared_ptr<ListEntry>> write_list_
+      ABSL_GUARDED_BY(write_list_lock_);
   std::unique_ptr<FileWriter> file_writer_ ABSL_GUARDED_BY(lock_)
       ABSL_ACQUIRED_BEFORE(write_list_lock_);
   int64_t entries_count_ ABSL_GUARDED_BY(
