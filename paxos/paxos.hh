@@ -11,13 +11,13 @@ class Paxos {
  private:
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
-  std::unique_ptr<Proposer> proposer_;
   std::unique_ptr<AcceptorService> acceptor_;
+  std::unique_ptr<ProposerService> proposer_;
 
  public:
   Paxos(uint8_t node_id);
   ~Paxos();
-
+  
   void Propose(const std::string& value);
 
   // Helper functions for unit testing.

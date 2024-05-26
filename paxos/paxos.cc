@@ -4,13 +4,13 @@ Paxos::Paxos(uint8_t node_id) {
   replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
   paxos_node_ = std::make_shared<PaxosNode>(node_id, replicated_log_);
 
-  proposer_ = std::make_unique<Proposer>(paxos_node_->GetNumNodes(), node_id,
-                                         replicated_log_, paxos_node_);
-  CHECK_NE(proposer_, nullptr);
-
   acceptor_ = std::make_unique<AcceptorService>(
       paxos_node_->GetNodeAddress(node_id), node_id, replicated_log_);
   CHECK_NE(acceptor_, nullptr);
+  
+  proposer_ = std::make_unique<ProposerService>( paxos_node_->GetLeaderAddress(node_id), 
+                                             node_id, replicated_log_, paxos_node_);
+  CHECK_NE(proposer_, nullptr);
 
   paxos_node_->MakeReady();
 }
@@ -29,6 +29,9 @@ void Paxos::Propose(const std::string& value) {
     LOG(WARNING)
         << "Replication not possible, majority of the nodes are not reachable.";
   } else {
-    this->proposer_->Propose(value);
+    paxos::ProposeRequest request;
+    google::protobuf::Empty response;
+    request.set_value(value);
+    paxos_node_->SendProposeGrpc(request, &response);
   }
 }

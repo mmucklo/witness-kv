@@ -12,6 +12,11 @@ struct Node {
   std::string GetAddressPortStr() const {
     return this->ip_address_ + ":" + std::to_string(this->port_);
   }
+
+  std::string GetLeaderAddressPortStr(uint64_t nodes_size) const {
+    int leader_port = this->port_ + nodes_size;
+    return this->ip_address_ + ":" + std::to_string( leader_port );
+  }
 };
 
 class PaxosNode {
@@ -21,7 +26,10 @@ class PaxosNode {
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
   std::mutex node_mutex_;
+  std::mutex proposer_stub_mutex_;
+
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_;
+  std::unique_ptr<paxos::Proposer::Stub> proposer_stub_;
   size_t num_active_acceptors_conns_;
 
   size_t quorum_;
@@ -58,6 +66,7 @@ class PaxosNode {
 
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
+  std::string GetLeaderAddress( uint8_t nodes_id ) const;
   bool ClusterHasEnoughNodesUp();
 
   grpc::Status PrepareGrpc(uint8_t node_id, paxos::PrepareRequest request,
@@ -66,6 +75,8 @@ class PaxosNode {
                           paxos::AcceptResponse* response);
   grpc::Status CommitGrpc(uint8_t node_id, paxos::CommitRequest request,
                           paxos::CommitResponse* response);
+  grpc::Status SendProposeGrpc( paxos::ProposeRequest request,
+                                google::protobuf::Empty* response );
 };
 
 // This helper function will parse the node config file specified
