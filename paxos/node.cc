@@ -39,7 +39,7 @@ std::vector<Node> ParseNodesConfig() {
 }
 
 PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
-    : num_active_acceptors_conns_{}, replicated_log_{rlog} {
+    : num_active_acceptors_conns_{}, replicated_log_{rlog}, leader_node_id_{0} {
   nodes_ = ParseNodesConfig();
   CHECK_NE(nodes_.size(), 0);
 
@@ -126,6 +126,16 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
                   << "] New leader elected with node id: "
                   << static_cast<uint32_t>(highest_node_id);
         leader_node_id_ = highest_node_id;
+        google::protobuf::Empty response;
+        grpc::ClientContext context;
+        auto proposer_channel = grpc::CreateChannel(
+            nodes_[leader_node_id_].GetLeaderAddressPortStr( nodes_.size() ),
+            grpc::InsecureChannelCredentials() );
+        auto proposer_stub = paxos::Proposer::NewStub( proposer_channel );
+        {
+          std::lock_guard<std::mutex> guard(proposer_stub_mutex_);
+          proposer_stub_ = std::move(proposer_stub);
+        }
       }
     }
 
@@ -224,6 +234,10 @@ std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
   return nodes_[node_id].GetAddressPortStr();
 }
 
+std::string PaxosNode::GetLeaderAddress( uint8_t node_id ) const {
+  return nodes_[node_id].GetLeaderAddressPortStr( nodes_.size() );
+}
+
 bool PaxosNode::ClusterHasEnoughNodesUp() {
   std::lock_guard<std::mutex> guard(node_mutex_);
   return this->num_active_acceptors_conns_ >= quorum_;
@@ -278,5 +292,17 @@ grpc::Status PaxosNode::SendPingGrpc(uint8_t node_id,
   } else {
     return grpc::Status(grpc::StatusCode::UNAVAILABLE,
                         "Acceptor not available right now.");
+  }
+}
+
+grpc::Status PaxosNode::SendProposeGrpc( paxos::ProposeRequest request,
+                                         google::protobuf::Empty* response ) {
+  std::lock_guard<std::mutex> guard(proposer_stub_mutex_);
+  grpc::ClientContext context;
+  if (proposer_stub_) {
+    return proposer_stub_->Propose(&context, request, response);
+  } else {
+    return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                        "Proposer not available right now.");
   }
 }

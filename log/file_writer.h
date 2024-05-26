@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
@@ -53,6 +54,7 @@ class FileWriter {
   std::string& filename() { return filename_; }
 
  private:
+  void InitialSync(const std::filesystem::path& path);
   void WriteBuffer();
 
   int fd_;

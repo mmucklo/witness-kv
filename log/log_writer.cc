@@ -5,6 +5,7 @@
 #include <string>
 #include <type_traits>
 
+#include "absl/crc/crc32c.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -14,7 +15,6 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "byte_conversion.h"
-#include "crc32.h"
 #include "log.pb.h"
 #include "re2/re2.h"
 
@@ -35,7 +35,14 @@ ABSL_FLAG(uint64_t, log_writer_max_file_size, 1 << 30,
 ABSL_FLAG(uint64_t, log_writer_max_msg_size, 1 << 20,
           "Maximum message size in bytes (when coded to string).");
 
+ABSL_FLAG(uint64_t, log_writer_max_write_size_threshold, 1 << 17,  // 128k
+          "Threshold after which we will release the lock on the queue. This "
+          "ensures a bit more fairness on high-contention workloads");
+
 namespace witnesskvs::log {
+
+// Number of bytes we use to store the size + checksum
+constexpr int kSizeChecksumBytes = 12;
 
 extern constexpr char kFilenamePrefix[] = "^[A-Za-z0-9_-]+$";
 
@@ -72,7 +79,8 @@ LogWriter::LogWriter(std::string dir, std::string prefix)
 void LogWriter::Write(absl::string_view str) {
   absl::Cord cord;
   cord.Append(byte_str(static_cast<uint64_t>(str.size())));
-  uint32_t crc32_res = crc32(str.data(), str.size());
+  uint32_t crc32_res = static_cast<uint32_t>(absl::ComputeCrc32c(str));
+  VLOG(1) << "crc32_res: " << crc32_res;
   cord.Append(byte_str(crc32_res));
   cord.Append(str);
   VLOG(2) << "LogWriter::Write size bytes: "
@@ -80,6 +88,7 @@ void LogWriter::Write(absl::string_view str) {
   VLOG(2) << "LogWriter::Write crc32_res: " << crc32_res;
   VLOG(2) << "LogWriter::Write str length: " << str.size();
   file_writer_->Write(cord);
+  return;
 }
 
 void LogWriter::InitFileWriterLocked() {
@@ -123,20 +132,35 @@ void LogWriter::MaybeRotate(uint64_t size_est) {
     InitFileWriterLocked();
   }
 }
-std::vector<std::unique_ptr<std::string>> LogWriter::GetWriteQueueMsgs() {
-  // Get the waiting messages off the queue, outside of I/O ops.
-  // After this block, other threads should be able to continue
-  // to add messages to the queue.
+std::vector<std::unique_ptr<std::string>> LogWriter::GetWriteQueueMsgs(
+    std::weak_ptr<ListEntry> entry) {
+  // Get the waiting messages off the list up to a certain size, outside of I/O
+  // ops. After a call to this function, other threads should be able to
+  // continue to add messages to the list.
   //
-  // It's quite possible due to queuing and concurrent threads
-  // that we will write a threads messages out while it's
-  // blocked on lock_.
+  // It's quite possible due to queuing at the lock and concurrent threads
+  // that we will write a thread's message out while it's
+  // blocked on lock_, we check this first and will return early.
   std::vector<std::unique_ptr<std::string>> msgs;
   {
-    absl::MutexLock wl(&write_queue_lock_);
-    while (!write_queue_.empty()) {
-      msgs.push_back(std::move(write_queue_.front()));
-      write_queue_.pop();
+    absl::MutexLock wl(&write_list_lock_);
+    uint64_t size = 0;
+
+    // Always get our own entry off the list first.
+    if (std::shared_ptr<ListEntry> shared = entry.lock(); shared != nullptr) {
+      size += shared->msg->size() + kSizeChecksumBytes;
+      msgs.push_back(std::move(shared->msg));
+      write_list_.erase(shared->it);
+    } else {
+      // Our entry has already been written. Just return.
+      return msgs;
+    }
+    while (!write_list_.empty() &&
+           size < absl::GetFlag(FLAGS_log_writer_max_write_size_threshold)) {
+      std::shared_ptr<ListEntry>& list_entry = write_list_.front();
+      size += list_entry->msg->size() + kSizeChecksumBytes;
+      msgs.push_back(std::move(list_entry->msg));
+      write_list_.pop_front();
     }
   }
   return msgs;
@@ -144,6 +168,7 @@ std::vector<std::unique_ptr<std::string>> LogWriter::GetWriteQueueMsgs() {
 
 absl::Status LogWriter::Log(const Log::Message& msg) {
   // Append the message to the queue first.
+  std::weak_ptr<ListEntry> my_entry;
   {
     std::string msg_str;
     msg.AppendToString(&msg_str);
@@ -152,10 +177,14 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
           "msg size when serialized '%d' is greater than max '%d'.",
           msg_str.size(), absl::GetFlag(FLAGS_log_writer_max_msg_size)));
     }
-    absl::MutexLock wl(&write_queue_lock_);
+    std::shared_ptr<ListEntry> entry = std::make_shared<ListEntry>(
+        std::make_unique<std::string>(std::move(msg_str)));
+    my_entry = entry;
+    absl::MutexLock wl(&write_list_lock_);
     // unique_ptr used here as a hack to get around copies when going in and out
     // of the queue.
-    write_queue_.push(std::make_unique<std::string>(std::move(msg_str)));
+    write_list_.push_back(entry);
+    entry->it = --(write_list_.end());
   }
 
   // Read all pending messages off the queue and write them.
@@ -172,9 +201,8 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
     // are still on the queue
     while (true) {
       // Get messages off the queue.
-      // TODO(mmucklo): Put a bound on the number of messages to do at a time.
-      // TODO(mmucklo): Make sure we do our own, however.
-      std::vector<std::unique_ptr<std::string>> msgs = GetWriteQueueMsgs();
+      std::vector<std::unique_ptr<std::string>> msgs =
+          GetWriteQueueMsgs(my_entry);
       if (msgs.empty()) {
         break;
       }
@@ -183,9 +211,10 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
       //
       // Do the I/O operation outside of queue access.
       for (std::unique_ptr<std::string>& msg_str : msgs) {
-        // Size estimate of the next log entry (includes length and checksum)
+        // Size estimate of the next log entry (includes length (8) and checksum
+        // (4))
         CHECK_NE(msg_str, nullptr);
-        const uint64_t size_est = msg_str->length() + 16;
+        const uint64_t size_est = msg_str->length() + kSizeChecksumBytes;
         MaybeRotate(size_est);
         Write(*msg_str);
         ++entries_count_;

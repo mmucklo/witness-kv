@@ -8,30 +8,22 @@
 
 // GRPC headers
 #include <grpc/grpc.h>
-#include <grpcpp/create_channel.h>
+#include <grpcpp/server_builder.h>
+
 
 #include "node.hh"
+#include "common.hh"
 
-class Proposer {
- private:
-  uint8_t node_id_;
-  int majority_threshold_;
-  int retry_count_;  // For testing so we can test nodes not reaching consensus
-
-  std::shared_ptr<ReplicatedLog> replicated_log_;
-  std::shared_ptr<PaxosNode> node_grpc_;
-
- public:
-  Proposer(int num_acceptors, uint8_t nodeId,
-           std::shared_ptr<ReplicatedLog> rlog,
-           std::shared_ptr<PaxosNode> node_grpc)
-      : retry_count_{3},
-        majority_threshold_{num_acceptors / 2 + 1},
-        node_id_{nodeId},
-        replicated_log_{rlog},
-        node_grpc_{node_grpc} {}
-  ~Proposer() = default;
-
-  void Propose(const std::string& value);
+class ProposerService {
+  private:
+    std::jthread service_thread_;
+    std::stop_source stop_source_ = {};
+    uint8_t node_id_;
+ 
+  public:
+    ProposerService(const std::string& address, uint8_t node_id,
+                    std::shared_ptr<ReplicatedLog> rlog,
+                    std::shared_ptr<PaxosNode> paxos_node);
+    ~ProposerService();
 };
 #endif  // PROPOSER_HH_
