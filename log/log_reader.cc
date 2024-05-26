@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/crc/crc32c.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -16,7 +17,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "byte_conversion.h"
-#include "crc32.h"
 #include "util/status_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
@@ -58,7 +58,7 @@ LogReader::~LogReader() {
   if (f_ != nullptr) {
     if (std::fclose(f_) == EOF) {
       LOG(FATAL) << "Error closing fd: for filename " << filename_
-            << " errno: " << errno << " " << std::strerror(errno);
+                 << " errno: " << errno << " " << std::strerror(errno);
     }
   }
 }
@@ -114,11 +114,13 @@ absl::StatusOr<std::unique_ptr<char[]>> LogReader::ReadBufferLocked(
                         "instead only read: %d bytes",
                         size, bytes));
   }
-  uint32_t crc32_buffer = crc32(buffer.get(), bytes);
+
+  uint32_t crc32_buffer = static_cast<uint32_t>(
+      absl::ComputeCrc32c(absl::string_view(buffer.get(), bytes)));
   if (crc32_val != crc32_buffer) {
     return absl::DataLossError(
         absl::StrFormat("Not crc32 invalid, expected %04x, instead got %04x",
-                        crc32, crc32_buffer));
+                        crc32_val, crc32_buffer));
   }
   return buffer;
 }
@@ -148,7 +150,8 @@ absl::StatusOr<long> LogReader::ReadHeader() {
 
   // Read size
   ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
-  VLOG(2) << "header after size position: " << std::ftell(f_) << " size: " << size;
+  VLOG(2) << "header after size position: " << std::ftell(f_)
+          << " size: " << size;
   CHECK_NE(size, 0);
 
   ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
@@ -205,7 +208,7 @@ absl::StatusOr<Log::Message> LogReader::NextLocked() {
   if (last_pos_ == pos_) {
     // Hack to reset the file pointer so we can continue to read off from the
     // last position if possible.
-    MaybeSeekLocked(pos_ - 1); // this moves pos_ back 1.
+    MaybeSeekLocked(pos_ - 1);  // this moves pos_ back 1.
     MaybeSeekLocked(pos_ + 1);
   }
   last_pos_ = pos_;

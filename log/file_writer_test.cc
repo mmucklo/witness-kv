@@ -100,6 +100,7 @@ TEST(FlagTest, Smoke) {
   LOG(INFO) << "file_writer_test_flag: "
             << absl::GetFlag(FLAGS_file_writer_test_flag);
 }
+
 // TODO microbenchmark to watch flush cycles and timing.
 
 }  // namespace

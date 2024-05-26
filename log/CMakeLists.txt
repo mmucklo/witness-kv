@@ -2,7 +2,6 @@ add_library(file_writer_lib file_writer.cc)
 add_library(log_writer_lib log_writer.cc)
 add_library(log_reader_lib log_reader.cc)
 add_library(logs_loader_lib logs_loader.cc)
-add_library(crc32 crc32.cc)
 
 find_package(re2 REQUIRED)
 
@@ -18,9 +17,6 @@ target_include_directories(log_reader_lib
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 target_include_directories(logs_loader_lib
-    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
-)
-target_include_directories(crc32
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
@@ -51,11 +47,11 @@ target_link_libraries(log_writer_lib PUBLIC
     logproto
     absl::base
     absl::core_headers
+    absl::crc32c
     absl::flags
     absl::log
     absl::synchronization
     re2::re2
-    crc32
 )
 
 target_link_libraries(log_reader_lib PUBLIC
@@ -63,11 +59,11 @@ target_link_libraries(log_reader_lib PUBLIC
     logproto
     absl::base
     absl::core_headers
+    absl::crc32c
     absl::flags
     absl::log
     absl::synchronization
     absl::strings
-    crc32
     status_macros
 )
 
