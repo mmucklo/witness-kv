@@ -143,7 +143,7 @@ std::vector<std::unique_ptr<std::string>> LogWriter::GetWriteQueueMsgs(
   // blocked on lock_, we check this first and will return early.
   std::vector<std::unique_ptr<std::string>> msgs;
   {
-    absl::MutexLock wl(&write_queue_lock_);
+    absl::MutexLock wl(&write_list_lock_);
     uint64_t size = 0;
 
     // Always get our own entry off the list first.
@@ -180,7 +180,7 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
     std::shared_ptr<ListEntry> entry = std::make_shared<ListEntry>(
         std::make_unique<std::string>(std::move(msg_str)));
     my_entry = entry;
-    absl::MutexLock wl(&write_queue_lock_);
+    absl::MutexLock wl(&write_list_lock_);
     // unique_ptr used here as a hack to get around copies when going in and out
     // of the queue.
     write_list_.push_back(entry);
