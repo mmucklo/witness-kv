@@ -65,7 +65,7 @@ class LogWriter {
   std::unique_ptr<FileWriter> file_writer_ ABSL_GUARDED_BY(lock_)
       ABSL_ACQUIRED_BEFORE(write_list_lock_);
   int64_t entries_count_ ABSL_GUARDED_BY(
-      lock);  // Number of entries written to current file_writer_
+      lock_);  // Number of entries written to current file_writer_
   std::vector<std::string> filenames_
       ABSL_GUARDED_BY(lock_);  // List of files written to.
 
