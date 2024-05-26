@@ -7,7 +7,6 @@
 #include "proposer.hh"
 #include "replicated_log.hh"
 
-
 class Paxos {
  private:
   std::shared_ptr<ReplicatedLog> replicated_log_;
