@@ -175,7 +175,10 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
     current_entry.min_proposal_ = new_entry.min_proposal_;
     current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.accepted_value_ = new_entry.accepted_value_;
-    current_entry.is_chosen_ = new_entry.is_chosen_;
+
+    if (!current_entry.is_chosen_) {
+      current_entry.is_chosen_ = new_entry.is_chosen_;
+    }
     MakeLogEntryStable(current_entry);
   }
   return current_entry.min_proposal_;

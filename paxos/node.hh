@@ -33,11 +33,9 @@ class PaxosNode {
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
   absl::Mutex node_mutex_;
-  std::mutex proposer_stub_mutex_;
 
   std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_
       ABSL_GUARDED_BY(node_mutex_);
-  std::unique_ptr<paxos::Proposer::Stub> proposer_stub_;
   size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(node_mutex_);
 
   size_t quorum_;
@@ -66,7 +64,8 @@ class PaxosNode {
   ~PaxosNode();
 
   void MakeReady(void);
-  void CommitInBackground(const std::vector<uint64_t>& commit_idxs);
+  void CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs,
+                         bool force_sync);
 
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;

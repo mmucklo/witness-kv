@@ -98,6 +98,7 @@ ProposerService::~ProposerService() {
 }
 
 void ProposerImpl::ProposeLocal(const std::string& value) {
+  bool is_nop = value.empty();
   bool done = false;
   while (!done) {
     std::string value_for_accept_phase = value;
@@ -148,6 +149,12 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       }
     } while (num_promises < majority_threshold_);
 
+    bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
+    done = nop_paxos_round;
+
+    LOG(INFO) << "nop_paxos_round: " << nop_paxos_round;
+    LOG(INFO) << "is_nop: " << is_nop;
+
     // Perform phase 2 of paxos operation i.e. try to get the value we
     // determined in phase 1 to be accepted by a quorum of acceptors.
     paxos::AcceptRequest accept_request;
@@ -168,6 +175,12 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
                      << " and error message: " << status.error_message();
         continue;
       }
+
+      peer_unchosen_idx[i] = accept_response.first_unchosen_index();
+      if (nop_paxos_round) {
+        continue;
+      }
+
       if (accept_response.min_proposal() > request.proposal_number()) {
         this->replicated_log_->UpdateProposalNumber(
             accept_response.min_proposal());
@@ -179,13 +192,15 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
                 << "] Got accept from " << i
                 << " for proposal number: " << accept_response.min_proposal()
                 << " and accepted value: " << value_for_accept_phase;
-
-      peer_unchosen_idx[i] = accept_response.first_unchosen_index();
     }
 
     // Since a quorum of acceptors responded with an accept for this value,
     // we can mark this entry as chosen.
     if (accept_majority_count >= majority_threshold_) {
+      CHECK(!nop_paxos_round)
+          << "NODE: [" << static_cast<uint32_t>(node_id_)
+          << "] NOP round of paxos should never make log commits.";
+
       this->replicated_log_->MarkLogEntryChosen(request.index());
       LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                 << "] Accepted Proposal number: "
@@ -201,7 +216,7 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
     }
 
     if (done) {
-      this->paxos_node_->CommitInBackground(peer_unchosen_idx);
+      this->paxos_node_->CommitOnPeerNodes(peer_unchosen_idx, nop_paxos_round);
     }
   }
 }

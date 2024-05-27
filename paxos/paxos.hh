@@ -20,12 +20,16 @@ class Paxos {
   Paxos(uint8_t node_id);
   ~Paxos();
 
+  // Function to add a command to the replicated state machine across all alive
+  // Paxos nodes. If value is empty this will trigger a NOP paxos round as
+  // described in section 3 in
+  // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
   void Propose(const std::string& value);
 
   // Helper functions for unit testing.
-  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_;  }
-  bool IsLeader( uint8_t node_id )  { return paxos_node_->IsLeader( node_id );  }
-  bool IsWitness( uint8_t node_id ) { return paxos_node_->IsWitness( node_id ); }
+  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
+  bool IsLeader(uint8_t node_id) { return paxos_node_->IsLeader(node_id); }
+  bool IsWitness(uint8_t node_id) { return paxos_node_->IsWitness(node_id); }
 };
 
 }  // namespace witnesskvs::paxoslibrary

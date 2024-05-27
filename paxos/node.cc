@@ -62,7 +62,7 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
   quorum_ = nodes_.size() / 2 + 1;
 
   // Determine the number of witnesses based on the total number of nodes
-  size_t num_witnesses = floor(nodes_.size() / 2);
+  size_t num_witnesses = floor(static_cast<double>(nodes_.size()) / 2);
 
   for (size_t i = 0; i < nodes_.size(); ++i) {
     nodes_[i].is_witness_ = false;
@@ -122,6 +122,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
         status = stub->SendPing(&context, request, &response);
         if (status.ok()) {
           LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                    << "] [Witness: " << nodes_[node_id_].IsWitness()
                     << "] Connection established with node: " << i;
           absl::MutexLock l(&node_mutex_);
           acceptor_stubs_[i] = std::move(stub);
@@ -137,9 +138,6 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       }
     }
 
-    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-              << "] IS WITNESS: " << nodes_[node_id_].IsWitness();
-
     {
       absl::MutexLock l(&node_mutex_);
       if (leader_node_id_ != highest_node_id) {
@@ -148,19 +146,9 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
                   << static_cast<uint32_t>(highest_node_id);
         leader_node_id_ = highest_node_id;
         nodes_[leader_node_id_].is_leader_ = true;
-        google::protobuf::Empty response;
         grpc::ClientContext context;
-        auto proposer_channel = grpc::CreateChannel(
-            nodes_[leader_node_id_].GetLeaderAddressPortStr(nodes_.size()),
-            grpc::InsecureChannelCredentials());
-        auto proposer_stub = paxos::Proposer::NewStub(proposer_channel);
-        {
-          std::lock_guard<std::mutex> guard(proposer_stub_mutex_);
-          proposer_stub_ = std::move(proposer_stub);
-        }
       }
     }
-
     absl::SleepFor(sleep_time);
   }
 
@@ -209,18 +197,19 @@ void PaxosNode::MakeReady() {
   commit_futures_.resize(GetNumNodes());
 }
 
-void PaxosNode::CommitInBackground(const std::vector<uint64_t>& commit_idxs) {
-  if (absl::GetFlag(FLAGS_paxos_disable_background_commit)) {
-    return;
-  }
-
+void PaxosNode::CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs,
+                                  bool force_sync) {
   auto commit_async = std::bind(&PaxosNode::CommitAsync, this,
                                 std::placeholders::_1, std::placeholders::_2);
   for (size_t i = 0; i < GetNumNodes(); i++) {
     if (static_cast<uint8_t>(i) == node_id_) continue;
+
     if (commit_idxs[i] < this->replicated_log_->GetFirstUnchosenIdx()) {
       commit_futures_[i] = std::async(std::launch::async, commit_async,
                                       static_cast<uint8_t>(i), commit_idxs[i]);
+      if (force_sync) {
+        commit_futures_[i].wait();
+      }
     }
   }
 }
@@ -314,14 +303,26 @@ grpc::Status PaxosNode::SendPingGrpc(uint8_t node_id,
 
 grpc::Status PaxosNode::SendProposeGrpc(paxos::ProposeRequest request,
                                         google::protobuf::Empty* response) {
-  std::lock_guard<std::mutex> guard(proposer_stub_mutex_);
+  // TODO [V] : Move this stub creation back to the heartbeat thread as leader
+  // is updated. Moving it here to avoid dealock issues as the
+  // proposer_stub->Propose() will also need the node_mutex and these locks are
+  // not recursive.
+  node_mutex_.ReaderLock();
+  auto proposer_channel = grpc::CreateChannel(
+      nodes_[leader_node_id_].GetLeaderAddressPortStr(nodes_.size()),
+      grpc::InsecureChannelCredentials());
+  auto proposer_stub = paxos::Proposer::NewStub(proposer_channel);
+  node_mutex_.ReaderUnlock();
+
+  grpc::Status status;
   grpc::ClientContext context;
-  if (proposer_stub_) {
-    return proposer_stub_->Propose(&context, request, response);
+  if (proposer_stub) {
+    status = proposer_stub->Propose(&context, request, response);
   } else {
-    return grpc::Status(grpc::StatusCode::UNAVAILABLE,
-                        "Proposer not available right now.");
+    status = grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                          "Proposer not available right now.");
   }
+  return status;
 }
 
 }  // namespace witnesskvs::paxoslibrary

@@ -55,13 +55,16 @@ void VerifyLogIntegrity(
   std::vector<std::map<uint64_t, witnesskvs::paxoslibrary::ReplicatedLogEntry>>
       logs(nodes.size());
   for (size_t i = 0; i < nodes.size(); i++) {
-    logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
-    ASSERT_EQ(logs[i].size(), total_proposals);
+    if (nodes[i]) {
+      logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+      ASSERT_EQ(logs[i].size(), total_proposals);
+    }
   }
 
   // Ensure all the nodes see the same value in their log positions.
   for (size_t i = 0; i < total_proposals; i++) {
     for (size_t n = 1; n < nodes.size() - 1; n++) {
+      if (!nodes[i]) continue;
       auto left = logs[0].find(i)->second;
       auto right = logs[n].find(i)->second;
       ASSERT_EQ(left.accepted_value_, right.accepted_value_)
@@ -226,6 +229,52 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
 
   // Log must reflect the operations from all three batch of proposals.
   VerifyLogIntegrity(nodes, 3 * num_proposals);
+}
+
+TEST_F(PaxosSanity, CommitOnNOP) {
+  const size_t num_nodes = 3;
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
+  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(
+      num_nodes);
+  for (size_t i = 0; i < num_nodes; i++) {
+    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
+  }
+
+  absl::SleepFor(sleep_timer);
+
+  nodes[1].reset();
+  absl::SleepFor(sleep_timer);
+
+  const size_t num_proposals = 5;
+  for (size_t i = 0; i < num_proposals; i++) {
+    nodes[0]->Propose(std::to_string(i));
+  }
+
+  absl::SleepFor(sleep_timer);
+  nodes[1] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(1);
+  nodes[0].reset();
+  nodes[2].reset();
+  absl::SleepFor(sleep_timer);
+
+  nodes[2] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(2);
+  absl::SleepFor(sleep_timer);
+
+  // node 1 does not have any entry in it's log, a NOP propose should help catch
+  // this node up.
+  ASSERT_EQ(nodes[1]->GetReplicatedLog()->GetLogEntries().size(), 0);
+  nodes[1]->Propose("");
+
+  std::map<uint64_t, witnesskvs::paxoslibrary::ReplicatedLogEntry> log =
+      nodes[1]->GetReplicatedLog()->GetLogEntries();
+
+  ASSERT_GE(log.size(), num_proposals);
+  for (size_t i = 0; i < num_proposals; i++) {
+    auto left = log.find(i)->second;
+    ASSERT_EQ(left.accepted_value_, std::to_string(i))
+        << "Log values do not match at index: " << i << " on nodes 1("
+        << left.accepted_value_ << ") and expected: (" << std::to_string(i)
+        << ")";
+  }
 }
 
 TEST_F(PaxosSanity, WitnessNotLeader) {
