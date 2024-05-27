@@ -12,6 +12,9 @@ ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
           "Paxos config file for nodes ip addresses and ports");
 
+ABSL_FLAG(bool, paxos_disable_background_commit, false,
+          "Control background commit behavior");
+
 namespace witnesskvs::paxoslibrary {
 
 std::vector<Node> ParseNodesConfig() {
@@ -180,13 +183,18 @@ void PaxosNode::MakeReady() {
 }
 
 void PaxosNode::CommitInBackground(const std::vector<uint64_t>& commit_idxs) {
+  if (absl::GetFlag(FLAGS_paxos_disable_background_commit)) {
+    return;
+  }
+
   auto commit_async = std::bind(&PaxosNode::CommitAsync, this,
                                 std::placeholders::_1, std::placeholders::_2);
   for (size_t i = 0; i < GetNumNodes(); i++) {
     if (static_cast<uint8_t>(i) == node_id_) continue;
-
-    commit_futures_[i] = std::async(std::launch::async, commit_async,
-                                    static_cast<uint8_t>(i), commit_idxs[i]);
+    if (commit_idxs[i] < this->replicated_log_->GetFirstUnchosenIdx()) {
+      commit_futures_[i] = std::async(std::launch::async, commit_async,
+                                      static_cast<uint8_t>(i), commit_idxs[i]);
+    }
   }
 }
 

@@ -15,7 +15,7 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
     : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
 
-  bool has_atleast_one_chosen = false;
+  bool found_unchosen_idx = false;
 
   const std::string prefix =
       absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
@@ -30,21 +30,17 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
     entry.accepted_value_ = log_msg.paxos().accepted_value();
     entry.is_chosen_ = log_msg.paxos().is_chosen();
 
-    if (entry.is_chosen_) {
-      has_atleast_one_chosen = true;
-      first_unchosen_index_ =
-          std::max(first_unchosen_index_, log_msg.paxos().idx());
+    if (!found_unchosen_idx) {
+      if (entry.is_chosen_) {
+        first_unchosen_index_ = log_msg.paxos().idx() + 1;
+      } else {
+        first_unchosen_index_ = log_msg.paxos().idx();
+        found_unchosen_idx = true;
+      }
     }
 
     proposal_number_ =
         std::max(proposal_number_, log_msg.paxos().min_proposal());
-  }
-
-  // If there was atleast one previously known to be chosen entry in the log,
-  // the `first_unchosen_index` will be the index one beyond the max we've
-  // stored in the log.
-  if (log_entries_.size() && has_atleast_one_chosen) {
-    first_unchosen_index_++;
   }
 
   VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
