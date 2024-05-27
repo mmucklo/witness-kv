@@ -47,7 +47,7 @@ struct SanityTests : public ::testing::Test
 
 TEST_F( SanityTests, BasicSanityTest )
 {
-  auto channel = grpc::CreateChannel( "0.0.0.0:50054",
+  auto channel = grpc::CreateChannel( "0.0.0.0:50061",
                                       grpc::InsecureChannelCredentials() );
   std::unique_ptr<KeyValueStore::Kvs::Stub> stub
       = KeyValueStore::Kvs::NewStub( channel );
@@ -55,10 +55,10 @@ TEST_F( SanityTests, BasicSanityTest )
 
   // 1. Test "Get" on empty kvs
   {
-    KeyValueStore::KvsKey request;
+    KeyValueStore::GetRequest request;
     request.set_key( "1" );
 
-    KeyValueStore::KvsValue response;
+    KeyValueStore::GetResponse response;
     ASSERT_FALSE( stub->Get( &context, request, &response ).ok() );
   }
 
@@ -68,19 +68,19 @@ TEST_F( SanityTests, BasicSanityTest )
     std::string v { "value0" };
     {
       grpc::ClientContext context;
-      KeyValueStore::KvsSetRequest request;
-      google::protobuf::Empty empty;
+      KeyValueStore::PutRequest request;
+      KeyValueStore::PutResponse response;
 
       request.set_key( k );
       request.set_value( v );
-      ASSERT_TRUE( stub->Set( &context, request, &empty ).ok() );
+      ASSERT_TRUE( stub->Put( &context, request, &response ).ok() );
     }
 
     {
       grpc::ClientContext context;
-      KeyValueStore::KvsKey getRequest;
+      KeyValueStore::GetRequest getRequest;
       getRequest.set_key( k );
-      KeyValueStore::KvsValue response;
+      KeyValueStore::GetResponse response;
       ASSERT_TRUE( stub->Get( &context, getRequest, &response ).ok() );
 
       ASSERT_EQ( response.value(), v );
