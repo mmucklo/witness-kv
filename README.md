@@ -19,3 +19,5 @@ You may need to specify "-- --stderrthreshold=0" when running unit tests to get 
         ./log_writer_test -- --stderrthreshold=0
 
 "--" tells gtest that the rest of the arguments should get passed to the tests.
+
+sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libbz2-dev
