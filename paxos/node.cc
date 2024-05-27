@@ -15,6 +15,10 @@ ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
 ABSL_FLAG(bool, paxos_disable_background_commit, false,
           "Control background commit behavior");
 
+ABSL_FLAG(bool, witness_support, true, "Enable witness support");
+
+ABSL_FLAG(bool, lower_node_witness, false, "Lower nodes are witnesses");
+
 namespace witnesskvs::paxoslibrary {
 
 std::vector<Node> ParseNodesConfig() {
@@ -56,6 +60,23 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
 
   node_id_ = node_id;
   quorum_ = nodes_.size() / 2 + 1;
+
+  // Determine the number of witnesses based on the total number of nodes
+  size_t num_witnesses = floor(nodes_.size() / 2);
+
+  for (size_t i = 0; i < nodes_.size(); ++i) {
+    nodes_[i].is_witness_ = false;
+    nodes_[i].is_leader_ = false;
+    if (absl::GetFlag(FLAGS_witness_support)) {
+      if (i >= nodes_.size() - num_witnesses &&
+          !absl::GetFlag(FLAGS_lower_node_witness)) {
+        nodes_[i].is_witness_ = true;
+      }
+      if (i < num_witnesses && absl::GetFlag(FLAGS_lower_node_witness)) {
+        nodes_[i].is_witness_ = true;
+      }
+    }
+  }
 
   acceptor_stubs_.resize(nodes_.size());
 }
@@ -109,10 +130,15 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
       }
 
       if (status.ok()) {
-        highest_node_id =
-            std::max(highest_node_id, static_cast<uint8_t>(response.node_id()));
+        if (!nodes_[response.node_id()].is_witness_) {
+          highest_node_id = std::max(highest_node_id,
+                                     static_cast<uint8_t>(response.node_id()));
+        }
       }
     }
+
+    LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+              << "] IS WITNESS: " << nodes_[node_id_].IsWitness();
 
     {
       absl::MutexLock l(&node_mutex_);
@@ -121,6 +147,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
                   << "] New leader elected with node id: "
                   << static_cast<uint32_t>(highest_node_id);
         leader_node_id_ = highest_node_id;
+        nodes_[leader_node_id_].is_leader_ = true;
         google::protobuf::Empty response;
         grpc::ClientContext context;
         auto proposer_channel = grpc::CreateChannel(
@@ -204,6 +231,14 @@ std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
 
 std::string PaxosNode::GetLeaderAddress(uint8_t node_id) const {
   return nodes_[node_id].GetLeaderAddressPortStr(nodes_.size());
+}
+
+bool PaxosNode::IsLeader(uint8_t node_id) const {
+  return nodes_[node_id].IsLeader();
+}
+
+bool PaxosNode::IsWitness(uint8_t node_id) const {
+  return nodes_[node_id].IsWitness();
 }
 
 bool PaxosNode::ClusterHasEnoughNodesUp() {
