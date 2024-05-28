@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package paxos;
+package paxos_rpc;
 
 import "google/protobuf/empty.proto";
 

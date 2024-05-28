@@ -4,6 +4,8 @@
 #include "common.hh"
 #include "log/log_writer.h"
 
+namespace witnesskvs::paxos {
+
 struct ReplicatedLogEntry {
   uint64_t idx_{};
   uint64_t min_proposal_{};
@@ -58,4 +60,5 @@ class ReplicatedLog {
   }
 };
 
+}  // namespace witnesskvs::paxos
 #endif  // REPLICATED_LOG_H_
