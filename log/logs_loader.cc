@@ -414,9 +414,8 @@ void SortingLogsLoader::Init(
       std::vector<std::string> sorted_files =
           SortLogsFile(path, prefix_sorted_idx, sortfn);
       sort_idx++;
-      for (const auto& file : sorted_files) {
-        cleanup_files.push_back(file);
-      }
+      cleanup_files.insert(cleanup_files.end(), sorted_files.begin(),
+                           sorted_files.end());
     }
   }
 
@@ -425,7 +424,8 @@ void SortingLogsLoader::Init(
       std::ceil(static_cast<double>(
                     absl::GetFlag(FLAGS_logs_loader_max_memory_for_sorting)) /
                 absl::GetFlag(FLAGS_log_writer_max_msg_size));
-  CHECK_GT(max_files, 0);
+  CHECK_GT(max_files, 1);
+  VLOG(1) << "SortingLogsLoader: max_files: " << max_files;
   int merge_round = 0;
   while (sorted_prefixes.size() > 0) {
     merge_round++;
@@ -445,11 +445,8 @@ void SortingLogsLoader::Init(
 
     // Final merge.
     if (merge_lists.size() == 1) {
-      cur_paths = merge_lists.front();
-      merge_lists.pop_front();
-      CHECK_GT(cur_paths.size(), 0);
-      CHECK_EQ(merge_lists.size(), 0);
-      temp_files_ = MergeSortedFiles(dir, cur_paths, prefix_merge, sortfn);
+      temp_files_ =
+          MergeSortedFiles(dir, merge_lists.front(), prefix_merge, sortfn);
       break;
     }
 
@@ -459,20 +456,14 @@ void SortingLogsLoader::Init(
       ++group;
       std::string prefix_merge_round =
           absl::StrCat(prefix_merge, "_round_", merge_round, "_group_", group);
-      cur_paths = merge_lists.front();
-      merge_lists.pop_front();
-      CHECK_GT(cur_paths.size(), 0);
-      CHECK_EQ(merge_lists.size(), 0);
+      CHECK_GT(merge_list.size(), 0);
       std::vector<std::string> merge_files =
-          MergeSortedFiles(dir, cur_paths, prefix_merge_round, sortfn);
+          MergeSortedFiles(dir, merge_list, prefix_merge_round, sortfn);
       sorted_prefixes.push_back(prefix_merge_round);
 
       // Can get rid of intermediate files now.
       CleanupFiles(cleanup_files);
-      cleanup_files.clear();
-      for (const auto& file : merge_files) {
-        cleanup_files.push_back(file);
-      }
+      cleanup_files.swap(merge_files);
     }
   }
 
@@ -503,7 +494,7 @@ void SortingLogsLoader::iterator::reset() {
 }
 
 void SortingLogsLoader::iterator::next() {
-  VLOG(1) << "SortingLogsLoader::iterator::next";
+  VLOG(2) << "SortingLogsLoader::iterator::next";
   CHECK(llit != std::nullopt);
   ++(*llit);
   if (*llit == loader->logs_loader_->end()) {

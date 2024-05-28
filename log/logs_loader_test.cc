@@ -1,6 +1,7 @@
 #include "logs_loader.h"
 
 #include <gmock/gmock.h>
+#include <google/protobuf/text_format.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -30,6 +31,10 @@ using ::testing::AllOf;
 using ::testing::HasSubstr;
 using ::testing::Not;
 using ::testing::UnorderedElementsAre;
+
+ABSL_DECLARE_FLAG(uint64_t, logs_loader_max_memory_for_sorting);
+ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
+ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
 
 MATCHER(IsError, "") { return (!arg.ok()); }
 
@@ -488,9 +493,10 @@ TEST(SortingLogsLoaderTest, Basic) {
     cleanup_files = log_writer.filenames();
   }
   {
-    SortingLogsLoader logs_loader("/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
-                             return a.paxos().idx() < b.paxos().idx();
-                           });
+    SortingLogsLoader logs_loader(
+        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+          return a.paxos().idx() < b.paxos().idx();
+        });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message));
@@ -546,10 +552,10 @@ TEST(SortingLogsLoaderTest, SortingTest) {
   }
   {
     // Try a logs loader that sorts by idx.
-    SortingLogsLoader logs_loader("/tmp", prefix,
-                           [](const Log::Message& a, const Log::Message& b) {
-                             return a.paxos().idx() < b.paxos().idx();
-                           });
+    SortingLogsLoader logs_loader(
+        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+          return a.paxos().idx() < b.paxos().idx();
+        });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message1));
@@ -628,10 +634,10 @@ TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
   }
   {
     // Try a logs loader that sorts by idx.
-    SortingLogsLoader logs_loader("/tmp", prefix,
-                           [](const Log::Message& a, const Log::Message& b) {
-                             return a.paxos().idx() < b.paxos().idx();
-                           });
+    SortingLogsLoader logs_loader(
+        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+          return a.paxos().idx() < b.paxos().idx();
+        });
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message4));
@@ -652,6 +658,57 @@ TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
         ElementsAre(EqualsProto(log_message4), EqualsProto(log_message6),
                     EqualsProto(log_message5), EqualsProto(log_message1),
                     EqualsProto(log_message2), EqualsProto(log_message3)));
+  }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
+}
+
+TEST(SortingLogsLoaderTest, Large) {
+  Log::Message msg_base;
+  ASSERT_TRUE(google::protobuf::TextFormat::ParseFromString(R"(
+      paxos {
+        idx: 5
+        accepted_value: "testing1245"
+      }
+    )",
+                                                            &msg_base));
+  std::vector<Log::Message> msgs;
+
+  absl::BitGen gen;
+  absl::flat_hash_set<uint32_t> seen;
+  for (int i = 0; i < 1024; i++) {
+    uint32_t idx = absl::Uniform(absl::IntervalClosed, gen, 1, 1 << 20);
+    if (seen.insert(idx).second) {
+      Log::Message msg(msg_base);
+      msg.mutable_paxos()->set_idx(idx);
+      msgs.push_back(msg);
+    }
+  }
+  const std::string prefix = GetTempPrefix();
+  absl::SetFlag(&FLAGS_log_writer_max_file_size, 256);
+  std::vector<std::string> cleanup_files;
+  {
+    LogWriter log_writer("/tmp", prefix);
+    for (size_t i = 0; i < msgs.size(); i++) {
+      ASSERT_THAT(log_writer.Log(msgs[i]), IsOk()) << i;
+    }
+    cleanup_files = log_writer.filenames();
+  }
+
+  {
+    absl::SetFlag(&FLAGS_logs_loader_max_memory_for_sorting,
+                  absl::GetFlag(FLAGS_log_writer_max_msg_size) * 5);
+
+    // Try a logs loader that sorts by idx.
+    SortingLogsLoader logs_loader(
+        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+          return a.paxos().idx() < b.paxos().idx();
+        });
+    int prev_idx = -1;
+    for (const Log::Message& msg : logs_loader) {
+      EXPECT_GT(msg.paxos().idx(), prev_idx)
+          << prev_idx << " " << msg.paxos().idx();
+      prev_idx = msg.paxos().idx();
+    }
   }
   ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }

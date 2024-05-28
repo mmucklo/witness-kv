@@ -59,7 +59,7 @@ class LogWriter {
       std::weak_ptr<ListEntry> entry);
 
   absl::Mutex write_list_lock_;  // Only locks write queue access.
-  mutable absl::Mutex lock_;      // Main lock.
+  mutable absl::Mutex lock_;     // Main lock.
   std::string dir_;
   std::string prefix_;
   std::list<std::shared_ptr<ListEntry>> write_list_
