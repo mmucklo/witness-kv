@@ -4,90 +4,116 @@
 #include <map>
 #include <memory>
 #include <string>
-#include "rocksdb/db.h"
 
+#include "absl/log/log.h"
 #include "kvs.grpc.pb.h"
+#include "rocksdb/db.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 
-using KeyValueStore::Kvs;
-using KeyValueStore::GetRequest;
-using KeyValueStore::GetResponse;
-using KeyValueStore::PutRequest;
-using KeyValueStore::PutResponse;
 using KeyValueStore::DeleteRequest;
 using KeyValueStore::DeleteResponse;
+using KeyValueStore::GetRequest;
+using KeyValueStore::GetResponse;
+using KeyValueStore::Kvs;
+using KeyValueStore::PutRequest;
+using KeyValueStore::PutResponse;
 
 std::map<std::string, std::string> globalMap {};
 
 class KvsServiceImpl final : public Kvs::Service
 {
-  public:
-   KvsServiceImpl( const std::string& db_path )
-   {
-     rocksdb::Options options;
-     options.create_if_missing = true;
-     rocksdb::Status status = rocksdb::DB::Open( options, db_path, &db_ );
-     if ( !status.ok() ) {
-       throw std::runtime_error( "Failed to open RocksDB: "
-                                 + status.ToString() );
-     }
-   }
+ public:
+  KvsServiceImpl( const std::string& db_path, bool isLeader )
+  {
+    isLeader_ = isLeader;
+    rocksdb::Options options;
+    options.create_if_missing = true;
+    rocksdb::Status status = rocksdb::DB::Open( options, db_path, &db_ );
+    if ( !status.ok() ) {
+      throw std::runtime_error( "Failed to open RocksDB: "
+                                + status.ToString() );
+    }
+  }
 
-   ~KvsServiceImpl() { delete db_; }
+  ~KvsServiceImpl() { delete db_; }
 
-   Status Get( ServerContext* context, const GetRequest* request,
-               GetResponse* response ) override
-   {
-     std::string value;
-     rocksdb::Status status
-         = db_->Get( rocksdb::ReadOptions(), request->key(), &value );
-     if ( status.ok() ) {
-       response->set_value( value );
-       return Status::OK;
-     } else {
-       return Status::CANCELLED;
-     }
-   }
+  Status Get( ServerContext* context, const GetRequest* request,
+              GetResponse* response ) override
+  {
+    if ( !IsLeader() ) {
+      std::string leader = GetLeader();
+      LOG( INFO ) << "Not a leader, forwarding leader info to client: "
+                  << leader << "\n";
+      return grpc::Status( grpc::StatusCode::NOT_FOUND, leader );
+    }
+    std::string value;
+    rocksdb::Status status
+        = db_->Get( rocksdb::ReadOptions(), request->key(), &value );
+    if ( status.ok() ) {
+      response->set_value( value );
+      return Status::OK;
+    } else {
+      return Status::CANCELLED;
+    }
+  }
 
-   Status Put( ServerContext* context, const PutRequest* request,
-               PutResponse* response ) override
-   {
-     rocksdb::Status status = db_->Put( rocksdb::WriteOptions(), request->key(),
-                                        request->value() );
-     if ( status.ok() ) {
-       response->set_status( "OK" );
-       return Status::OK;
-     } else {
-       return Status::CANCELLED;
-     }
-   }
+  Status Put( ServerContext* context, const PutRequest* request,
+              PutResponse* response ) override
+  {
+    if ( !IsLeader() ) {
+      std::string leader = GetLeader();
+      LOG( INFO ) << "Not a leader, forwarding leader info to client: "
+                  << leader << "\n";
+      return grpc::Status( grpc::StatusCode::NOT_FOUND, leader );
+    }
+    rocksdb::Status status
+        = db_->Put( rocksdb::WriteOptions(), request->key(), request->value() );
+    if ( status.ok() ) {
+      response->set_status( "OK" );
+      return Status::OK;
+    } else {
+      return Status::CANCELLED;
+    }
+  }
 
-   Status Delete( ServerContext* context, const DeleteRequest* request,
-                  DeleteResponse* response ) override
-   {
-     rocksdb::Status status
-         = db_->Delete( rocksdb::WriteOptions(), request->key() );
-     if ( status.ok() ) {
-       response->set_status( "OK" );
-       return Status::OK;
-     } else {
-       return Status::CANCELLED;
-     }
-   }
+  Status Delete( ServerContext* context, const DeleteRequest* request,
+                 DeleteResponse* response ) override
+  {
+    if ( !IsLeader() ) {
+      std::string leader = GetLeader();
+      LOG( INFO ) << "Not a leader, forwarding leader info to client: "
+                  << leader << "\n";
+      return grpc::Status( grpc::StatusCode::NOT_FOUND, leader );
+    }
+    rocksdb::Status status
+        = db_->Delete( rocksdb::WriteOptions(), request->key() );
+    if ( status.ok() ) {
+      response->set_status( "OK" );
+      return Status::OK;
+    } else {
+      return Status::CANCELLED;
+    }
+  }
+
+  bool IsLeader() { return isLeader_; }
+  std::string GetLeader() { return "localhost:50062"; }
 
  private:
   rocksdb::DB* db_;
+  bool isLeader_;
 };
 
-void RunServer( uint16_t port, const std::string& db_path)
+void RunServer( uint16_t port, const std::string& db_path,
+                bool isLeader = false )
 {
-  // FIXME: Hard-coded port for now.
-  std::string server_address = "0.0.0.0:50061";
-  KvsServiceImpl service( db_path );
+  std::string port_str = std::to_string( port );
+  std::string ip_address = "0.0.0.0";
+  std::string server_address = ip_address + ":" + port_str;
+  KvsServiceImpl service( db_path, isLeader );
 
   ServerBuilder builder;
   // Listen on the given address without any authentication mechanism.
@@ -107,7 +133,16 @@ void RunServer( uint16_t port, const std::string& db_path)
 
 int main( int argc, char** argv )
 {
-  std::string dirname = "/tmp/rocksdb";
-  RunServer( 50051, dirname );
-  return 0;
+  std::string db_path = "/tmp/rocksdb";
+  uint16_t server_port = 50061;
+  bool isLeader
+      = false;  // Just a WAR until we get Paxos integrated with Server
+
+  if ( argc > 2 ) {
+    server_port = std::stoi( argv[1] );
+    isLeader = std::stoi( argv[2] );
+    db_path = "/tmp/rocksdb" + std::to_string( server_port );
+  }
+
+  RunServer( server_port, db_path, isLeader );
 }
