@@ -183,8 +183,6 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       }
 
       peer_unchosen_idx[i] = accept_response.first_unchosen_index();
-      LOG(INFO) << "peer_unchosen_index: on node: " << i
-                << " is: " << accept_response.first_unchosen_index();
       if (nop_paxos_round) {
         continue;
       }
