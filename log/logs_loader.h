@@ -147,6 +147,23 @@ class LogsLoader {
   std::unique_ptr<std::vector<Log::Message>> msgs_;
 };
 
+/**
+ * SortingLogsLoader sorts all the files under a directory with a specific
+ * prefix according to the passed-in sort function, merging across files
+ * such that the output via iterator is a completely sorted set.
+ * 
+ * It essentially runs an external merge sort across all the files within a constrained
+ * memory limit that's controlled by a command-line flag.
+ * https://en.wikipedia.org/wiki/External_sorting
+ * 
+ * We still have an overall limit on the log file size (as defined by flag in log_writer.cc), so the external merge sort will still possibly produce multiple files, however these will be completed sorted and ordered by timestamp (in microseconds).
+ * 
+ * TODO(mmucklo): relax fsync a bit during the merge sort algorithm as we only need to
+ * fsync when the sorted file is completely written (since we already have a base durable copy under the prefix passed in).
+ * 
+ * TODO(mmucklo): cleanup merge-sort file fragments after merge sort is complete. Possibly rename all new sorted files such that the completed merge
+ * sort is the durable version so that there's only one copy afterwards.
+ */
 class SortingLogsLoader {
  public:
   SortingLogsLoader() = delete;
