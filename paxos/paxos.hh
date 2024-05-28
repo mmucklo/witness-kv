@@ -7,7 +7,7 @@
 #include "proposer.hh"
 #include "replicated_log.hh"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 class Paxos {
  private:
@@ -31,6 +31,5 @@ class Paxos {
   bool IsLeader() { return paxos_node_->IsLeader(); }
   bool IsWitness() { return paxos_node_->IsWitness(); }
 };
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
 #endif  // PAXOS_HH_

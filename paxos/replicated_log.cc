@@ -9,7 +9,7 @@ ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
 ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
           "Paxos log file prefix");
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 ReplicatedLog::ReplicatedLog(uint8_t node_id)
     : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
@@ -182,5 +182,4 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   }
   return current_entry.min_proposal_;
 }
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos

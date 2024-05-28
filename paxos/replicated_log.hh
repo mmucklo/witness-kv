@@ -4,7 +4,7 @@
 #include "common.hh"
 #include "log/log_writer.h"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 struct ReplicatedLogEntry {
   uint64_t idx_{};
@@ -60,5 +60,5 @@ class ReplicatedLog {
   }
 };
 
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
 #endif  // REPLICATED_LOG_H_

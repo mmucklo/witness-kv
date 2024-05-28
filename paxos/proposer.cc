@@ -8,13 +8,13 @@ using grpc::ServerBuilder;
 using grpc::ServerContext;
 using grpc::Status;
 
-using paxos::Proposer;
-using paxos::ProposeRequest;
+using paxos_rpc::Proposer;
+using paxos_rpc::ProposeRequest;
 
 ABSL_FLAG(absl::Duration, paxos_server_sleep, absl::Seconds(1),
           "Sleep time for paxos server");
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 class ProposerImpl final : public Proposer::Service {
  private:
@@ -115,7 +115,7 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
 
     // Perform phase 1 of the paxos operation i.e. find a proposal that will be
     // accepted by a quorum of acceptors.
-    paxos::PrepareRequest request;
+    paxos_rpc::PrepareRequest request;
     request.set_index(this->replicated_log_->GetFirstUnchosenIdx());
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
               << "] Attempting replication at index " << request.index();
@@ -126,7 +126,7 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
 
       uint64_t max_proposal_id = 0;
       for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
-        paxos::PrepareResponse response;
+        paxos_rpc::PrepareResponse response;
         grpc::Status status = this->paxos_node_->PrepareGrpc(
             static_cast<uint8_t>(i), request, &response);
         if (!status.ok()) {
@@ -158,16 +158,15 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       }
     } while (num_promises < majority_threshold_);
 
-    bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
-    done = nop_paxos_round;
+    const bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
 
     // Perform phase 2 of paxos operation i.e. try to get the value we
     // determined in phase 1 to be accepted by a quorum of acceptors.
-    paxos::AcceptRequest accept_request;
+    paxos_rpc::AcceptRequest accept_request;
     accept_request.set_proposal_number(request.proposal_number());
     accept_request.set_index(request.index());
     accept_request.set_value(value_for_accept_phase);
-    paxos::AcceptResponse accept_response;
+    paxos_rpc::AcceptResponse accept_response;
     uint32_t accept_majority_count = 0;
     std::vector<uint64_t> peer_unchosen_idx(this->paxos_node_->GetNumNodes());
 
@@ -221,10 +220,10 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       }
     }
 
-    if (done) {
+    if (done || nop_paxos_round) {
       this->paxos_node_->CommitOnPeerNodes(peer_unchosen_idx);
+      break;
     }
   }
 }
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos

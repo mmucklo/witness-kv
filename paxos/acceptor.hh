@@ -4,7 +4,7 @@
 #include "common.hh"
 #include "replicated_log.hh"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 class AcceptorService {
  private:
@@ -17,6 +17,5 @@ class AcceptorService {
                   std::shared_ptr<ReplicatedLog> rlog);
   ~AcceptorService();
 };
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
 #endif  // ACCEPTOR_HH_

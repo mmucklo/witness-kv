@@ -13,7 +13,7 @@
 #include "common.hh"
 #include "node.hh"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 class ProposerService {
  private:
@@ -28,5 +28,5 @@ class ProposerService {
   ~ProposerService();
 };
 
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
 #endif  // PROPOSER_HH_

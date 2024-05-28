@@ -1,6 +1,6 @@
 #include "paxos.hh"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 Paxos::Paxos(uint8_t node_id) {
   replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
@@ -32,11 +32,10 @@ void Paxos::Propose(const std::string& value) {
     LOG(WARNING)
         << "Replication not possible, majority of the nodes are not reachable.";
   } else {
-    paxos::ProposeRequest request;
+    paxos_rpc::ProposeRequest request;
     google::protobuf::Empty response;
     request.set_value(value);
     paxos_node_->SendProposeGrpc(request, &response);
   }
 }
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos

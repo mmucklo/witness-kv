@@ -7,7 +7,7 @@
 #include "paxos.pb.h"
 #include "replicated_log.hh"
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 struct Node {
   std::string ip_address_;
@@ -34,7 +34,7 @@ class PaxosNode {
 
   absl::Mutex node_mutex_;
 
-  std::vector<std::unique_ptr<paxos::Acceptor::Stub>> acceptor_stubs_
+  std::vector<std::unique_ptr<paxos_rpc::Acceptor::Stub>> acceptor_stubs_
       ABSL_GUARDED_BY(node_mutex_);
   size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(node_mutex_);
 
@@ -66,8 +66,8 @@ class PaxosNode {
   std::future<void> async_leader_catch_up_;
   std::atomic<bool> leader_caught_up_;
 
-  grpc::Status SendPingGrpc(uint8_t node_id, paxos::PingRequest request,
-                            paxos::PingResponse* response);
+  grpc::Status SendPingGrpc(uint8_t node_id, paxos_rpc::PingRequest request,
+                            paxos_rpc::PingResponse* response);
 
  public:
   PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog);
@@ -86,19 +86,18 @@ class PaxosNode {
   bool IsWitness() const;
   bool ClusterHasEnoughNodesUp();
 
-  grpc::Status PrepareGrpc(uint8_t node_id, paxos::PrepareRequest request,
-                           paxos::PrepareResponse* response);
-  grpc::Status AcceptGrpc(uint8_t node_id, paxos::AcceptRequest request,
-                          paxos::AcceptResponse* response);
-  grpc::Status CommitGrpc(uint8_t node_id, paxos::CommitRequest request,
-                          paxos::CommitResponse* response);
-  grpc::Status SendProposeGrpc(paxos::ProposeRequest request,
+  grpc::Status PrepareGrpc(uint8_t node_id, paxos_rpc::PrepareRequest request,
+                           paxos_rpc::PrepareResponse* response);
+  grpc::Status AcceptGrpc(uint8_t node_id, paxos_rpc::AcceptRequest request,
+                          paxos_rpc::AcceptResponse* response);
+  grpc::Status CommitGrpc(uint8_t node_id, paxos_rpc::CommitRequest request,
+                          paxos_rpc::CommitResponse* response);
+  grpc::Status SendProposeGrpc(paxos_rpc::ProposeRequest request,
                                google::protobuf::Empty* response);
 };
 
 // This helper function will parse the node config file specified
 // by flag `paxos_node_config_file`.
 std::vector<Node> ParseNodesConfig();
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
 #endif  // NODE_HH_

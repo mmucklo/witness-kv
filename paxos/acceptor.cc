@@ -7,17 +7,17 @@
 using grpc::ServerContext;
 using grpc::Status;
 
-using paxos::Acceptor;
-using paxos::AcceptRequest;
-using paxos::AcceptResponse;
-using paxos::CommitRequest;
-using paxos::CommitResponse;
-using paxos::PingRequest;
-using paxos::PingResponse;
-using paxos::PrepareRequest;
-using paxos::PrepareResponse;
+using paxos_rpc::Acceptor;
+using paxos_rpc::AcceptRequest;
+using paxos_rpc::AcceptResponse;
+using paxos_rpc::CommitRequest;
+using paxos_rpc::CommitResponse;
+using paxos_rpc::PingRequest;
+using paxos_rpc::PingResponse;
+using paxos_rpc::PrepareRequest;
+using paxos_rpc::PrepareResponse;
 
-namespace witnesskvs::paxoslibrary {
+namespace witnesskvs::paxos {
 
 class AcceptorImpl final : public Acceptor::Service {
  private:
@@ -135,5 +135,4 @@ AcceptorService::~AcceptorService() {
     service_thread_.join();
   }
 }
-
-}  // namespace witnesskvs::paxoslibrary
+}  // namespace witnesskvs::paxos
