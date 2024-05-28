@@ -37,6 +37,9 @@ class LogWriter {
   // Returns the list of filenames written to, including the ones rotated.
   std::vector<std::string> filenames() const;
 
+  void SetSkipFlush(bool skip_flush);
+  bool skip_flush() const;
+
  private:
   struct ListEntry {
     std::list<std::shared_ptr<ListEntry>>::iterator it;
@@ -62,6 +65,7 @@ class LogWriter {
   mutable absl::Mutex lock_;     // Main lock.
   std::string dir_;
   std::string prefix_;
+  bool skip_flush_ ABSL_GUARDED_BY(lock_);
   std::list<std::shared_ptr<ListEntry>> write_list_
       ABSL_GUARDED_BY(write_list_lock_);
   std::unique_ptr<FileWriter> file_writer_ ABSL_GUARDED_BY(lock_)

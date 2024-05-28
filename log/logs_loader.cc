@@ -289,6 +289,7 @@ std::vector<std::string> SortLogsFile(
   }
   std::sort(msgs.begin(), msgs.end(), sortfn);
   LogWriter log_writer(parent_path.string(), std::string(prefix_sorted));
+  log_writer.SetSkipFlush(true);
   for (const Log::Message& msg : msgs) {
     CHECK_OK(log_writer.Log(msg));
   }
@@ -312,6 +313,7 @@ std::vector<std::string> MergeSortedFiles(
     const std::function<bool(const Log::Message& a, const Log::Message& b)>&
         sortfn) {
   LogWriter log_writer{std::string(dir), std::string(output_prefix)};
+  log_writer.SetSkipFlush(true);
   struct LogMessageContainer {
     std::shared_ptr<LogsLoader> logs_loader;
     LogsLoader::iterator it;
