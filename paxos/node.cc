@@ -1,4 +1,5 @@
 #include "node.hh"
+#include "proposer.hh"
 
 // GRPC headers
 #include <grpc/grpc.h>
@@ -170,10 +171,9 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
 }
 
 void PaxosNode::ProposeNopAsync(void) {
-  paxos_rpc::ProposeRequest request;
-  google::protobuf::Empty response;
-  request.set_value("");
-  this->SendProposeGrpc(request, &response);
+  auto proposer = std::make_unique<Proposer>( this->GetNumNodes(), node_id_,
+                                          replicated_log_, shared_from_this());
+  proposer->Propose("");
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
             << "] Performed a Paxos No-op round";
   leader_caught_up_ = true;
@@ -244,8 +244,9 @@ std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
   return nodes_[node_id].GetAddressPortStr();
 }
 
-std::string PaxosNode::GetProposerServiceAddress(uint8_t node_id) const {
-  return nodes_[node_id].GetProposerServiceAddressPortStr(nodes_.size());
+std::string PaxosNode::GetProposerServiceAddress() {
+  absl::MutexLock l(&node_mutex_);
+  return nodes_[leader_node_id_].GetAddressPortStr();
 }
 
 bool PaxosNode::IsLeader() const { return nodes_[node_id_].IsLeader(); }
@@ -308,35 +309,6 @@ grpc::Status PaxosNode::SendPingGrpc(uint8_t node_id,
     return grpc::Status(grpc::StatusCode::UNAVAILABLE,
                         "Acceptor not available right now.");
   }
-}
-
-grpc::Status PaxosNode::SendProposeGrpc(paxos_rpc::ProposeRequest request,
-                                        google::protobuf::Empty* response) {
-  // TODO [V] : Move this stub creation back to the heartbeat thread as leader
-  // is updated. Moving it here to avoid dealock issues as the
-  // proposer_stub->Propose() will also need the node_mutex and these locks are
-  // not recursive.
-  std::unique_ptr<paxos_rpc::Proposer::Stub> proposer_stub;
-  {
-    absl::ReaderMutexLock rl(&node_mutex_);
-    if (UINT8_MAX != leader_node_id_) {
-      auto proposer_channel = grpc::CreateChannel(
-          nodes_[leader_node_id_].GetProposerServiceAddressPortStr(
-              nodes_.size()),
-          grpc::InsecureChannelCredentials());
-      proposer_stub = paxos_rpc::Proposer::NewStub(proposer_channel);
-    }
-  }
-
-  grpc::Status status;
-  grpc::ClientContext context;
-  if (proposer_stub) {
-    status = proposer_stub->Propose(&context, request, response);
-  } else {
-    status = grpc::Status(grpc::StatusCode::UNAVAILABLE,
-                          "Proposer not available right now.");
-  }
-  return status;
 }
 
 }  // namespace witnesskvs::paxos

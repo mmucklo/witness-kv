@@ -19,6 +19,13 @@ ABSL_DECLARE_FLAG(std::string, paxos_node_config_file);
 ABSL_DECLARE_FLAG(absl::Duration, paxos_node_heartbeat);
 ABSL_DECLARE_FLAG(bool, lower_node_witness);
 
+// Map of ip address to node id, only for testing purposes.
+std::map<std::string, uint8_t> ip_to_node_id = {
+    {"localhost:50051", 0}, {"localhost:50052", 1}, {"localhost:50053", 2},
+    {"localhost:50054", 3}, {"localhost:50055", 4}, {"localhost:50056", 5},
+    {"localhost:50057", 6}, {"localhost:50058", 7}, {"localhost:50059", 8},
+    {"localhost:50060", 9}};
+
 // Simple test to sanity check file parsing logic.
 TEST(FileParseTest, ConfigFileParseTest) {
   std::vector<std::string> addrs = {"0.0.0.0", "0.1.2.3", "8.7.6.5",
@@ -112,10 +119,19 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
   absl::SleepFor(sleep_timer);
 
   const size_t num_proposals = 10;
+  grpc::Status status;
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(i));
+    nodes[0]->Propose(std::to_string(i), status, false);
+    ASSERT_EQ(status.error_code(), grpc::StatusCode::NOT_FOUND);
   }
 
+  uint8_t leader_id = ip_to_node_id[status.error_message()];
+  for (size_t i = 0; i < num_proposals; i++) {
+    LOG(INFO) << "Leader Address: " << status.error_message();
+    nodes[leader_id]->Propose(std::to_string(i), status, false);
+    ASSERT_EQ(status.error_code(), grpc::StatusCode::OK);
+  }
+  
   VerifyLogIntegrity(nodes, num_proposals);
 }
 
@@ -123,6 +139,7 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
+  grpc::Status status;
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
@@ -131,9 +148,15 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[num_nodes - 1]->Propose(std::to_string(i));
+    nodes[num_nodes - 1]->Propose(std::to_string(i), status, false);
   }
 
+  uint8_t leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(i), status, false);
+    }
+  }
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
   nodes[0] = std::make_unique<witnesskvs::paxos::Paxos>(0);
@@ -155,7 +178,14 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 
   // Make node 0 propose some values and verify that all nodes see the same log.
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(num_proposals + i));
+    nodes[0]->Propose(std::to_string(num_proposals + i), status, false);
+  }
+
+  leader_id = ip_to_node_id[status.error_message()];
+  if(status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(num_proposals + i), status, false);
+    }
   }
 
   VerifyLogIntegrity(nodes, 2 * num_proposals);
@@ -165,6 +195,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
+  grpc::Status status;
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
@@ -173,7 +204,14 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[num_nodes - 1]->Propose(std::to_string(i));
+    nodes[num_nodes - 1]->Propose(std::to_string(i), status, false);
+  }
+
+  uint8_t leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(i), status, false);
+    }
   }
 
   // Mimic node 0 going away and coming back up.
@@ -182,7 +220,14 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   absl::SleepFor(sleep_timer);
 
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[num_nodes - 1]->Propose(std::to_string(num_proposals + i));
+    nodes[num_nodes - 1]->Propose(std::to_string(num_proposals + i), status, false);
+  }
+
+  leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(num_proposals + i), status, false);
+    }
   }
 
   VerifyLogIntegrity(nodes, 2 * num_proposals);
@@ -192,6 +237,7 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
+  grpc::Status status;
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
@@ -202,7 +248,15 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
 
   // First batch of proposals, all nodes are up.
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(i));
+    nodes[0]->Propose(std::to_string(i), status, false);
+    ASSERT_EQ(status.error_code(), grpc::StatusCode::NOT_FOUND);
+  }
+
+  uint8_t leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(i), status, false);
+    }
   }
 
   // Mimic node going away and some operations happening while node is down and
@@ -212,16 +266,31 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
 
   // Second batch of proposals, one node is not up.
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(num_proposals + i));
+    nodes[0]->Propose(std::to_string(num_proposals + i), status, false);
+    ASSERT_EQ(status.error_code(), grpc::StatusCode::NOT_FOUND);
   }
 
-  nodes[num_nodes - 1] =
-      std::make_unique<witnesskvs::paxos::Paxos>((num_nodes - 1));
+  leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(num_proposals + i), status, false);
+    }
+  }
+
+  nodes[num_nodes - 1] = std::make_unique<witnesskvs::paxos::Paxos>((num_nodes - 1));
   absl::SleepFor(sleep_timer);
 
   // Third batch of proposals, all nodes are up again.
   for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(2 * num_proposals + i));
+    nodes[0]->Propose(std::to_string(2 * num_proposals + i), status, false);
+    ASSERT_EQ(status.error_code(), grpc::StatusCode::NOT_FOUND);
+  }
+
+  leader_id = ip_to_node_id[status.error_message()];
+  if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    for (size_t i = 0; i < num_proposals; i++) {
+      nodes[leader_id]->Propose(std::to_string(2 * num_proposals + i), status, false);
+    }
   }
 
   // Log must reflect the operations from all three batch of proposals.

@@ -14,7 +14,8 @@ class Paxos {
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
   std::unique_ptr<AcceptorService> acceptor_;
-  std::unique_ptr<ProposerService> proposer_;
+  std::unique_ptr<Proposer> proposer_;
+  uint8_t node_id_;
 
  public:
   Paxos(uint8_t node_id);
@@ -24,7 +25,7 @@ class Paxos {
   // Paxos nodes. If value is empty this will trigger a NOP paxos round as
   // described in section 3 in
   // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
-  void Propose(const std::string& value);
+  void Propose(const std::string& value, grpc::Status& status, bool is_Read );
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
