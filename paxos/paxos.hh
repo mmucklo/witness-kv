@@ -28,8 +28,8 @@ class Paxos {
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
-  bool IsLeader(uint8_t node_id) { return paxos_node_->IsLeader(node_id); }
-  bool IsWitness(uint8_t node_id) { return paxos_node_->IsWitness(node_id); }
+  bool IsLeader() { return paxos_node_->IsLeader(); }
+  bool IsWitness() { return paxos_node_->IsWitness(); }
 };
 
 }  // namespace witnesskvs::paxoslibrary

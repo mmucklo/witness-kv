@@ -50,6 +50,15 @@ ProposerImpl::ProposerImpl(uint8_t node_id,
 Status ProposerImpl::Propose(ServerContext* context,
                              const ProposeRequest* request,
                              google::protobuf::Empty* response) {
+  if (!paxos_node_->IsLeaderCaughtUp()) {
+    if (!request->value().empty()) {
+      LOG(WARNING)
+          << "Leader is not caught up yet, it can only serve NOP request";
+      return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+                          "(Leader) Proposer not available right now.");
+    }
+  }
+
   ProposeLocal(request->value());
   return Status::OK;
 }
@@ -152,9 +161,6 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
     bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
     done = nop_paxos_round;
 
-    LOG(INFO) << "nop_paxos_round: " << nop_paxos_round;
-    LOG(INFO) << "is_nop: " << is_nop;
-
     // Perform phase 2 of paxos operation i.e. try to get the value we
     // determined in phase 1 to be accepted by a quorum of acceptors.
     paxos::AcceptRequest accept_request;
@@ -177,6 +183,8 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
       }
 
       peer_unchosen_idx[i] = accept_response.first_unchosen_index();
+      LOG(INFO) << "peer_unchosen_index: on node: " << i
+                << " is: " << accept_response.first_unchosen_index();
       if (nop_paxos_round) {
         continue;
       }
@@ -216,7 +224,7 @@ void ProposerImpl::ProposeLocal(const std::string& value) {
     }
 
     if (done) {
-      this->paxos_node_->CommitOnPeerNodes(peer_unchosen_idx, nop_paxos_round);
+      this->paxos_node_->CommitOnPeerNodes(peer_unchosen_idx);
     }
   }
 }

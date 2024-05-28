@@ -10,9 +10,9 @@ Paxos::Paxos(uint8_t node_id) {
       paxos_node_->GetNodeAddress(node_id), node_id, replicated_log_);
   CHECK_NE(acceptor_, nullptr);
 
-  proposer_ =
-      std::make_unique<ProposerService>(paxos_node_->GetLeaderAddress(node_id),
-                                        node_id, replicated_log_, paxos_node_);
+  proposer_ = std::make_unique<ProposerService>(
+      paxos_node_->GetProposerServiceAddress(node_id), node_id, replicated_log_,
+      paxos_node_);
   CHECK_NE(proposer_, nullptr);
 
   paxos_node_->MakeReady();

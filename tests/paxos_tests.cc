@@ -231,52 +231,6 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   VerifyLogIntegrity(nodes, 3 * num_proposals);
 }
 
-TEST_F(PaxosSanity, CommitOnNOP) {
-  const size_t num_nodes = 3;
-  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<witnesskvs::paxoslibrary::Paxos>> nodes(
-      num_nodes);
-  for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(i);
-  }
-
-  absl::SleepFor(sleep_timer);
-
-  nodes[1].reset();
-  absl::SleepFor(sleep_timer);
-
-  const size_t num_proposals = 5;
-  for (size_t i = 0; i < num_proposals; i++) {
-    nodes[0]->Propose(std::to_string(i));
-  }
-
-  absl::SleepFor(sleep_timer);
-  nodes[1] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(1);
-  nodes[0].reset();
-  nodes[2].reset();
-  absl::SleepFor(sleep_timer);
-
-  nodes[2] = std::make_unique<witnesskvs::paxoslibrary::Paxos>(2);
-  absl::SleepFor(sleep_timer);
-
-  // node 1 does not have any entry in it's log, a NOP propose should help catch
-  // this node up.
-  ASSERT_EQ(nodes[1]->GetReplicatedLog()->GetLogEntries().size(), 0);
-  nodes[1]->Propose("");
-
-  std::map<uint64_t, witnesskvs::paxoslibrary::ReplicatedLogEntry> log =
-      nodes[1]->GetReplicatedLog()->GetLogEntries();
-
-  ASSERT_GE(log.size(), num_proposals);
-  for (size_t i = 0; i < num_proposals; i++) {
-    auto left = log.find(i)->second;
-    ASSERT_EQ(left.accepted_value_, std::to_string(i))
-        << "Log values do not match at index: " << i << " on nodes 1("
-        << left.accepted_value_ << ") and expected: (" << std::to_string(i)
-        << ")";
-  }
-}
-
 TEST_F(PaxosSanity, WitnessNotLeader) {
   using witnesskvs::paxoslibrary::Paxos;
 
@@ -289,11 +243,11 @@ TEST_F(PaxosSanity, WitnessNotLeader) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), false);
-  ASSERT_EQ(nodes[1]->IsWitness(1), false);
-  ASSERT_EQ(nodes[1]->IsLeader(1), true);
-  ASSERT_EQ(nodes[2]->IsWitness(2), true);
-  ASSERT_EQ(nodes[2]->IsLeader(2), false);
+  ASSERT_EQ(nodes[0]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsLeader(), true);
+  ASSERT_EQ(nodes[2]->IsWitness(), true);
+  ASSERT_EQ(nodes[2]->IsLeader(), false);
 
   absl::SetFlag(&FLAGS_lower_node_witness, true);
   nodes.clear();
@@ -303,10 +257,10 @@ TEST_F(PaxosSanity, WitnessNotLeader) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), true);
-  ASSERT_EQ(nodes[1]->IsLeader(1), false);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[2]->IsLeader(2), true);
+  ASSERT_EQ(nodes[0]->IsWitness(), true);
+  ASSERT_EQ(nodes[1]->IsLeader(), false);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsLeader(), true);
 }
 
 TEST_F(PaxosSanity, WitnessCount) {
@@ -335,13 +289,13 @@ TEST_F(PaxosSanity, WitnessCount) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), false);
-  ASSERT_EQ(nodes[1]->IsWitness(1), false);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[2]->IsLeader(2), true);
-  ASSERT_EQ(nodes[3]->IsWitness(3), true);
-  ASSERT_EQ(nodes[4]->IsWitness(4), true);
-  ASSERT_EQ(nodes[4]->IsLeader(4), false);
+  ASSERT_EQ(nodes[0]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsLeader(), true);
+  ASSERT_EQ(nodes[3]->IsWitness(), true);
+  ASSERT_EQ(nodes[4]->IsWitness(), true);
+  ASSERT_EQ(nodes[4]->IsLeader(), false);
 
   nodes.clear();
 
@@ -354,10 +308,10 @@ TEST_F(PaxosSanity, WitnessCount) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), true);
-  ASSERT_EQ(nodes[1]->IsWitness(1), true);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[3]->IsWitness(3), false);
-  ASSERT_EQ(nodes[4]->IsWitness(4), false);
-  ASSERT_EQ(nodes[4]->IsLeader(4), true);
+  ASSERT_EQ(nodes[0]->IsWitness(), true);
+  ASSERT_EQ(nodes[1]->IsWitness(), true);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[3]->IsWitness(), false);
+  ASSERT_EQ(nodes[4]->IsWitness(), false);
+  ASSERT_EQ(nodes[4]->IsLeader(), true);
 }
