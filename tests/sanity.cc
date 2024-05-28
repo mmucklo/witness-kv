@@ -27,7 +27,9 @@ struct SanityTests : public ::testing::Test
     if ( server_pid == 0 ) {
       // Child process: Run the server executable
       char serverName[] = "build/server/kvs_server";
-      char* server_args[] = { serverName, nullptr };
+      char arg1[] = "50062";
+      char arg2[] = "1";
+      char* server_args[] = { serverName, arg1, arg2, nullptr };
       ASSERT_NE( execvp( server_args[0], server_args ), -1 );
     }
 
