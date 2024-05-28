@@ -47,7 +47,7 @@ struct SanityTests : public ::testing::Test
 
 TEST_F( SanityTests, BasicSanityTest )
 {
-  auto channel = grpc::CreateChannel( "0.0.0.0:50061",
+  auto channel = grpc::CreateChannel( "0.0.0.0:50062",
                                       grpc::InsecureChannelCredentials() );
   std::unique_ptr<KeyValueStore::Kvs::Stub> stub
       = KeyValueStore::Kvs::NewStub( channel );

@@ -13,5 +13,6 @@ include_directories(${PROJECT_SOURCE_DIR}/paxos)
 add_executable(client ${SOURCES})
 target_link_libraries(client
     PRIVATE
+    kvsproto
     paxos
 )
