@@ -21,11 +21,13 @@
  *
  * Modifications copyright 2020 Igor Nazarenko.
  */
+// Modified by mmucklo 2024/05/28
 #include "protobuf_matchers.h"
 
 #include <algorithm>
 #include <regex>
 
+#include "absl/strings/string_view.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock-more-matchers.h"
 #include "google/protobuf/descriptor.h"
@@ -44,13 +46,15 @@ class StringErrorCollector : public google::protobuf::io::ErrorCollector {
   explicit StringErrorCollector(std::string* error_text)
       : error_text_(error_text) {}
 
-  void AddError(int line, int column, const std::string& message) override {
+  virtual void RecordError(int line, google::protobuf::io::ColumnNumber column,
+                           absl::string_view message) override {
     std::ostringstream stream;
     stream << line << '(' << column << "): " << message << std::endl;
     *error_text_ += stream.str();
   }
 
-  void AddWarning(int line, int column, const std::string& message) override {
+  virtual void RecordWarning(int line, int column,
+                             absl::string_view message) override {
     std::ostringstream stream;
     stream << line << '(' << column << "): " << message << std::endl;
     *error_text_ += stream.str();
