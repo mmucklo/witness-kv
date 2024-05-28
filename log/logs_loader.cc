@@ -1,6 +1,9 @@
 #include "logs_loader.h"
 
+#include <algorithm>
+#include <cerrno>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <list>
 #include <set>
@@ -265,9 +268,12 @@ void LogsLoader::iterator::next() {
 // the log writers flags have been changed (as far as the max space per log
 // file) in between the time the log file was output and the time this sort
 // done.
-void SortLogsFile(std::filesystem::path path, absl::string_view prefix_sorted,
-                  const std::function<bool(const Log::Message& a,
-                                           const Log::Message& b)>& sortfn) {
+//
+// Returns the list of files written to.
+std::vector<std::string> SortLogsFile(
+    std::filesystem::path path, absl::string_view prefix_sorted,
+    const std::function<bool(const Log::Message& a, const Log::Message& b)>&
+        sortfn) {
   CHECK(path.has_parent_path());
   std::filesystem::path parent_path = path.parent_path();
 
@@ -282,13 +288,25 @@ void SortLogsFile(std::filesystem::path path, absl::string_view prefix_sorted,
     }
   }
   std::sort(msgs.begin(), msgs.end(), sortfn);
-  LogWriter writer(parent_path.string(), std::string(prefix_sorted));
+  LogWriter log_writer(parent_path.string(), std::string(prefix_sorted));
   for (const Log::Message& msg : msgs) {
-    writer.Log(msg);
+    CHECK_OK(log_writer.Log(msg));
+  }
+  return log_writer.filenames();
+}
+
+void CleanupFiles(const std::vector<std::string>& files) {
+  for (const auto& filename : files) {
+    if (!std::filesystem::remove(std::filesystem::path(filename))) {
+      LOG(FATAL) << absl::StrCat("Can't cleanup: ", filename, " ",
+                                 std::strerror(errno));
+    }
   }
 }
 
-void MergeSortedFiles(
+// Merges the list of input_prefixes into output_prefix in directory dir.
+// Returns a list of filenames outputted into.
+std::vector<std::string> MergeSortedFiles(
     absl::string_view dir, const std::vector<std::string>& input_prefixes,
     absl::string_view output_prefix,
     const std::function<bool(const Log::Message& a, const Log::Message& b)>&
@@ -332,6 +350,7 @@ void MergeSortedFiles(
       ordered_messages.insert(std::move(container));
     }
   }
+  return log_writer.filenames();
 }
 SortingLogsLoader::SortingLogsLoader(
     absl::string_view dir, absl::string_view prefix,
@@ -339,11 +358,36 @@ SortingLogsLoader::SortingLogsLoader(
   Init(dir, prefix, std::move(sortfn));
 }
 
+void CleanupDir(absl::string_view dir, absl::string_view prefix) {
+  absl::StatusOr<std::vector<std::filesystem::path>> entries =
+      ReadDir(dir, prefix);
+  CHECK_OK(entries);
+  if (entries.value().size() > 0) {
+    std::vector<std::string> files;
+    std::transform(
+        entries.value().cbegin(), entries.value().cend(), files.begin(),
+        [](const std::filesystem::path& path) { return path.string(); });
+    CleanupFiles(files);
+  }
+}
+
+// Sorting the files will cause some temporary files to be created.
+// Though we delete intermediary files, we will still end up leaving some
+// temporary files around unless we have an atomic rename function that touches
+// multiple files. While this is possible, the easier solution might be to
+// delete on destruction of the SortingLogsLoader, since then we're sure that
+// they will no longer be iterated over. With intermediary logs cleanup, the
+// worst case space blowup should be O(2n).
 void SortingLogsLoader::Init(
     absl::string_view dir, absl::string_view prefix,
     std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn) {
   CheckDir(dir);
   CheckPrefix(prefix);
+  const std::string prefix_sorted = absl::StrCat(prefix, "_sorted");
+  const std::string prefix_merge = absl::StrCat(prefix, "_merge_sorted");
+  CleanupDir(dir, prefix_sorted);
+  CleanupDir(dir, prefix_merge);
+
   absl::StatusOr<std::vector<std::filesystem::path>> entries =
       ReadDir(dir, prefix);
   CHECK_OK(entries) << "Bad result reading the directory: "
@@ -356,19 +400,27 @@ void SortingLogsLoader::Init(
   }
 
   // Step 1, sort all the files.
-  std::vector<std::string> sorted_prefixes;
+  std::vector<std::string>
+      sorted_prefixes;  // This will be a list of all the file prefixes that has
+                        // been sorted.
+  std::vector<std::string>
+      cleanup_files;  // This will be an ongoing list of temporary intermediate
+                      // files to cleanup.
   {
     uint64_t sort_idx = 0;
     for (auto& path : files) {
-      std::string prefix_sorted = absl::StrCat(prefix, "_sorted", sort_idx);
-      sorted_prefixes.push_back(prefix_sorted);
-      SortLogsFile(path, prefix_sorted, sortfn);
+      std::string prefix_sorted_idx = absl::StrCat(prefix_sorted, sort_idx);
+      sorted_prefixes.push_back(prefix_sorted_idx);
+      std::vector<std::string> sorted_files =
+          SortLogsFile(path, prefix_sorted_idx, sortfn);
       sort_idx++;
+      for (const auto& file : sorted_files) {
+        cleanup_files.push_back(file);
+      }
     }
   }
 
   // Step 2, do the merge algorithm.
-  const std::string prefix_merge = absl::StrCat(prefix, "merge_sorted");
   const uint64_t max_files =
       std::ceil(static_cast<double>(
                     absl::GetFlag(FLAGS_logs_loader_max_memory_for_sorting)) /
@@ -379,7 +431,7 @@ void SortingLogsLoader::Init(
     merge_round++;
     std::list<std::vector<std::string>> merge_lists;
     std::vector<std::string> cur_paths;
-    for (uint64_t i = 0; i < sorted_prefixes.size(); i++) {
+    for (size_t i = 0; i < sorted_prefixes.size(); i++) {
       if ((i + 1) % max_files == 0) {
         merge_lists.push_back(cur_paths);
         cur_paths.clear();
@@ -391,28 +443,49 @@ void SortingLogsLoader::Init(
     sorted_prefixes.clear();
     CHECK_GT(merge_lists.size(), 0);
 
+    // Final merge.
     if (merge_lists.size() == 1) {
       cur_paths = merge_lists.front();
       merge_lists.pop_front();
       CHECK_GT(cur_paths.size(), 0);
       CHECK_EQ(merge_lists.size(), 0);
-      MergeSortedFiles(dir, cur_paths, prefix_merge, sortfn);
+      temp_files_ = MergeSortedFiles(dir, cur_paths, prefix_merge, sortfn);
       break;
     }
 
+    // Intermediary merge.
     uint64_t group = 0;
     for (auto& merge_list : merge_lists) {
       ++group;
-      std::string prefix_merge =
-          absl::StrCat(prefix_merge, "round_", merge_round, "_group_", group);
+      std::string prefix_merge_round =
+          absl::StrCat(prefix_merge, "_round_", merge_round, "_group_", group);
       cur_paths = merge_lists.front();
       merge_lists.pop_front();
       CHECK_GT(cur_paths.size(), 0);
       CHECK_EQ(merge_lists.size(), 0);
-      MergeSortedFiles(dir, cur_paths, prefix_merge, sortfn);
-      sorted_prefixes.push_back(prefix_merge);
+      std::vector<std::string> merge_files =
+          MergeSortedFiles(dir, cur_paths, prefix_merge_round, sortfn);
+      sorted_prefixes.push_back(prefix_merge_round);
+
+      // Can get rid of intermediate files now.
+      CleanupFiles(cleanup_files);
+      cleanup_files.clear();
+      for (const auto& file : merge_files) {
+        cleanup_files.push_back(file);
+      }
     }
-    // TODO(mmucklo): clean intermediary files.
+  }
+
+  if (cleanup_files.size() > 0) {
+    CleanupFiles(cleanup_files);
+    cleanup_files.clear();
+  }
+
+  for (const auto& filename : cleanup_files) {
+    if (!std::filesystem::remove(std::filesystem::path(filename))) {
+      LOG(FATAL) << absl::StrCat("Can't cleanup: ", filename, " ",
+                                 std::strerror(errno));
+    }
   }
   logs_loader_ = std::make_unique<LogsLoader>(dir, prefix_merge);
   prefix_merge_ = prefix_merge;
@@ -440,6 +513,13 @@ void SortingLogsLoader::iterator::next() {
   }
   cur = std::make_unique<Log::Message>(std::move((*(*llit))));
   counter++;
+}
+
+SortingLogsLoader::~SortingLogsLoader() {
+  // These were the sorted and merged files that we temporarily created
+  // during recovery. Once we're done iterating through them and this class is
+  // destructed, it's safe to delete them.
+  CleanupFiles(temp_files_);
 }
 
 }  // namespace witnesskvs::log

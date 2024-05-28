@@ -33,6 +33,8 @@ class LogWriter {
 
   // Returns the current filename in use.
   std::string filename() const ABSL_LOCKS_EXCLUDED(lock_);
+
+  // Returns the list of filenames written to, including the ones rotated.
   std::vector<std::string> filenames() const;
 
  private:
