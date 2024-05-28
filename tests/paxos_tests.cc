@@ -36,7 +36,8 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  auto nodes = ParseNodesConfig();
+  std::vector<witnesskvs::paxos::Node> nodes =
+      witnesskvs::paxos::ParseNodesConfig();
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {
@@ -49,17 +50,22 @@ TEST(FileParseTest, ConfigFileParseTest) {
 }
 
 // Helper function to check replicated log on all nodes.
-void VerifyLogIntegrity(const std::vector<std::unique_ptr<Paxos>> &nodes,
-                        size_t total_proposals) {
-  std::vector<std::map<uint64_t, ReplicatedLogEntry>> logs(nodes.size());
+void VerifyLogIntegrity(
+    const std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> &nodes,
+    size_t total_proposals) {
+  std::vector<std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry>> logs(
+      nodes.size());
   for (size_t i = 0; i < nodes.size(); i++) {
-    logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
-    ASSERT_EQ(logs[i].size(), total_proposals);
+    if (nodes[i]) {
+      logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+      ASSERT_EQ(logs[i].size(), total_proposals);
+    }
   }
 
   // Ensure all the nodes see the same value in their log positions.
   for (size_t i = 0; i < total_proposals; i++) {
     for (size_t n = 1; n < nodes.size() - 1; n++) {
+      if (!nodes[i]) continue;
       auto left = logs[0].find(i)->second;
       auto right = logs[n].find(i)->second;
       ASSERT_EQ(left.accepted_value_, right.accepted_value_)
@@ -98,9 +104,9 @@ struct PaxosSanity : public ::testing::Test {
 TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -116,9 +122,9 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
 TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -130,11 +136,11 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
-  nodes[0] = std::make_unique<Paxos>(0);
+  nodes[0] = std::make_unique<witnesskvs::paxos::Paxos>(0);
   absl::SleepFor(sleep_timer);
 
   // After node 0 comes back up it should have all the committed entires intact.
-  std::map<uint64_t, ReplicatedLogEntry> log =
+  std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry> log =
       nodes[0]->GetReplicatedLog()->GetLogEntries();
   ASSERT_EQ(log.size(), num_proposals);
 
@@ -158,9 +164,9 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
 TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -172,7 +178,7 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
-  nodes[0] = std::make_unique<Paxos>(0);
+  nodes[0] = std::make_unique<witnesskvs::paxos::Paxos>(0);
   absl::SleepFor(sleep_timer);
 
   for (size_t i = 0; i < num_proposals; i++) {
@@ -185,9 +191,9 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
 TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
-  std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
+  std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
   for (size_t i = 0; i < num_nodes; i++) {
-    nodes[i] = std::make_unique<Paxos>(i);
+    nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
   }
 
   absl::SleepFor(sleep_timer);
@@ -209,7 +215,8 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
     nodes[0]->Propose(std::to_string(num_proposals + i));
   }
 
-  nodes[num_nodes - 1] = std::make_unique<Paxos>((num_nodes - 1));
+  nodes[num_nodes - 1] =
+      std::make_unique<witnesskvs::paxos::Paxos>((num_nodes - 1));
   absl::SleepFor(sleep_timer);
 
   // Third batch of proposals, all nodes are up again.
@@ -222,6 +229,8 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
 }
 
 TEST_F(PaxosSanity, WitnessNotLeader) {
+  using witnesskvs::paxos::Paxos;
+
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -231,33 +240,35 @@ TEST_F(PaxosSanity, WitnessNotLeader) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), false);
-  ASSERT_EQ(nodes[1]->IsWitness(1), false);
-  ASSERT_EQ(nodes[1]->IsLeader(1),  true);
-  ASSERT_EQ(nodes[2]->IsWitness(2), true);
-  ASSERT_EQ(nodes[2]->IsLeader(2),  false);
-  
+  ASSERT_EQ(nodes[0]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsLeader(), true);
+  ASSERT_EQ(nodes[2]->IsWitness(), true);
+  ASSERT_EQ(nodes[2]->IsLeader(), false);
+
   absl::SetFlag(&FLAGS_lower_node_witness, true);
   nodes.clear();
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
-  
+
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), true);
-  ASSERT_EQ(nodes[1]->IsLeader(1),  false);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[2]->IsLeader(2),  true);
-
+  ASSERT_EQ(nodes[0]->IsWitness(), true);
+  ASSERT_EQ(nodes[1]->IsLeader(), false);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsLeader(), true);
 }
 
 TEST_F(PaxosSanity, WitnessCount) {
+  using witnesskvs::paxos::Paxos;
+
   std::string addr = "localhost";
-  std::vector<std::string> ports = {"50051", "50052", "50053", "50054", "50055"};
+  std::vector<std::string> ports = {"50051", "50052", "50053", "50054",
+                                    "50055"};
 
   char filename[] = "/tmp/nodes_config_5nodes";
-  absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
+  absl::SetFlag(&FLAGS_paxos_node_config_file, filename);
   std::ofstream temp_file(filename);
   ASSERT_TRUE(temp_file.is_open()) << "Failed to create temporary file\n";
 
@@ -265,7 +276,7 @@ TEST_F(PaxosSanity, WitnessCount) {
     temp_file << addr << ":" << ports[i] << "\n";
   }
   temp_file << std::endl;
-  absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
+  // absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
   const size_t num_nodes = 5;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -275,29 +286,32 @@ TEST_F(PaxosSanity, WitnessCount) {
 
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), false);
-  ASSERT_EQ(nodes[1]->IsWitness(1), false);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[2]->IsLeader(2),  true);
-  ASSERT_EQ(nodes[3]->IsWitness(3), true);
-  ASSERT_EQ(nodes[4]->IsWitness(4), true);
-  ASSERT_EQ(nodes[4]->IsLeader(4),  false);
-  
+  ASSERT_EQ(nodes[0]->IsWitness(), false);
+  ASSERT_EQ(nodes[1]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[2]->IsLeader(), true);
+  ASSERT_EQ(nodes[3]->IsWitness(), true);
+  ASSERT_EQ(nodes[4]->IsWitness(), true);
+  ASSERT_EQ(nodes[4]->IsLeader(), false);
+
   nodes.clear();
-  
+
   absl::SleepFor(sleep_timer);
-  
+
   absl::SetFlag(&FLAGS_lower_node_witness, true);
   for (size_t i = 0; i < num_nodes; i++) {
     nodes[i] = std::make_unique<Paxos>(i);
   }
-  
+
   absl::SleepFor(sleep_timer);
 
-  ASSERT_EQ(nodes[0]->IsWitness(0), true);
-  ASSERT_EQ(nodes[1]->IsWitness(1), true);
-  ASSERT_EQ(nodes[2]->IsWitness(2), false);
-  ASSERT_EQ(nodes[3]->IsWitness(3), false);
-  ASSERT_EQ(nodes[4]->IsWitness(4), false);
-  ASSERT_EQ(nodes[4]->IsLeader(4),  true);
+  ASSERT_EQ(nodes[0]->IsWitness(), true);
+  ASSERT_EQ(nodes[1]->IsWitness(), true);
+  ASSERT_EQ(nodes[2]->IsWitness(), false);
+  ASSERT_EQ(nodes[3]->IsWitness(), false);
+  ASSERT_EQ(nodes[4]->IsWitness(), false);
+  ASSERT_EQ(nodes[4]->IsLeader(), true);
+
+  temp_file.close();
+  ASSERT_EQ(remove(filename), 0);
 }

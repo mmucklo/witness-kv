@@ -7,15 +7,17 @@
 using grpc::ServerContext;
 using grpc::Status;
 
-using paxos::Acceptor;
-using paxos::AcceptRequest;
-using paxos::AcceptResponse;
-using paxos::CommitRequest;
-using paxos::CommitResponse;
-using paxos::PingRequest;
-using paxos::PingResponse;
-using paxos::PrepareRequest;
-using paxos::PrepareResponse;
+using paxos_rpc::Acceptor;
+using paxos_rpc::AcceptRequest;
+using paxos_rpc::AcceptResponse;
+using paxos_rpc::CommitRequest;
+using paxos_rpc::CommitResponse;
+using paxos_rpc::PingRequest;
+using paxos_rpc::PingResponse;
+using paxos_rpc::PrepareRequest;
+using paxos_rpc::PrepareResponse;
+
+namespace witnesskvs::paxos {
 
 class AcceptorImpl final : public Acceptor::Service {
  private:
@@ -66,14 +68,16 @@ Status AcceptorImpl::Prepare(ServerContext* context,
 Status AcceptorImpl::Accept(ServerContext* context,
                             const AcceptRequest* request,
                             AcceptResponse* response) {
-  ReplicatedLogEntry entry = {};
-  entry.idx_ = request->index();
-  entry.min_proposal_ = request->proposal_number();
-  entry.accepted_proposal_ = request->proposal_number();
-  entry.accepted_value_ = request->value();
-  entry.is_chosen_ = false;
+  if (!request->value().empty()) {
+    ReplicatedLogEntry entry = {};
+    entry.idx_ = request->index();
+    entry.min_proposal_ = request->proposal_number();
+    entry.accepted_proposal_ = request->proposal_number();
+    entry.accepted_value_ = request->value();
+    entry.is_chosen_ = false;
 
-  response->set_min_proposal(this->replicated_log_->UpdateLogEntry(entry));
+    response->set_min_proposal(this->replicated_log_->UpdateLogEntry(entry));
+  }
   response->set_first_unchosen_index(
       this->replicated_log_->GetFirstUnchosenIdx());
   return Status::OK;
@@ -131,3 +135,4 @@ AcceptorService::~AcceptorService() {
     service_thread_.join();
   }
 }
+}  // namespace witnesskvs::paxos

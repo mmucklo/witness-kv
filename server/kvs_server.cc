@@ -30,6 +30,7 @@ class KvsServiceImpl final : public Kvs::Service
   KvsServiceImpl( const std::string& db_path, bool isLeader )
   {
     isLeader_ = isLeader;
+    db_path_ = db_path;
     rocksdb::Options options;
     options.create_if_missing = true;
     rocksdb::Status status = rocksdb::DB::Open( options, db_path, &db_ );
@@ -39,7 +40,15 @@ class KvsServiceImpl final : public Kvs::Service
     }
   }
 
-  ~KvsServiceImpl() { delete db_; }
+  ~KvsServiceImpl() 
+  { 
+    delete db_;
+    rocksdb::Status status = rocksdb::DestroyDB(db_path_, rocksdb::Options());
+    if (!status.ok())
+    {
+      std::cerr << "Failed to destroy RocksDB: " + status.ToString() << std::endl;
+    }
+  }
 
   Status Get( ServerContext* context, const GetRequest* request,
               GetResponse* response ) override
@@ -104,6 +113,7 @@ class KvsServiceImpl final : public Kvs::Service
 
  private:
   rocksdb::DB* db_;
+  std::string db_path_;
   bool isLeader_;
 };
 

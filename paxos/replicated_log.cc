@@ -9,11 +9,13 @@ ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
 ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
           "Paxos log file prefix");
 
+namespace witnesskvs::paxos {
+
 ReplicatedLog::ReplicatedLog(uint8_t node_id)
     : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
 
-  bool has_atleast_one_chosen = false;
+  bool found_unchosen_idx = false;
 
   const std::string prefix =
       absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
@@ -28,21 +30,17 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
     entry.accepted_value_ = log_msg.paxos().accepted_value();
     entry.is_chosen_ = log_msg.paxos().is_chosen();
 
-    if (entry.is_chosen_) {
-      has_atleast_one_chosen = true;
-      first_unchosen_index_ =
-          std::max(first_unchosen_index_, log_msg.paxos().idx());
+    if (!found_unchosen_idx) {
+      if (entry.is_chosen_) {
+        first_unchosen_index_ = log_msg.paxos().idx() + 1;
+      } else {
+        first_unchosen_index_ = log_msg.paxos().idx();
+        found_unchosen_idx = true;
+      }
     }
 
     proposal_number_ =
         std::max(proposal_number_, log_msg.paxos().min_proposal());
-  }
-
-  // If there was atleast one previously known to be chosen entry in the log,
-  // the `first_unchosen_index` will be the index one beyond the max we've
-  // stored in the log.
-  if (log_entries_.size() && has_atleast_one_chosen) {
-    first_unchosen_index_++;
   }
 
   VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
@@ -114,7 +112,6 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   absl::MutexLock l(&log_mutex_);
   ReplicatedLogEntry &entry = log_entries_[idx];
-  CHECK(!entry.is_chosen_);
   entry.is_chosen_ = true;
 
   MakeLogEntryStable(entry);
@@ -177,8 +174,12 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
     current_entry.min_proposal_ = new_entry.min_proposal_;
     current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.accepted_value_ = new_entry.accepted_value_;
-    current_entry.is_chosen_ = new_entry.is_chosen_;
+
+    if (!current_entry.is_chosen_) {
+      current_entry.is_chosen_ = new_entry.is_chosen_;
+    }
     MakeLogEntryStable(current_entry);
   }
   return current_entry.min_proposal_;
 }
+}  // namespace witnesskvs::paxos
