@@ -29,7 +29,7 @@ ABSL_FLAG(uint64_t, file_writer_buffer_size, BLOCK_SIZE,
 
 namespace witnesskvs::log {
 
-void verifyFilename(const std::filesystem::path& path) {
+void VerifyFilename(const std::filesystem::path& path) {
   // Should be a new file in an exisiting writeable directory.
   // Do a bunch of tests to make sure, otherwise we crash.
   // TODO(mmucklo): maybe convert these into LOG(FATAL)s so more information
@@ -58,7 +58,7 @@ FileWriter::FileWriter(std::string filename)
       bytes_received_(0) {
   // This may crash if we have an invalid filename.
   std::filesystem::path path{filename_};
-  verifyFilename(path);
+  VerifyFilename(path);
 
   // Use low-level I/O since we need to call fsync or fdatasync.
   // We could also consider using O_DIRECT | O_DSYNC or O_DIRECT | O_SYNC

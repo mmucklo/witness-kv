@@ -23,6 +23,7 @@
 #include "log_writer.h"
 #include "tests/protobuf_matchers.h"
 #include "tests/test_macros.h"
+#include "tests/test_util.h"
 
 using ::protobuf_matchers::EqualsProto;
 using ::testing::AllOf;
@@ -51,20 +52,6 @@ class LogWriterTestPeer {
 };
 
 namespace {
-
-// TODO(mmucklo): put this reused method into a common testutil file.
-absl::Status Cleanup(std::vector<std::string> filenames) {
-  bool success = true;
-  for (auto& filename : filenames) {
-    success =
-        success && std::filesystem::remove(std::filesystem::path(filename));
-  }
-  if (success) {
-    return absl::OkStatus();
-  }
-  return absl::UnknownError(
-      absl::StrCat("Could not delete files: ", absl::StrJoin(filenames, ",")));
-}
 
 std::string GetTempPrefix() {
   absl::Time now = absl::Now();
@@ -109,7 +96,7 @@ TEST(LogsLoader, Basic) {
     }
     EXPECT_EQ(count, 1);
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogsLoaderTest, MultiTest) {
@@ -154,7 +141,7 @@ TEST(LogsLoaderTest, MultiTest) {
     EXPECT_THAT(msgs, ElementsAre(EqualsProto(log_message1),
                                   EqualsProto(log_message2)));
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogsLoaderTest, MultiFileTest) {
@@ -216,7 +203,7 @@ TEST(LogsLoaderTest, MultiFileTest) {
         msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
                           EqualsProto(log_message3)));
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogsLoaderTest, MultiFileTestWithBlank) {
@@ -314,7 +301,7 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
         msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
                           EqualsProto(log_message3)));
   }
-  ASSERT_THAT(Cleanup(cleanup_files), IsOk());
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogsLoaderTest, SortingTest) {
@@ -385,6 +372,7 @@ TEST(LogsLoaderTest, SortingTest) {
         msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
                           EqualsProto(log_message3)));
   }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 TEST(LogsLoaderTest, SortingMultiFileTest) {
@@ -481,6 +469,191 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
                     EqualsProto(log_message3), EqualsProto(log_message4),
                     EqualsProto(log_message6), EqualsProto(log_message5)));
   }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
+}
+
+TEST(SortingLogsLoaderTest, Basic) {
+  std::vector<std::string> cleanup_files;
+  std::string prefix = GetTempPrefix();
+  Log::Message log_message;
+  log_message.mutable_paxos()->set_idx(0);
+  log_message.mutable_paxos()->set_min_proposal(4);
+  log_message.mutable_paxos()->set_accepted_proposal(9);
+  log_message.mutable_paxos()->set_accepted_value("test1234");
+  log_message.mutable_paxos()->set_is_chosen(true);
+  {
+    LogWriter log_writer("/tmp", prefix);
+    EXPECT_THAT(log_writer.Log(log_message), IsOk());
+    EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
+    cleanup_files = log_writer.filenames();
+  }
+  {
+    SortingLogsLoader logs_loader("/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+                             return a.paxos().idx() < b.paxos().idx();
+                           });
+    auto it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message));
+    it++;  // Test postfix notation.
+    EXPECT_EQ(it, logs_loader.end());
+    // Reset iterator.
+    it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message));
+    ++it;  // Test prefix notation.
+    EXPECT_EQ(it, logs_loader.end());
+    int count = 0;
+    for (auto& log_msg : logs_loader) {
+      count++;
+      EXPECT_THAT(log_msg, EqualsProto(log_message));
+    }
+    EXPECT_EQ(count, 1);
+  }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
+}
+
+TEST(SortingLogsLoaderTest, SortingTest) {
+  std::vector<std::string> cleanup_files;
+  std::string prefix = GetTempPrefix();
+  Log::Message log_message1;
+  log_message1.mutable_paxos()->set_idx(0);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message2;
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message3;
+  log_message3.mutable_paxos()->set_idx(2);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
+  {
+    LogWriter log_writer("/tmp", prefix);
+    LOG(INFO) << "second log message";
+    EXPECT_THAT(log_writer.Log(log_message3), IsOk());
+    LOG(INFO) << "third log message";
+    EXPECT_THAT(log_writer.Log(log_message2), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message1), IsOk());
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    // Try a logs loader that sorts by idx.
+    SortingLogsLoader logs_loader("/tmp", prefix,
+                           [](const Log::Message& a, const Log::Message& b) {
+                             return a.paxos().idx() < b.paxos().idx();
+                           });
+    auto it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message1));
+    ++it;
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message2));
+    it++;
+    ASSERT_NE(it, logs_loader.end());
+    int count = 0;
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : logs_loader) {
+      count++;
+      msgs.push_back(log_msg);
+    }
+    EXPECT_EQ(count, 3);
+    EXPECT_THAT(
+        msgs, ElementsAre(EqualsProto(log_message1), EqualsProto(log_message2),
+                          EqualsProto(log_message3)));
+  }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
+}
+
+TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
+  std::vector<std::string> cleanup_files;
+  std::string prefix = GetTempPrefix();
+  Log::Message log_message1;
+  log_message1.mutable_paxos()->set_idx(3);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message2;
+  log_message2.mutable_paxos()->set_idx(4);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12344");
+  log_message2.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message3;
+  log_message3.mutable_paxos()->set_idx(5);
+  log_message3.mutable_paxos()->set_min_proposal(6);
+  log_message3.mutable_paxos()->set_accepted_proposal(11);
+  log_message3.mutable_paxos()->set_accepted_value("test1234124");
+  log_message3.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message4;
+  Log::Message log_message5;
+  log_message5.mutable_paxos()->set_idx(2);
+  log_message5.mutable_paxos()->set_min_proposal(7);
+  log_message5.mutable_paxos()->set_accepted_proposal(12);
+  log_message5.mutable_paxos()->set_accepted_value("test1234124");
+  log_message5.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message6;
+  log_message6.mutable_paxos()->set_idx(1);
+  log_message6.mutable_paxos()->set_min_proposal(8);
+  log_message6.mutable_paxos()->set_accepted_proposal(13);
+  log_message6.mutable_paxos()->set_accepted_value("test1234124");
+  log_message6.mutable_paxos()->set_is_chosen(true);
+  {
+    LogWriter log_writer("/tmp", prefix);
+    LOG(INFO) << "second log message";
+    EXPECT_THAT(log_writer.Log(log_message3), IsOk());
+    LOG(INFO) << "third log message";
+    EXPECT_THAT(log_writer.Log(log_message2), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message1), IsOk());
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    LogWriter log_writer("/tmp", prefix);
+    EXPECT_THAT(log_writer.Log(log_message4), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message5), IsOk());
+    EXPECT_THAT(log_writer.Log(log_message6), IsOk());
+    for (const auto& filename : log_writer.filenames()) {
+      cleanup_files.push_back(filename);
+    }
+  }
+  {
+    // Try a logs loader that sorts by idx.
+    SortingLogsLoader logs_loader("/tmp", prefix,
+                           [](const Log::Message& a, const Log::Message& b) {
+                             return a.paxos().idx() < b.paxos().idx();
+                           });
+    auto it = logs_loader.begin();
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message4));
+    ++it;
+    ASSERT_NE(it, logs_loader.end());
+    EXPECT_THAT(*it, EqualsProto(log_message6));
+    it++;
+    ASSERT_NE(it, logs_loader.end());
+    int count = 0;
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : logs_loader) {
+      count++;
+      msgs.push_back(log_msg);
+    }
+    EXPECT_EQ(count, 6);
+    EXPECT_THAT(
+        msgs,
+        ElementsAre(EqualsProto(log_message4), EqualsProto(log_message6),
+                    EqualsProto(log_message5), EqualsProto(log_message1),
+                    EqualsProto(log_message2), EqualsProto(log_message3)));
+  }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
 
 }  // namespace

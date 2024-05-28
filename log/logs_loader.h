@@ -5,13 +5,59 @@
 #include <filesystem>
 #include <iterator>
 
-#include "absl/functional/any_invocable.h"
 #include "absl/log/log.h"
 #include "absl/strings/string_view.h"
 #include "log.pb.h"
 #include "log_reader.h"
 
 namespace witnesskvs::log {
+
+template <typename T, typename U>
+struct logs_iterator {
+ public:
+  using difference_type = std::ptrdiff_t;
+  logs_iterator() { LOG(FATAL) << "not implemented."; };
+  logs_iterator(T* l) : loader(l), counter(0), cur(nullptr) {}
+  logs_iterator(T* l, std::unique_ptr<Log::Message> sentinel)
+      : loader(l), counter(0), cur(std::move(sentinel)) {}
+
+  logs_iterator(const logs_iterator& it) {
+    counter = it.counter;
+    loader = it.loader;
+  }
+  logs_iterator& operator=(logs_iterator& other) {
+    counter = other.counter;
+    loader = other.loader;
+    return *this;
+  }
+  logs_iterator& operator=(logs_iterator&& other) {
+    counter = other.counter;
+    loader = other.loader;
+    cur = std::move(other.cur);
+    return *this;
+  }
+  logs_iterator(logs_iterator&& it) {
+    counter = it.counter;
+    loader = it.loader;
+    cur = std::move(it.cur);
+  }
+  Log::Message& operator*() { return *cur; }
+  U& operator++() {
+    next();
+    return *reinterpret_cast<U*>(this);
+  }
+  void operator++(int) { ++*this; }
+  bool operator==(const logs_iterator& it) const {
+    return it.loader == loader && it.counter == counter && cur == nullptr &&
+           it.cur == nullptr;
+  }
+
+ protected:
+  T* loader;
+  uint64_t counter;
+  std::unique_ptr<Log::Message> cur;
+  virtual void next() = 0;
+};
 
 /**
  * A LogsLoader that takes in a directory and a prefix and provides an
@@ -43,55 +89,24 @@ class LogsLoader {
   // the log messages before they are returned from the iterator.
   LogsLoader(
       absl::string_view dir, absl::string_view prefix,
-      absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)>
-          sortfn);
+      std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn);
 
-  struct iterator {
-    using difference_type = std::ptrdiff_t;
+  // Takes in a list of file paths that are assumed to be presorted.
+  LogsLoader(std::vector<std::filesystem::path> files);
+  LogsLoader(
+      std::vector<std::filesystem::path> files,
+      std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn);
+
+  struct iterator : public logs_iterator<LogsLoader, iterator> {
+   public:
+    using logs_iterator::logs_iterator;
+    iterator(LogsLoader* l) : logs_iterator(l) { reset(); }
+
+   protected:
+    virtual void next() override;
 
    private:
-    LogsLoader* logs_loader;
-    uint64_t counter;
-    std::unique_ptr<Log::Message> cur;
-    void next();
     void reset();
-
-   public:
-    iterator() { LOG(FATAL) << "not implemented."; };
-    iterator(LogsLoader* ll);
-    iterator(const iterator& it) {
-      counter = it.counter;
-      logs_loader = it.logs_loader;
-      reset();
-    }
-    iterator& operator=(iterator& other) {
-      counter = other.counter;
-      logs_loader = other.logs_loader;
-      reset();
-      return *this;
-    }
-    iterator& operator=(iterator&& other) {
-      counter = other.counter;
-      logs_loader = other.logs_loader;
-      cur = std::move(other.cur);
-      return *this;
-    }
-    iterator(iterator&& it) {
-      counter = it.counter;
-      logs_loader = it.logs_loader;
-      cur = std::move(it.cur);
-    }
-    iterator(LogsLoader* lr, std::unique_ptr<Log::Message> sentinel);
-    Log::Message& operator*() { return *cur; }
-    iterator& operator++() {
-      next();
-      return *this;
-    }
-    void operator++(int) { ++*this; }
-    bool operator==(const iterator& it) const {
-      return it.logs_loader == logs_loader && it.counter == counter &&
-             cur == nullptr && it.cur == nullptr;
-    }
   };
   static_assert(std::input_or_output_iterator<iterator>);
 
@@ -99,10 +114,6 @@ class LogsLoader {
   iterator end() { return iterator(this, nullptr); }
 
  private:
-  // Reads the list of files satisfying the prefix from dir_.
-  absl::StatusOr<std::vector<std::filesystem::path>> ReadDir(
-      absl::string_view dir, absl::string_view prefix);
-
   // Resets the reading, intended to be called on begin().
   void reset();
 
@@ -124,9 +135,7 @@ class LogsLoader {
 
   std::vector<std::filesystem::path> files_;  // List of files found.
 
-  // TODO(mmucklo): use this function for sorting log messages as they come out.
-  absl::AnyInvocable<bool(const Log::Message& a, const Log::Message& b)>
-      sortfn_;
+  std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn_;
 
   int64_t current_file_idx_;  // -1 here is a sentinel value.
   uint64_t current_counter_;  // never negative.
@@ -136,6 +145,50 @@ class LogsLoader {
   // If we pre-sort the messages this will be the buffer we load into.
   uint64_t msgs_counter_;
   std::unique_ptr<std::vector<Log::Message>> msgs_;
+};
+
+class SortingLogsLoader {
+ public:
+  SortingLogsLoader() = delete;
+
+  // Disable copy (and move) semantics.
+  SortingLogsLoader(const SortingLogsLoader&) = delete;
+  SortingLogsLoader& operator=(const SortingLogsLoader&) = delete;
+
+  // dir is the directory to find the log messages.
+  // prefix is the file naming scheme.
+  // sortfn is the logs sorting function.
+  SortingLogsLoader(
+      absl::string_view dir, absl::string_view prefix,
+      std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn);
+
+  struct iterator : public logs_iterator<SortingLogsLoader, iterator> {
+   public:
+    using difference_type = std::ptrdiff_t;
+    using logs_iterator::logs_iterator;
+    iterator(SortingLogsLoader* l) : logs_iterator(l) { reset(); }
+
+   protected:
+    virtual void next() override;
+
+   private:
+    std::optional<LogsLoader::iterator> llit;
+    void reset();
+  };
+  static_assert(std::input_or_output_iterator<iterator>);
+
+  iterator begin() { return iterator(this); }
+  iterator end() { return iterator(this, nullptr); }
+
+  // If a merge was performed, this will be the prefix of the merged files.
+  std::optional<std::string> prefix_merge() { return prefix_merge_; }
+
+ private:
+  void Init(
+      absl::string_view dir, absl::string_view prefix,
+      std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn);
+  std::unique_ptr<LogsLoader> logs_loader_;
+  std::optional<std::string> prefix_merge_;
 };
 
 }  // namespace witnesskvs::log

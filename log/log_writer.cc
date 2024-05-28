@@ -47,7 +47,7 @@ constexpr int kSizeChecksumBytes = 12;
 extern constexpr char kFilenamePrefix[] = "^[A-Za-z0-9_-]+$";
 
 // TODO(mmucklo): is there a better way to do this?
-void checkDir(const std::string& dir) {
+void CheckDir(const std::string& dir) {
   // Should be an existing writable directory.
   // Do a bunch of tests to make sure, otherwise we crash.
   const std::filesystem::file_status dir_status = std::filesystem::status(dir);
@@ -64,16 +64,16 @@ void checkDir(const std::string& dir) {
   }
 }
 
-void checkPrefix(const std::string& prefix) {
+void CheckPrefix(const std::string& prefix) {
   if (!re2::RE2::FullMatch(prefix, kFilenamePrefix)) {
     LOG(FATAL) << "LogWriter: prefix should match " << kFilenamePrefix;
   }
 }
 
 LogWriter::LogWriter(std::string dir, std::string prefix)
-    : dir_(dir), prefix_(prefix) {
-  checkDir(dir_);
-  checkPrefix(prefix);
+    : dir_(std::move(dir)), prefix_(std::move(prefix)) {
+  CheckDir(dir_);
+  CheckPrefix(prefix_);
 }
 
 void LogWriter::Write(absl::string_view str) {
