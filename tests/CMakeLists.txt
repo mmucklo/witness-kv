@@ -24,6 +24,7 @@ target_link_libraries(protobuf_matchers PUBLIC
     absl::flags
     # See https://github.com/abseil/abseil-cpp/blob/c14dfbf9/absl/log/CMakeLists.txt#L464-L467
     $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
+    absl::strings
 )
 
 target_link_libraries(test_util_lib PUBLIC 

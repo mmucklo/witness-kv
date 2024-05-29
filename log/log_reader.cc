@@ -24,7 +24,7 @@ ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 namespace witnesskvs::log {
 
 // TODO(mmucklo): is there a better way to do this?
-std::string checkFile(std::string filename) {
+std::string CheckFile(std::string filename) {
   // Should be an existing readable file.
   // Do a bunch of tests to make sure, otherwise we crash.
   std::filesystem::file_status file_status = std::filesystem::status(filename);
@@ -49,6 +49,7 @@ LogReader::LogReader(std::string filename)
       pos_header_(-1),
       pos_(0),
       last_pos_(0) {
+  CheckFile(filename_);
   absl::MutexLock l(&lock_);
   f_ = std::fopen(filename_.c_str(), "rb");
   CHECK(f_ != nullptr);

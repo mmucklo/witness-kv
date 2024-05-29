@@ -146,6 +146,7 @@ target_link_libraries(logs_loader_test PUBLIC
     gmock
     log_writer_lib
     logs_loader_lib
+    test_util_lib
     absl::core_headers
     absl::flags
     absl::log

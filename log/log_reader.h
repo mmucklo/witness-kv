@@ -41,12 +41,10 @@ class LogReader {
     iterator(const iterator& it) {
       pos = it.pos;
       log_reader = it.log_reader;
-      reset();
     }
     iterator& operator=(iterator& other) {
       pos = other.pos;
       log_reader = other.log_reader;
-      reset();
       return *this;
     }
     iterator& operator=(iterator&& other) {
