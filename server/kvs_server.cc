@@ -1,5 +1,6 @@
 #include <google/protobuf/message.h>
 #include <grpcpp/grpcpp.h>
+#include <rocksdb/status.h>
 
 #include <iostream>
 #include <map>
@@ -42,24 +43,20 @@ ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
-  KvsServiceImpl(const std::string& db_path /*, bool isLeader*/);
+  KvsServiceImpl(const std::string& db_path);
   ~KvsServiceImpl() { delete db_; }
+
+  void InitPaxos(void);
 
   void KvsPaxosCommitCb(uint64_t idx, std::string value);
 
+  // GRPC routines mapping directly to rocksdb operations.
   Status Get(ServerContext* context, const GetRequest* request,
              GetResponse* response) override;
-
   Status Put(ServerContext* context, const PutRequest* request,
              PutResponse* response) override;
-
   Status Delete(ServerContext* context, const DeleteRequest* request,
                 DeleteResponse* response) override;
-
-  // bool IsLeader() { return isLeader_; }
-  // std::string GetLeader() { return "localhost:50062"; }
-
-  void InitPaxos(void);
 
  private:
   rocksdb::DB* db_;
@@ -69,14 +66,13 @@ class KvsServiceImpl final : public Kvs::Service {
   uint64_t first_unapplied_idx_;
 };
 
-KvsServiceImpl::KvsServiceImpl(const std::string& db_path /*, bool isLeader*/)
+KvsServiceImpl::KvsServiceImpl(const std::string& db_path)
     : first_unapplied_idx_{0} {
-  // isLeader_ = isLeader;
   rocksdb::Options options;
   options.create_if_missing = true;
   rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
   if (!status.ok()) {
-    throw std::runtime_error("Failed to open RocksDB: " + status.ToString());
+    LOG(FATAL) << "[KVS]: Failed to open RocksDB: " << status.ToString();
   }
 }
 
@@ -88,187 +84,127 @@ void KvsServiceImpl::InitPaxos(void) {
       absl::GetFlag(FLAGS_kvs_node_id), commitCb);
 }
 
-#if 0
-Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
-                           PutResponse* response) {
-  /*if (!IsLeader()) {
-    std::string leader = GetLeader();
-    LOG(INFO) << "Not a leader, forwarding leader info to client: " << leader
-              << "\n";
-    return grpc::Status(grpc::StatusCode::NOT_FOUND, leader);
-  }*/
-
-  // Serialize user request
-  std::string serialized_request;
-  if (request->SerializeToString(&serialized_request)) {
-    LOG(INFO) << "Serialize successful.";
-    serialized_request = "PUT:" + serialized_request;
-    LOG(INFO) << "After serialization: serialized_request: "
-              << serialized_request;
-
-    PutRequest request1;
-    // LOG(INFO) << "In Put "           <<
-    //           request1.ParseFromString(serialized_request.substr(4)).key();
-  }
-
-  // Paxos propose
-  paxos_->Propose(serialized_request);
-
-  response->set_status("OK");
-  return Status::OK;
-
-  /*rocksdb::Status status =
-      db_->Put(rocksdb::WriteOptions(), request->key(), request->value());
-  if (status.ok()) {
-    response->set_status("OK");
-    return Status::OK;
-  } else {
-    return Status::CANCELLED;
-  }*/
-}
-#endif
-
-Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
-                           PutResponse* response) {
-  // KeyValueStore::OperationType op;
-  KeyValueStore::OperationType op;
-  // op.set_type(KeyValueStore::OperationTypeEnum::PUT);
-  // op.mutable_put_data()->CopyFrom(*request);
-  //  op.mutable_put_data()->set_key(request->key());
-  //  op.mutable_put_data()->set_value(request->value());
-
-  op.set_type(KeyValueStore::OperationType_Type_PUT);
-  KeyValueStore::PutRequest* kv = op.mutable_message();
-  kv->set_key(request->key());
-  kv->set_value(request->value());
-
-  std::string serialized_request;
-  if (!op.SerializeToString(&serialized_request)) {
-    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
-                        "Failed to serialize Put request.");
-  }
-
-  paxos_->Propose(serialized_request);
-
-  response->set_status("OK");
-  return Status::OK;
-}
-
-// using google::protobuf::MessageLite::ParseFromString;
-
 void KvsServiceImpl::KvsPaxosCommitCb(uint64_t idx, std::string value) {
   KeyValueStore::OperationType op;
   if (!op.ParseFromString(value)) {
-    LOG(FATAL) << "Parse from string failed!";
+    LOG(FATAL) << "[KVS]: Parse from string failed!";
   }
-
-  LOG(INFO) << "In KvsPaxosCommitCb value string: " << value;
-  LOG(INFO) << "In KvsPaxosCommitCb value serialized: " << op;
 
   switch (op.type()) {
     case KeyValueStore::OperationType_Type_PUT: {
-      LOG(INFO) << "Put request: Key: " << op.message().key()
-                << " and value: " << op.message().value();
+      rocksdb::Status status = this->db_->Put(
+          rocksdb::WriteOptions(), op.put_data().key(), op.put_data().value());
+      if (!status.ok()) {
+        LOG(WARNING) << "[KVS]: Put operation failed with error : "
+                     << status.ToString();
+      }
       break;
     }
-    case KeyValueStore::OperationType_Type_DELETE:
+    case KeyValueStore::OperationType_Type_DELETE: {
+      rocksdb::Status status =
+          this->db_->Delete(rocksdb::WriteOptions(), op.del_data().key());
+      if (!status.ok()) {
+        LOG(WARNING) << "[KVS]: Delete operation failed with error : "
+                     << status.ToString();
+      }
+      break;
+    }
     default:
-      LOG(FATAL) << "Not implemented";
+      LOG(FATAL) << "[KVS]: Unknown operation type requested on rocks db";
       break;
   }
-
-  // LOG(INFO) << "request.key(): " << op.data.
-  //<< " and request.value(): " << request.value();
 }
 
-#if 0
-void KvsServiceImpl::KvsPaxosCommitCb(uint64_t idx, std::string value) {
-  // std::cerr << "Get Callback from paxos\n";
-  LOG(INFO) << "Get Callback from paxos\n";
-
-  LOG(INFO) << "In callback: value  received: " << value;
-
-  std::string op = std ::string(value.substr(0, 4));
-  if (op == "PUT:") {
-    PutRequest request;
-    request.ParseFromString(value.substr(4));
-
-    // std::cerr << "request.key(): " << request.key()
-    //           << " and request.value(): " << request.value() << "\n";
-    LOG(INFO) << "request.key(): " << request.key()
-              << " and request.value(): " << request.value();
-
-    rocksdb::Status status =
-        this->db_->Put(rocksdb::WriteOptions(), request.key(), request.value());
-  } else if (op == "DEL:") {
-    LOG(FATAL) << "Not implemented";
-  } else {
-    LOG(FATAL) << "Something went wrong...";
+// Helper function to convert rocks db errors to grpc errors
+static Status convertRocksDbErrorToGrpcError(const rocksdb::Status& status) {
+  switch (status.code()) {
+    case rocksdb::IOStatus::kNotFound:
+      return Status(grpc::NOT_FOUND, status.ToString());
+    case rocksdb::IOStatus::kCorruption:
+      return Status(grpc::INTERNAL, "[KVS]: RocksDB internal corruption");
+    case rocksdb::IOStatus::kInvalidArgument:
+      return Status(grpc::INVALID_ARGUMENT, status.ToString());
+    default:
+      return Status(grpc::UNKNOWN, status.ToString());
   }
 }
-#endif
+
+Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
+                           PutResponse* response) {
+  KeyValueStore::OperationType op;
+
+  op.set_type(KeyValueStore::OperationType_Type_PUT);
+  KeyValueStore::PutRequest* kv_put = op.mutable_put_data();
+  kv_put->set_key(request->key());
+  kv_put->set_value(request->value());
+
+  std::string serialized_request;
+  if (!op.SerializeToString(&serialized_request)) {
+    LOG(WARNING)
+        << "[KVS]: SerializeToString to string failed in Put operation.";
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "[KVS]: Failed to serialize Put request.");
+  }
+
+  paxos_->Propose(serialized_request);
+
+  response->set_status("[KVS]: Put operation Successful");
+  return Status::OK;
+}
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
-  /*if (!IsLeader()) {
-    std::string leader = GetLeader();
-    LOG(INFO) << "Not a leader, forwarding leader info to client: " << leader
-              << "\n";
-    return grpc::Status(grpc::StatusCode::NOT_FOUND, leader);
-  }*/
   std::string value;
   rocksdb::Status status =
       db_->Get(rocksdb::ReadOptions(), request->key(), &value);
-  if (status.ok()) {
-    response->set_value(value);
-    return Status::OK;
-  } else {
-    return Status::CANCELLED;
+  if (!status.ok()) {
+    LOG(WARNING) << "[KVS]: Get operation for key:" << request->key()
+                 << "failed with error: " << status.ToString();
+    return convertRocksDbErrorToGrpcError(status);
   }
+
+  response->set_value(value);
+  return Status::OK;
 }
 
 Status KvsServiceImpl::Delete(ServerContext* context,
                               const DeleteRequest* request,
                               DeleteResponse* response) {
-  /*if (!IsLeader()) {
-    std::string leader = GetLeader();
-    LOG(INFO) << "Not a leader, forwarding leader info to client: " << leader
-              << "\n";
-    return grpc::Status(grpc::StatusCode::NOT_FOUND, leader);
-  }*/
+  KeyValueStore::OperationType op;
 
-  rocksdb::Status status = db_->Delete(rocksdb::WriteOptions(), request->key());
-  if (status.ok()) {
-    response->set_status("OK");
-    return Status::OK;
-  } else {
-    return Status::CANCELLED;
+  op.set_type(KeyValueStore::OperationType_Type_DELETE);
+  KeyValueStore::DeleteRequest* kv_del = op.mutable_del_data();
+  kv_del->set_key(request->key());
+
+  std::string serialized_request;
+  if (!op.SerializeToString(&serialized_request)) {
+    LOG(WARNING)
+        << "[KVS] SerializeToString to string failed in Delete operation.";
+    return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
+                        "Failed to serialize Delete request.");
   }
+
+  // TODO: Paxos propose should return a result.
+  paxos_->Propose(serialized_request);
+
+  response->set_status("[KVS]: Delete operation Successful");
+  return Status::OK;
 }
 
-void RunKvsServer(const std::string& db_path, uint16_t port
-                  /*bool isLeader = false*/) {
+void RunKvsServer(const std::string& db_path, uint16_t port) {
   std::string port_str = std::to_string(port);
   std::string server_address =
       absl::GetFlag(FLAGS_kvs_ip_address) + ":" + port_str;
 
-  KvsServiceImpl service(db_path /*, isLeader*/);
+  KvsServiceImpl service(db_path);
   service.InitPaxos();
 
   ServerBuilder builder;
-  // Listen on the given address without any authentication mechanism.
   builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  // Register "service" as the instance through which we'll communicate with
-  // clients. In this case it corresponds to an *synchronous* service.
   builder.RegisterService(&service);
-  // Finally assemble the server.
   std::unique_ptr<Server> server(builder.BuildAndStart());
 
-  // Wait for the server to shutdown. Note that some other thread must be
-  // responsible for shutting down the server for this call to ever return.
   server->Wait();
-
-  LOG(INFO) << "KVS Server exited!\n";
 }
 
 int main(int argc, char** argv) {
@@ -281,14 +217,5 @@ int main(int argc, char** argv) {
       absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), server_port, ".",
                    absl::ToUnixMicros(absl::Now()));
 
-  RunKvsServer(database_path, server_port /*, true*/);
-  /*KeyValueStore::OperationType op;
-  op.set_type(KeyValueStore::OperationType_Type_PUT);
-  KeyValueStore::PutRequest* kv = op.mutable_message();
-  kv->set_key("key");
-  kv->set_value("value");*/
-
-  // op.mutable_put_data()->CopyFrom(*request);
-  //  op.mutable_put_data()->set_key(request->key());
-  //  op.mutable_put_data()->set_value(request->value());
+  RunKvsServer(database_path, server_port);
 }
