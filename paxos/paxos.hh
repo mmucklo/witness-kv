@@ -18,6 +18,8 @@ class Paxos {
 
  public:
   Paxos(uint8_t node_id);
+
+  Paxos(uint8_t node_id, std::function<void(uint64_t, std::string)> databaseCb);
   ~Paxos();
 
   // Function to add a command to the replicated state machine across all alive

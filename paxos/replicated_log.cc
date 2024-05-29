@@ -106,6 +106,15 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
             << " with value: " << entry.accepted_value_
             << " with chosenness: " << entry.is_chosen_;
   absl::Status status = log_writer_->Log(log_message);
+
+  if (entry.is_chosen_ && this->database_commit_Cb_) {
+    // Invoke callback.
+    // TODO: We are holding the replicated log lock, simplify this -- try to
+    // avoid lock.
+    LOG(INFO) << "Calling database callback..";
+    this->database_commit_Cb_(entry.idx_, entry.accepted_value_);
+  }
+
   CHECK_EQ(status, absl::OkStatus());
 }
 
@@ -115,6 +124,7 @@ void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   entry.is_chosen_ = true;
 
   MakeLogEntryStable(entry);
+
   UpdateFirstUnchosenIdx();
 }
 

@@ -32,3 +32,32 @@ message DeleteRequest {
 message DeleteResponse {
   string status = 1;
 }
+
+/*enum OperationTypeEnum {
+  PUT = 0;
+  DELETE = 1;
+}
+
+message OperationType {
+  OperationTypeEnum type = 1;
+
+  oneof data {
+    PutRequest put_data = 2; // Key-value pair for PUT operation
+    DeleteRequest del_data = 3;       // Just the key for DELETE operation
+  }
+}
+*/
+
+message OperationType {
+  enum Type {
+    PUT = 0;
+    DELETE = 1;
+  }
+
+  Type type = 1;
+
+  oneof data {
+    PutRequest message  = 2;// Key-value pair for PUT operation
+    string key = 3;       // Just the key for DELETE operation
+  }
+}
