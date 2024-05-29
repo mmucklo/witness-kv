@@ -47,7 +47,7 @@ constexpr int kSizeChecksumBytes = 12;
 extern constexpr char kFilenamePrefix[] = "^[A-Za-z0-9_-]+$";
 
 // TODO(mmucklo): is there a better way to do this?
-void checkDir(const std::string& dir) {
+void CheckDir(const std::string& dir) {
   // Should be an existing writable directory.
   // Do a bunch of tests to make sure, otherwise we crash.
   const std::filesystem::file_status dir_status = std::filesystem::status(dir);
@@ -64,16 +64,20 @@ void checkDir(const std::string& dir) {
   }
 }
 
-void checkPrefix(const std::string& prefix) {
+void CheckPrefix(const std::string& prefix) {
   if (!re2::RE2::FullMatch(prefix, kFilenamePrefix)) {
     LOG(FATAL) << "LogWriter: prefix should match " << kFilenamePrefix;
   }
 }
 
 LogWriter::LogWriter(std::string dir, std::string prefix)
-    : dir_(dir), prefix_(prefix) {
-  checkDir(dir_);
-  checkPrefix(prefix);
+    : dir_(std::move(dir)), prefix_(std::move(prefix)) {
+  CheckDir(dir_);
+  CheckPrefix(prefix_);
+  {
+    absl::MutexLock l(&lock_);
+    skip_flush_ = false;
+  }
 }
 
 void LogWriter::Write(absl::string_view str) {
@@ -222,7 +226,9 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
     }
     // This will be the operation that could stall a bit.
     // So we do this after all writes have been done.
-    file_writer_->Flush();
+    if (!skip_flush_) {
+      file_writer_->Flush();
+    }
   }
   return absl::OkStatus();
 }
@@ -240,6 +246,16 @@ std::string LogWriter::filename() const {
 std::vector<std::string> LogWriter::filenames() const {
   absl::MutexLock l(&lock_);
   return filenames_;
+}
+
+void LogWriter::SetSkipFlush(bool skip_flush) {
+  absl::MutexLock l(&lock_);
+  skip_flush_ = skip_flush;
+}
+
+bool LogWriter::skip_flush() const {
+  absl::MutexLock l(&lock_);
+  return skip_flush_;
 }
 
 }  // namespace witnesskvs::log
