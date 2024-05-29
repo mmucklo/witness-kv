@@ -24,22 +24,29 @@ Paxos::~Paxos() {
   replicated_log_.reset();
 }
 
-void Paxos::Propose(const std::string& value, grpc::Status& status, bool is_Read) {
+Paxos::PaxosResult Paxos::Propose(const std::string& value, std::string* leader_address, bool is_Read) {
   CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
 
   if (!paxos_node_->ClusterHasEnoughNodesUp()) {
     // TODO [V]: Fix this with a user specified timeout/deadline for request.
     LOG(WARNING)
         << "Replication not possible, majority of the nodes are not reachable.";
+    return PAXOS_ERROR_NO_QUORUM;
   } else {
     if (IsLeader() && !is_Read){
       proposer_->Propose(value);
-      status = grpc::Status(grpc::StatusCode::OK, "OK");
+      return PAXOS_OK;
     }
     else {
+      *leader_address = paxos_node_->GetProposerServiceAddress();
+      if (leader_address->empty()) {
+        LOG(WARNING) << "Leader is not ready.";
+        return PAXOS_ERROR_LEADER_NOT_READY;
+      }
       LOG(INFO) << "Node: " << static_cast<uint32_t>(node_id_) << " is not the leader.";
-      status = grpc::Status(grpc::StatusCode::NOT_FOUND, paxos_node_->GetProposerServiceAddress());
+      return PAXOS_ERROR_NOT_PERMITTED;
     }
   }
+  return PAXOS_OK;
 }
 }  // namespace witnesskvs::paxos

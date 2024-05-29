@@ -246,6 +246,9 @@ std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
 
 std::string PaxosNode::GetProposerServiceAddress() {
   absl::MutexLock l(&node_mutex_);
+  if (leader_node_id_ == UINT8_MAX) {
+    return "";
+  }
   return nodes_[leader_node_id_].GetAddressPortStr();
 }
 

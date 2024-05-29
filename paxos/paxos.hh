@@ -18,6 +18,13 @@ class Paxos {
   uint8_t node_id_;
 
  public:
+  enum PaxosResult
+  {
+    PAXOS_OK = 1,
+    PAXOS_ERROR_NOT_PERMITTED = 2,
+    PAXOS_ERROR_LEADER_NOT_READY = 3,
+    PAXOS_ERROR_NO_QUORUM = 4,
+  };
   Paxos(uint8_t node_id);
   ~Paxos();
 
@@ -25,7 +32,7 @@ class Paxos {
   // Paxos nodes. If value is empty this will trigger a NOP paxos round as
   // described in section 3 in
   // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
-  void Propose(const std::string& value, grpc::Status& status, bool is_Read );
+  PaxosResult Propose(const std::string& value, std::string* leader_address = nullptr, bool is_Read = false);
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }

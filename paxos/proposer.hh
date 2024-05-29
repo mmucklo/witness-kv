@@ -19,7 +19,6 @@ class Proposer {
  private:
   uint8_t node_id_;
   int majority_threshold_;
-  int retry_count_;  // For testing so we can test nodes not reaching consensus
 
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
@@ -28,8 +27,7 @@ class Proposer {
   Proposer(int num_acceptors, uint8_t nodeId,
            std::shared_ptr<ReplicatedLog> rlog,
            std::shared_ptr<PaxosNode> paxos_node)
-      : retry_count_{3},
-        majority_threshold_{num_acceptors / 2 + 1},
+      : majority_threshold_{num_acceptors / 2 + 1},
         node_id_{nodeId},
         replicated_log_{rlog},
         paxos_node_{paxos_node} {}
