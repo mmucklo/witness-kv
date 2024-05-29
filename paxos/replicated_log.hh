@@ -35,18 +35,12 @@ class ReplicatedLog {
 
   void MakeLogEntryStable(const ReplicatedLogEntry &entry);
 
-  std::function<void(uint64_t, std::string)> database_commit_Cb_;
+  std::function<void(std::string)> app_registered_callback_;
 
  public:
-  ReplicatedLog(uint8_t node_id);
+  ReplicatedLog(uint8_t node_id,
+                std::function<void(std::string)> callback = nullptr);
   ~ReplicatedLog();
-
-  void ReplicatedLogRegisterCallback(
-      std::function<void(uint64_t, std::string)> cb) {
-    std::cerr << "Paxos callback registered\n";
-    LOG(INFO) << "Paxos callback registered";
-    database_commit_Cb_ = cb;
-  }
 
   uint64_t GetFirstUnchosenIdx();
   uint64_t GetNextProposalNumber();

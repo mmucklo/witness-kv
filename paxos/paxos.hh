@@ -17,9 +17,7 @@ class Paxos {
   std::unique_ptr<ProposerService> proposer_;
 
  public:
-  Paxos(uint8_t node_id);
-
-  Paxos(uint8_t node_id, std::function<void(uint64_t, std::string)> databaseCb);
+  Paxos(uint8_t node_id, std::function<void(std::string)> callback = nullptr);
   ~Paxos();
 
   // Function to add a command to the replicated state machine across all alive

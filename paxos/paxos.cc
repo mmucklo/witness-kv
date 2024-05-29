@@ -2,26 +2,8 @@
 
 namespace witnesskvs::paxos {
 
-Paxos::Paxos(uint8_t node_id) {
-  replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
-  paxos_node_ = std::make_shared<PaxosNode>(node_id, replicated_log_);
-
-  acceptor_ = std::make_unique<AcceptorService>(
-      paxos_node_->GetNodeAddress(node_id), node_id, replicated_log_);
-  CHECK_NE(acceptor_, nullptr);
-
-  proposer_ = std::make_unique<ProposerService>(
-      paxos_node_->GetProposerServiceAddress(node_id), node_id, replicated_log_,
-      paxos_node_);
-  CHECK_NE(proposer_, nullptr);
-
-  paxos_node_->MakeReady();
-}
-
-Paxos::Paxos(uint8_t node_id,
-             std::function<void(uint64_t, std::string)> databaseCb) {
-  replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
-  replicated_log_->ReplicatedLogRegisterCallback(databaseCb);
+Paxos::Paxos(uint8_t node_id, std::function<void(std::string)> callback) {
+  replicated_log_ = std::make_shared<ReplicatedLog>(node_id, callback);
   paxos_node_ = std::make_shared<PaxosNode>(node_id, replicated_log_);
 
   acceptor_ = std::make_unique<AcceptorService>(

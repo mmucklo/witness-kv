@@ -33,8 +33,6 @@ using KeyValueStore::Kvs;
 using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
 
-using KeyValueStore::OperationType;
-
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::string, kvs_ip_address, "localhost", "kvs_ip_address");
 ABSL_FLAG(uint64_t, kvs_port, 40051, "kvs_port");
@@ -48,7 +46,7 @@ class KvsServiceImpl final : public Kvs::Service {
 
   void InitPaxos(void);
 
-  void KvsPaxosCommitCb(uint64_t idx, std::string value);
+  void KvsPaxosCommitCallback(std::string value);
 
   // GRPC routines mapping directly to rocksdb operations.
   Status Get(ServerContext* context, const GetRequest* request,
@@ -61,13 +59,9 @@ class KvsServiceImpl final : public Kvs::Service {
  private:
   rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
-  bool isLeader_;
-
-  uint64_t first_unapplied_idx_;
 };
 
-KvsServiceImpl::KvsServiceImpl(const std::string& db_path)
-    : first_unapplied_idx_{0} {
+KvsServiceImpl::KvsServiceImpl(const std::string& db_path) {
   rocksdb::Options options;
   options.create_if_missing = true;
   rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
@@ -77,14 +71,14 @@ KvsServiceImpl::KvsServiceImpl(const std::string& db_path)
 }
 
 void KvsServiceImpl::InitPaxos(void) {
-  auto commitCb = std::bind(&KvsServiceImpl::KvsPaxosCommitCb, this,
-                            std::placeholders::_1, std::placeholders::_2);
+  auto callback = std::bind(&KvsServiceImpl::KvsPaxosCommitCallback, this,
+                            std::placeholders::_1);
 
   paxos_ = std::make_unique<witnesskvs::paxos::Paxos>(
-      absl::GetFlag(FLAGS_kvs_node_id), commitCb);
+      absl::GetFlag(FLAGS_kvs_node_id), callback);
 }
 
-void KvsServiceImpl::KvsPaxosCommitCb(uint64_t idx, std::string value) {
+void KvsServiceImpl::KvsPaxosCommitCallback(std::string value) {
   KeyValueStore::OperationType op;
   if (!op.ParseFromString(value)) {
     LOG(FATAL) << "[KVS]: Parse from string failed!";
@@ -146,6 +140,8 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                         "[KVS]: Failed to serialize Put request.");
   }
 
+  // TODO[V]: Paxos propose should return a result that can be forwarded to
+  // client.
   paxos_->Propose(serialized_request);
 
   response->set_status("[KVS]: Put operation Successful");
@@ -158,8 +154,8 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
   rocksdb::Status status =
       db_->Get(rocksdb::ReadOptions(), request->key(), &value);
   if (!status.ok()) {
-    LOG(WARNING) << "[KVS]: Get operation for key:" << request->key()
-                 << "failed with error: " << status.ToString();
+    LOG(WARNING) << "[KVS]: Get operation for key: " << request->key()
+                 << " failed with error: " << status.ToString();
     return convertRocksDbErrorToGrpcError(status);
   }
 
@@ -179,12 +175,13 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   std::string serialized_request;
   if (!op.SerializeToString(&serialized_request)) {
     LOG(WARNING)
-        << "[KVS] SerializeToString to string failed in Delete operation.";
+        << "[KVS]: SerializeToString to string failed in Delete operation.";
     return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,
                         "Failed to serialize Delete request.");
   }
 
-  // TODO: Paxos propose should return a result.
+  // TODO[V]: Paxos propose should return a result that can be forwarded to
+  // client.
   paxos_->Propose(serialized_request);
 
   response->set_status("[KVS]: Delete operation Successful");
