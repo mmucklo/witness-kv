@@ -203,10 +203,10 @@ absl::Status LogsTruncator::ReadHeader(const std::filesystem::path& path,
           << " duplicate filename: " << path.string();
     } else {
       CHECK(!filename_max_idx_
-                .insert_or_assign(
-                    path.string(),
-                    TruncationFileInfo{.min_idx = min_idx, .max_idx = max_idx})
-                .second);
+                 .insert_or_assign(
+                     path.string(),
+                     TruncationFileInfo{.min_idx = min_idx, .max_idx = max_idx})
+                 .second);
     }
   } else {
     VLOG(1) << "Could not find valid min/max idx for file: " << path.string();
@@ -228,6 +228,12 @@ void LogsTruncator::Init() {
               << status.ToString();
     }
   }
+}
+
+absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
+LogsTruncator::filename_max_idx() {
+  absl::MutexLock l(&lock_);
+  return filename_max_idx_;
 }
 
 }  // namespace witnesskvs::log

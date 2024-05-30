@@ -37,6 +37,9 @@ class LogsTruncator {
   // Registers a set of max_idx and min_idx against a filename.
   void Register(TruncationFileInfo truncation_file_info);
 
+  absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+
  private:
   void Init();
   void Run(std::stop_token& stop_token);
@@ -46,7 +49,8 @@ class LogsTruncator {
   // Reads a header and updates filename_max_idx_ hash.
   //
   // insert signals whether we expect an insert or update.
-  absl::Status ReadHeader(const std::filesystem::path& path, bool insert = true);
+  absl::Status ReadHeader(const std::filesystem::path& path,
+                          bool insert = true);
 
   // The truncation queue is a lightweight place to enqueue requests into
   // the truncator without the need to hold locks for an extended period of
