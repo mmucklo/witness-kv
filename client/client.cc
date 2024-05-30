@@ -4,6 +4,10 @@
 #include <memory>
 #include <string>
 
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
+#include "absl/log/check.h"
+#include "absl/log/initialize.h"
 #include "absl/log/log.h"
 #include "kvs.grpc.pb.h"
 
@@ -17,6 +21,12 @@ using KeyValueStore::GetResponse;
 using KeyValueStore::Kvs;
 using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
+
+ABSL_FLAG(std::string, server_address, "",
+          "Address of the key-value server (host:port)");
+ABSL_FLAG(std::string, op, "", "Operation to perform (put, get, delete)");
+ABSL_FLAG(std::string, key, "", "Key for the operation");
+ABSL_FLAG(std::string, value, "", "Value for put operation (optional)");
 
 class KvsClient {
  public:
@@ -109,39 +119,47 @@ class KvsClient {
 };
 
 int main(int argc, char** argv) {
-  if (argc < 4) {
-    std::cerr << "Usage: " << argv[0]
-              << " <target_address> <operation> <key> [value]" << std::endl;
+  absl::ParseCommandLine(argc, argv);
+
+  absl::InitializeLog();
+
+  if (absl::GetFlag(FLAGS_server_address).empty()) {
+    LOG(ERROR) << "Usage: --server_address is required.";
     return 1;
   }
 
-  std::string target_address = argv[1];
-  std::string operation = argv[2];
-  std::string key = argv[3];
-  std::string value;
-
-  if (operation == "put" && argc < 5) {
-    std::cerr << "Usage for put operation: " << argv[0]
-              << " <target_address> put <key> <value>" << std::endl;
+  if (absl::GetFlag(FLAGS_op).empty()) {
+    LOG(ERROR) << "Usage: --op is required (put, get, delete).";
     return 1;
   }
 
-  if (operation == "put") {
-    value = argv[4];
+  if (absl::GetFlag(FLAGS_key).empty()) {
+    LOG(ERROR) << "Usage: --key is required for any op (put, get, delete).";
+    return 1;
   }
 
-  KvsClient client(
-      grpc::CreateChannel(target_address, grpc::InsecureChannelCredentials()));
+  if ((absl::GetFlag(FLAGS_op) == "put") &&
+      absl::GetFlag(FLAGS_value).empty()) {
+    LOG(ERROR) << "Usage: --value is required for put operation.";
+    return 1;
+  }
 
-  if (operation == "get") {
-    std::string get_response = client.Get(key);
+  KvsClient client(grpc::CreateChannel(absl::GetFlag(FLAGS_server_address),
+                                       grpc::InsecureChannelCredentials()));
+
+  if (absl::GetFlag(FLAGS_op) == "get") {
+    std::string get_response = client.Get(absl::GetFlag(FLAGS_key));
     std::cout << "Get response: " << get_response << std::endl;
-  } else if (operation == "put") {
-    std::string put_response = client.Put(key, value);
+    LOG(INFO) << "Get response: " << get_response;
+  } else if (absl::GetFlag(FLAGS_op) == "put") {
+    std::string put_response =
+        client.Put(absl::GetFlag(FLAGS_key), absl::GetFlag(FLAGS_value));
     std::cout << "Put response: " << put_response << std::endl;
-  } else if (operation == "delete") {
-    std::string delete_response = client.Delete(key);
+    LOG(INFO) << "Put response: " << put_response;
+  } else if (absl::GetFlag(FLAGS_op) == "delete") {
+    std::string delete_response = client.Delete(absl::GetFlag(FLAGS_key));
     std::cout << "Delete response: " << delete_response << std::endl;
+    LOG(INFO) << "Delete response: " << delete_response;
   } else {
     std::cerr << "Invalid operation. Use get, put, or delete." << std::endl;
     return 1;

@@ -9,6 +9,7 @@
 
 #include "absl/flags/flag.h"
 #include "paxos.hh"
+#include "utils.hh"
 
 ABSL_DECLARE_FLAG(uint64_t, absl_log_min_level);
 
@@ -37,8 +38,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  std::vector<witnesskvs::paxos::Node> nodes =
-      witnesskvs::paxos::ParseNodesConfig(filename);
+  std::vector<Node> nodes = ParseNodesConfig(filename);
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {

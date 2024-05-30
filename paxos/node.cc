@@ -19,38 +19,10 @@ ABSL_FLAG(bool, lower_node_witness, false, "Lower nodes are witnesses");
 
 namespace witnesskvs::paxos {
 
-bool IsValidNodeId(uint8_t node_id) { return (node_id != UINT8_MAX); }
-
-std::vector<Node> ParseNodesConfig(std::string config_file_name) {
-  std::vector<Node> nodes{};
-  std::ifstream config_file(config_file_name);
-
-  CHECK(config_file.is_open()) << "Failed to open nodes configuration file";
-
-  std::string line;
-  while (std::getline(config_file, line)) {
-    std::stringstream ss(line);
-    std::string ip_address, port_str;
-    int port;
-    if (std::getline(ss, ip_address, ':') && std::getline(ss, port_str)) {
-      try {
-        port = std::stoi(port_str);
-      } catch (const std::invalid_argument& e) {
-        throw std::runtime_error("Invalid port number in config file");
-      }
-      nodes.push_back({ip_address, port});
-    }
-  }
-
-  config_file.close();
-
-  return nodes;
-}
-
 PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
     : num_active_acceptors_conns_{},
       replicated_log_{rlog},
-      leader_node_id_{UINT8_MAX} {
+      leader_node_id_{INVALID_NODE_ID} {
   nodes_ = ParseNodesConfig(absl::GetFlag(FLAGS_paxos_node_config_file));
   CHECK_NE(nodes_.size(), 0);
 
@@ -148,7 +120,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
     {
       absl::MutexLock l(&node_mutex_);
       if (!(cluster_has_valid_leader && (num_active_acceptors_conns_ > 1))) {
-        leader_node_id_ = UINT8_MAX;
+        leader_node_id_ = INVALID_NODE_ID;
       } else if (leader_node_id_ != highest_node_id) {
         LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                   << "] New leader elected with node id: "

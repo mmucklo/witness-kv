@@ -18,6 +18,7 @@
 #include "absl/time/time.h"
 #include "kvs.grpc.pb.h"
 #include "paxos/paxos.hh"
+#include "paxos/utils.hh"
 #include "rocksdb/db.h"
 
 using grpc::Server;
@@ -36,21 +37,15 @@ using KeyValueStore::PutResponse;
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
-
-// ABSL_FLAG(std::string, kvs_ip_address, "localhost", "kvs_ip_address");
-// ABSL_FLAG(uint64_t, kvs_port, 40051, "kvs_port");
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
 ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
-  KvsServiceImpl(const std::string& db_path,
-                 std::vector<witnesskvs::paxos::Node> nodes);
+  KvsServiceImpl(const std::string& db_path, std::vector<Node> nodes);
   ~KvsServiceImpl() { delete db_; }
 
   void InitPaxos(void);
-
-  void KvsPaxosCommitCallback(std::string value);
 
   // GRPC routines mapping directly to rocksdb operations.
   Status Get(ServerContext* context, const GetRequest* request,
@@ -64,11 +59,15 @@ class KvsServiceImpl final : public Kvs::Service {
   rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
 
-  std::vector<witnesskvs::paxos::Node> nodes_;
+  std::vector<Node> nodes_;
+
+  Status PaxosProposeWrapper(const std::string& value, bool is_read);
+
+  void KvsPaxosCommitCallback(std::string value);
 };
 
 KvsServiceImpl::KvsServiceImpl(const std::string& db_path,
-                               std::vector<witnesskvs::paxos::Node> nodes)
+                               std::vector<Node> nodes)
     : nodes_{nodes} {
   rocksdb::Options options;
   options.create_if_missing = true;
@@ -131,10 +130,41 @@ static Status convertRocksDbErrorToGrpcError(const rocksdb::Status& status) {
   }
 }
 
+Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
+                                           bool is_read = false) {
+  using witnesskvs::paxos::PaxosResult;
+  using witnesskvs::paxos::PaxosResult::PAXOS_ERROR_NOT_PERMITTED;
+  using witnesskvs::paxos::PaxosResult::PAXOS_OK;
+
+  uint8_t leader_node_id = INVALID_NODE_ID;
+
+  PaxosResult result = paxos_->Propose(value, &leader_node_id);
+  if (PAXOS_OK == result) {
+    return Status::OK;
+  }
+
+  LOG(WARNING) << "[KVS]: Paxos propose failed with error code: " << result;
+
+  if (PAXOS_ERROR_NOT_PERMITTED == result) {
+    CHECK_NE(leader_node_id, INVALID_NODE_ID)
+        << "[KVS]: Paxos library returned us an invalid leader node id";
+
+    LOG(INFO) << "[KVS]: Leader address returned: "
+              << nodes_[leader_node_id].GetAddressPortStr();
+    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                        nodes_[leader_node_id].GetAddressPortStr());
+  } else {
+    // Either there is no-leader or more likely there are not enough nodes up
+    // and running.
+    return grpc::Status(
+        grpc::StatusCode::UNAVAILABLE,
+        "[KVS]: Cluster is not in a state to serve requests right now");
+  }
+}
+
 Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                            PutResponse* response) {
   KeyValueStore::OperationType op;
-
   op.set_type(KeyValueStore::OperationType_Type_PUT);
   KeyValueStore::PutRequest* kv_put = op.mutable_put_data();
   kv_put->set_key(request->key());
@@ -148,31 +178,20 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                         "[KVS]: Failed to serialize Put request.");
   }
 
-  uint8_t leader_node_id;
-  witnesskvs::paxos::PaxosResult result =
-      paxos_->Propose(serialized_request, &leader_node_id);
-  if (witnesskvs::paxos::PAXOS_OK != result) {
-    LOG(WARNING) << "[KVS]: Paxos propose failed with error code: " << result;
-    if (witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED == result) {
-      LOG(INFO) << "[KVS]: Returning leader address: "
-                << nodes_[leader_node_id].GetAddressPortStr();
-      return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                          nodes_[leader_node_id].GetAddressPortStr());
-    } else {
-      // Either there is no-leader or more likely there are not enough nodes up
-      // and running.
-      return grpc::Status(
-          grpc::StatusCode::UNAVAILABLE,
-          "[KVS]: Cluster is not in a state to serve requests right now");
-    }
+  Status status = PaxosProposeWrapper(serialized_request);
+  if (status.ok()) {
+    response->set_status("[KVS]: Put operation Successful");
   }
-
-  response->set_status("[KVS]: Put operation Successful");
-  return Status::OK;
+  return status;
 }
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
+  Status statusGrpc = PaxosProposeWrapper("", true);
+  if (!statusGrpc.ok()) {
+    return statusGrpc;
+  }
+
   std::string value;
   rocksdb::Status status =
       db_->Get(rocksdb::ReadOptions(), request->key(), &value);
@@ -190,7 +209,6 @@ Status KvsServiceImpl::Delete(ServerContext* context,
                               const DeleteRequest* request,
                               DeleteResponse* response) {
   KeyValueStore::OperationType op;
-
   op.set_type(KeyValueStore::OperationType_Type_DELETE);
   KeyValueStore::DeleteRequest* kv_del = op.mutable_del_data();
   kv_del->set_key(request->key());
@@ -203,17 +221,15 @@ Status KvsServiceImpl::Delete(ServerContext* context,
                         "Failed to serialize Delete request.");
   }
 
-  // TODO[V]: Paxos propose should return a result that can be forwarded to
-  // client.
-  paxos_->Propose(serialized_request);
-
-  response->set_status("[KVS]: Delete operation Successful");
-  return Status::OK;
+  Status status = PaxosProposeWrapper(serialized_request);
+  if (status.ok()) {
+    response->set_status("[KVS]: Delete operation Successful");
+  }
+  return status;
 }
 
-void RunKvsServer(const std::string& db_path,
-                  std::vector<witnesskvs::paxos::Node> nodes, uint8_t node_id) {
-  // std::string port_str = std::to_string(port);
+void RunKvsServer(const std::string& db_path, std::vector<Node> nodes,
+                  uint8_t node_id) {
   std::string server_address = nodes[node_id].GetAddressPortStr();
 
   KvsServiceImpl service(db_path, nodes);
@@ -231,11 +247,9 @@ int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // absl::InitializeLog();
 
-  auto nodes = witnesskvs::paxos::ParseNodesConfig(
-      absl::GetFlag(FLAGS_kvs_node_config_file));
+  auto nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
   CHECK_NE(nodes.size(), 0);
 
-  // uint16_t server_port = absl::GetFlag(FLAGS_kvs_port);
   uint8_t node_id = absl::GetFlag(FLAGS_kvs_node_id);
 
   std::string database_path =
