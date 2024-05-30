@@ -122,13 +122,13 @@ TEST_F(PaxosSanity, ReplicatedLogSanity) {
   std::string leader_address;
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[0]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   uint8_t leader_id = ip_to_node_id[leader_address];
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[leader_id]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
   
   VerifyLogIntegrity(nodes, num_proposals);
@@ -148,13 +148,13 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[num_nodes - 1]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   uint8_t leader_id = ip_to_node_id[leader_address];
   for ( size_t i = 0; i < num_proposals; i++ ) {
     auto status = nodes[leader_id]->Propose(std::to_string( i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
   // Mimic node 0 going away and coming back up.
   nodes[0].reset();
@@ -178,7 +178,7 @@ TEST_F(PaxosSanity, BasicStableLogSanity) {
   // Make node 0 propose some values and verify that all nodes see the same log.
   for (size_t i = 0; i < num_proposals; i++) {
     auto status =  nodes[0]->Propose(std::to_string(num_proposals + i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   leader_id = ip_to_node_id[leader_address];
@@ -203,13 +203,13 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_proposals = 5;
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[num_nodes - 1]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   uint8_t leader_id = ip_to_node_id[leader_address];
   for ( size_t i = 0; i < num_proposals; i++ ) {
     auto status = nodes[leader_id]->Propose(std::to_string( i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
 
   // Mimic node 0 going away and coming back up.
@@ -220,14 +220,14 @@ TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[num_nodes - 1]->Propose(
         std::to_string( num_proposals + i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   leader_id = ip_to_node_id[leader_address];
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[leader_id]->Propose(
         std::to_string( num_proposals + i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
 
   VerifyLogIntegrity(nodes, 2 * num_proposals);
@@ -249,13 +249,13 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   // First batch of proposals, all nodes are up.
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[0]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   uint8_t leader_id = ip_to_node_id[leader_address];
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[leader_id]->Propose(std::to_string(i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
 
   // Mimic node going away and some operations happening while node is down and
@@ -266,14 +266,14 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   // Second batch of proposals, one node is not up.
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[0]->Propose(std::to_string(num_proposals + i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   leader_id = ip_to_node_id[leader_address];
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[leader_id]->Propose(
         std::to_string( num_proposals + i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
 
   nodes[num_nodes - 1] = std::make_unique<witnesskvs::paxos::Paxos>((num_nodes - 1));
@@ -282,14 +282,14 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   // Third batch of proposals, all nodes are up again.
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[0]->Propose(std::to_string(2 * num_proposals + i), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
   }
 
   leader_id = ip_to_node_id[leader_address];
   for (size_t i = 0; i < num_proposals; i++) {
     auto status = nodes[leader_id]->Propose(
         std::to_string( 2 * num_proposals + i ), &leader_address, false);
-    ASSERT_EQ(witnesskvs::paxos::Paxos::PAXOS_OK, status);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
   }
 
   // Log must reflect the operations from all three batch of proposals.

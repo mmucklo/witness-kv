@@ -8,6 +8,13 @@
 #include "replicated_log.hh"
 
 namespace witnesskvs::paxos {
+  enum PaxosResult
+  {
+    PAXOS_OK = 1,
+    PAXOS_ERROR_NOT_PERMITTED = 2,
+    PAXOS_ERROR_LEADER_NOT_READY = 3,
+    PAXOS_ERROR_NO_QUORUM = 4,
+  };
 
 class Paxos {
  private:
@@ -18,13 +25,6 @@ class Paxos {
   uint8_t node_id_;
 
  public:
-  enum PaxosResult
-  {
-    PAXOS_OK = 1,
-    PAXOS_ERROR_NOT_PERMITTED = 2,
-    PAXOS_ERROR_LEADER_NOT_READY = 3,
-    PAXOS_ERROR_NO_QUORUM = 4,
-  };
   Paxos(uint8_t node_id);
   ~Paxos();
 

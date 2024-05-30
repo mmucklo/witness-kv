@@ -24,7 +24,7 @@ Paxos::~Paxos() {
   replicated_log_.reset();
 }
 
-Paxos::PaxosResult Paxos::Propose(const std::string& value, std::string* leader_address, bool is_Read) {
+PaxosResult Paxos::Propose(const std::string& value, std::string* leader_address, bool is_Read) {
   CHECK_NE(this->proposer_, nullptr) << "Proposer should not be NULL.";
 
   if (!paxos_node_->ClusterHasEnoughNodesUp()) {
