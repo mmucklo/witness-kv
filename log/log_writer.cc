@@ -7,10 +7,6 @@
 #include <string>
 #include <type_traits>
 
-#include "byte_conversion.h"
-#include "log_util.h"
-#include "log.pb.h"
-
 #include "absl/crc/crc32c.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -20,6 +16,9 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
+#include "byte_conversion.h"
+#include "log.pb.h"
+#include "log_util.h"
 #include "re2/re2.h"
 
 // TODO(mmucklo): explore encrypted at rest
@@ -69,7 +68,12 @@ LogWriter::LogWriter(std::string dir, std::string prefix,
   }
 }
 
-LogWriter::LogWriter(std::string filename, int64_t micros) : rotation_enabled_(false) {
+LogWriter::LogWriter(std::string filename, int64_t micros,
+                     std::function<uint64_t(const Log::Message&)> idxfn)
+    : idxfn_(std::move(idxfn)),
+      max_idx_(kIdxSentinelValue),
+      min_idx_(kIdxSentinelValue),
+      rotation_enabled_(false) {
   absl::MutexLock l(&lock_);
   InitFileWriterWithFileLocked(std::move(filename), micros);
 }
@@ -114,7 +118,8 @@ void LogWriter::InitFileWriterLocked() {
   InitFileWriterWithFileLocked(filename, micros);
 }
 
-void LogWriter::InitFileWriterWithFileLocked(const std::string& filename, const uint64_t micros) {
+void LogWriter::InitFileWriterWithFileLocked(const std::string& filename,
+                                             const uint64_t micros) {
   file_writer_ = std::make_unique<FileWriter>(filename);
   filenames_.push_back(filename);
   Log::Header header;
@@ -130,6 +135,32 @@ void LogWriter::InitFileWriterWithFileLocked(const std::string& filename, const 
   Write(header_str);
   VLOG(1) << "LogWriter::InitFileWriterLocked header bytes: "
           << file_writer_->bytes_received();
+}
+
+void LogWriter::MaybeForceRotate() {
+  absl::MutexLock l(&lock_);
+  if (min_idx_ == kIdxSentinelValue) {
+    // It seems we haven't written anything otherwise this would be not the
+    // sentinel.
+    return;
+  }
+  RotateLocked();
+}
+
+void LogWriter::RotateLocked() {
+  lock_.AssertHeld();
+  // Rotate the log:
+  std::filesystem::path prev_path =
+      std::filesystem::path(file_writer_->filename());
+  InitFileWriterLocked();
+  FileWriter::WriteHeader(prev_path, GetIdxCord(min_idx_, max_idx_));
+  if (rotate_callback_) {
+    // Let those who need to know that we rotated (e.g. LogTruncator who tracks
+    // the file available to truncate).
+    rotate_callback_(prev_path.string(), min_idx_, max_idx_);
+  }
+  min_idx_ = kIdxSentinelValue;
+  max_idx_ = kIdxSentinelValue;
 }
 
 void LogWriter::MaybeRotate(uint64_t size_est) {
@@ -155,14 +186,10 @@ void LogWriter::MaybeRotate(uint64_t size_est) {
     }
 
     // Should rotate the log:
-    std::filesystem::path prev_path =
-        std::filesystem::path(file_writer_->filename());
-    InitFileWriterLocked();
-    FileWriter::WriteHeader(prev_path, GetIdxCord(min_idx_, max_idx_));
-    min_idx_ = kIdxSentinelValue;
-    max_idx_ = kIdxSentinelValue;
+    RotateLocked();
   }
 }
+
 std::vector<std::shared_ptr<LogWriter::ListEntry>> LogWriter::GetNextMsgBatch(
     std::weak_ptr<ListEntry> entry) {
   // Get the waiting messages off the list up to a certain size, outside of I/O
@@ -218,8 +245,7 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
     const uint64_t idx = idxfn_ ? idxfn_(msg) : kIdxSentinelValue;
     VLOG(2) << "found idx: " << idx;
     std::shared_ptr<ListEntry> entry = std::make_shared<ListEntry>(
-        std::make_unique<std::string>(std::move(msg_str)),
-        idx);
+        std::make_unique<std::string>(std::move(msg_str)), idx);
     my_entry = entry;
     absl::MutexLock wl(&write_list_lock_);
     // unique_ptr used here as a hack to get around copies when going in and out
@@ -310,6 +336,12 @@ void LogWriter::SetSkipFlush(bool skip_flush) {
 bool LogWriter::skip_flush() const {
   absl::MutexLock l(&lock_);
   return skip_flush_;
+}
+
+void LogWriter::RegisterRotateCallback(
+    absl::AnyInvocable<void(std::string, uint64_t, uint64_t)> fn) {
+  absl::MutexLock l(&lock_);
+  rotate_callback_ = std::move(fn);
 }
 
 }  // namespace witnesskvs::log

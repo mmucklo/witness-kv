@@ -9,6 +9,7 @@
 #include <variant>
 #include <vector>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -111,7 +112,7 @@ void LogsTruncator::DoSingleFileTruncation(absl::string_view filename,
   {
     const std::string filename_str(filename);
     LogReader log_reader(filename_str);
-    LogWriter log_writer(temp_filename, file_parts.micros);
+    LogWriter log_writer(temp_filename, file_parts.micros, idxfn_);
     for (const Log::Message& msg : log_reader) {
       const uint64_t idx = idxfn_(msg);
       if (idx < max_idx) {
@@ -147,6 +148,7 @@ void LogsTruncator::DoSingleFileTruncation(absl::string_view filename,
 
 void LogsTruncator::DoTruncation(uint64_t max_idx) {
   absl::MutexLock l(&lock_);
+  std::vector<std::string> erase_files;
   for (const auto& [filename, file_info] : filename_max_idx_) {
     if (file_info.max_idx < max_idx) {
       // Delete file.
@@ -155,6 +157,7 @@ void LogsTruncator::DoTruncation(uint64_t max_idx) {
             "LogsTruncator::DoTruncation: Can't remove: ", filename, " ",
             std::strerror(errno));
       }
+      erase_files.push_back(filename);
     } else if (file_info.min_idx < max_idx) {
       // can remove individual entries...
       DoSingleFileTruncation(filename, max_idx);
@@ -164,6 +167,9 @@ void LogsTruncator::DoTruncation(uint64_t max_idx) {
       CHECK_OK(ReadHeader(std::filesystem::path(filename), false))
           << "Trouble reading header of " << filename;
     }
+  }
+  for (const auto& file : erase_files) {
+    CHECK_EQ(filename_max_idx_.erase(file), 1);
   }
 }
 
@@ -234,6 +240,17 @@ absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
 LogsTruncator::filename_max_idx() {
   absl::MutexLock l(&lock_);
   return filename_max_idx_;
+}
+
+absl::AnyInvocable<void(std::string, uint64_t, uint64_t)>
+LogsTruncator::GetCallbackFn() {
+  auto callback = [this](std::string filename, uint64_t min_idx,
+                         uint64_t max_idx) {
+    Register(TruncationFileInfo{.min_idx = min_idx,
+                                .max_idx = max_idx,
+                                .filename = std::move(filename)});
+  };
+  return callback;
 }
 
 }  // namespace witnesskvs::log

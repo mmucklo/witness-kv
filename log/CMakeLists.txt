@@ -103,6 +103,7 @@ target_link_libraries(logs_truncator_lib PUBLIC
     log_writer_lib
     log_util_lib
     logproto
+    absl::any_invocable
     absl::base
     absl::core_headers
     absl::flags

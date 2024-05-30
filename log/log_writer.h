@@ -23,12 +23,17 @@ class LogWriter {
  public:
   LogWriter() = delete;
   // Create a LogWriter with directory and filename prefix as specified.
+
+  // DEPRECATED - should use the one that requires an idxfn.
   LogWriter(std::string dir, std::string prefix);
+
+  // idxfn - a function that returns the idx for the log message passed in.
   LogWriter(std::string dir, std::string prefix,
             std::function<uint64_t(const Log::Message&)> idxfn);
 
   // For file-swapping purposes, intialize a single, non-rotating LogRotating.
-  LogWriter(std::string filename, int64_t micros);
+  LogWriter(std::string filename, int64_t micros,
+            std::function<uint64_t(const Log::Message&)> idxfn);
 
   ~LogWriter();
   // Disable copy (and move) semantics.
@@ -37,6 +42,12 @@ class LogWriter {
 
   // Logs msg, returns when sync'd.
   absl::Status Log(const Log::Message& msg);
+
+  // Will force a log rotation if the file has any entries.
+  void MaybeForceRotate();
+
+  void RegisterRotateCallback(
+      absl::AnyInvocable<void(std::string, uint64_t, uint64_t)> fn);
 
   // Returns the current filename in use.
   std::string filename() const ABSL_LOCKS_EXCLUDED(lock_);
@@ -58,7 +69,9 @@ class LogWriter {
 
   // Initializes a new FileWriter.
   void InitFileWriterLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
-  void InitFileWriterWithFileLocked(const std::string& filename, uint64_t micros) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  void InitFileWriterWithFileLocked(const std::string& filename,
+                                    uint64_t micros)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Writes a raw str to the log, preceeding with size, and ending with a 32-bit
   // checksum.
@@ -69,6 +82,7 @@ class LogWriter {
 
   // Maybe rotate the log file.
   void MaybeRotate(uint64_t size_est) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  void RotateLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // Gets a batch of waiting messages off the list, popping the front of the
   // list until it's empty, or we've filled up to the maximum size to write at a
@@ -112,9 +126,11 @@ class LogWriter {
   std::vector<std::string> filenames_
       ABSL_GUARDED_BY(lock_);  // List of files written to.
   std::function<uint64_t(const Log::Message&)> idxfn_;  //
-  uint64_t max_idx_;
-  uint64_t min_idx_;
+  uint64_t max_idx_ ABSL_GUARDED_BY(lock_);
+  uint64_t min_idx_ ABSL_GUARDED_BY(lock_);
   const bool rotation_enabled_;
+  absl::AnyInvocable<void(std::string, uint64_t, uint64_t)> rotate_callback_
+      ABSL_GUARDED_BY(lock_);
   friend LogWriterTestPeer;
 };
 

@@ -10,6 +10,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
@@ -17,8 +18,8 @@
 
 namespace witnesskvs::log {
 
-// TODO(mmucklo) - feedback loop from rotation.
-// TODO(mmucklo) - truncate from filesystem rather than memory hash.
+// LogsTruncator, will periodically truncate logs
+// IMPORTANT: must be instantiated before LogWriter and destroyed after the same.
 class LogsTruncator {
  public:
   LogsTruncator(std::string dir, std::string prefix,
@@ -34,17 +35,22 @@ class LogsTruncator {
   // Truncates log files up to max_idx.
   void Truncate(TruncationIdx max_idx);
 
-  // Registers a set of max_idx and min_idx against a filename.
-  void Register(TruncationFileInfo truncation_file_info);
-
   absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx()
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
+  // Returns a callback function primarily for use in LogWriter during log
+  // rotations.
+  absl::AnyInvocable<void(std::string, uint64_t, uint64_t)> GetCallbackFn();
+
  private:
+  // TODO(mmucklo): method comments.
   void Init();
   void Run(std::stop_token& stop_token);
   void DoTruncation(uint64_t max_idx);
   void DoSingleFileTruncation(absl::string_view filename, uint64_t max_idx);
+
+  // Registers a set of max_idx and min_idx against a filename.
+  void Register(TruncationFileInfo truncation_file_info);
 
   // Reads a header and updates filename_max_idx_ hash.
   //
@@ -60,13 +66,17 @@ class LogsTruncator {
   std::queue<std::variant<TruncationIdx, TruncationFileInfo>> queue_
       ABSL_GUARDED_BY(truncation_queue_lock_);
 
-  // Map of filename to max_idx.
   absl::Mutex lock_;
+
+  // Map of filename to max_idx.
+  // This is a list of rotatable filenames, and their min/max idx values.
   absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx_
       ABSL_GUARDED_BY(lock_);
 
-  // Whether the map is in use, or not (memory constraints).
-  bool filename_max_idx_in_use_;
+  // TODO(mmucklo) if there are a lot of log files, the map could get a bit big
+  // in which case we can just iterate over the directory and directly read each
+  // file header one by one when we want to truncate.
+  // bool filename_max_idx_in_use_;
 
   const std::string dir_;
   const std::string prefix_;

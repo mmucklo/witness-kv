@@ -155,12 +155,85 @@ TEST(LogsTruncator, MultiFile) {
       }
       indexes.push_back(msg.paxos().idx());
     }
+    EXPECT_EQ(min_idx, 11);
+    EXPECT_EQ(max_idx, 14);
+    EXPECT_THAT(indexes, ElementsAre(11, 12, 13, 14));
+    EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(first_file)));
+    EXPECT_TRUE(std::filesystem::exists(std::filesystem::path(cleanup_files[0])));
+    filename_max_idx = logs_truncator.filename_max_idx();
+    EXPECT_THAT(filename_max_idx, SizeIs(1));
+    EXPECT_EQ(filename_max_idx[cleanup_files[0]].min_idx, 11);
+    EXPECT_EQ(filename_max_idx[cleanup_files[0]].max_idx, 14);
   }
-  EXPECT_EQ(min_idx, 11);
-  EXPECT_EQ(max_idx, 14);
-  EXPECT_THAT(indexes, ElementsAre(11, 12, 13, 14));
-  EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(first_file)));
   CleanupFiles(cleanup_files);
+}
+
+TEST(LogTruncatorTest, RotationTest) {
+  std::vector<std::string> cleanup_files;
+  std::string first_file;
+  std::string prefix = test::GetTempPrefix("logs_truncator_");
+  {
+    LogsTruncator logs_truncator("/tmp", prefix, [](const Log::Message& msg) {
+      return msg.paxos().idx();
+    });
+    absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
+        filename_max_idx = logs_truncator.filename_max_idx();
+    EXPECT_THAT(filename_max_idx, SizeIs(0));
+
+    LogWriter log_writer("/tmp", prefix, [](const Log::Message& msg) {
+      return msg.paxos().idx();
+    });
+    for (int i = 0; i < 5; i++) {
+      Log::Message log_message;
+      log_message.mutable_paxos()->set_idx(i);
+      log_message.mutable_paxos()->set_min_proposal(4);
+      log_message.mutable_paxos()->set_accepted_proposal(9);
+      log_message.mutable_paxos()->set_accepted_value("test1234");
+      log_message.mutable_paxos()->set_is_chosen(true);
+      ASSERT_THAT(log_writer.Log(log_message), IsOk());
+    }
+    first_file = log_writer.filename();
+    log_writer.RegisterRotateCallback(logs_truncator.GetCallbackFn());
+    log_writer.MaybeForceRotate();
+    absl::SleepFor(absl::Seconds(4));
+    filename_max_idx = logs_truncator.filename_max_idx();
+    EXPECT_THAT(filename_max_idx, SizeIs(1));
+    for (const auto& [filename, file_info] : filename_max_idx) {
+      EXPECT_EQ(filename, first_file);
+      EXPECT_EQ(file_info.max_idx, 4);
+      EXPECT_EQ(file_info.min_idx, 0);
+    }
+
+    for (int i = 9; i < 15; i++) {
+      Log::Message log_message;
+      log_message.mutable_paxos()->set_idx(i);
+      log_message.mutable_paxos()->set_min_proposal(4);
+      log_message.mutable_paxos()->set_accepted_proposal(9);
+      log_message.mutable_paxos()->set_accepted_value("test1234");
+      log_message.mutable_paxos()->set_is_chosen(true);
+      ASSERT_THAT(log_writer.Log(log_message), IsOk());
+    }
+    cleanup_files.push_back(log_writer.filename());
+    filename_max_idx = logs_truncator.filename_max_idx();
+    EXPECT_THAT(filename_max_idx, SizeIs(1));
+    for (const auto& [filename, file_info] : filename_max_idx) {
+      EXPECT_EQ(filename, first_file);
+      EXPECT_EQ(file_info.max_idx, 4);
+      EXPECT_EQ(file_info.min_idx, 0);
+    }
+    log_writer.RegisterRotateCallback(logs_truncator.GetCallbackFn());
+    log_writer.MaybeForceRotate();
+    absl::SleepFor(absl::Seconds(4));
+
+    filename_max_idx = logs_truncator.filename_max_idx();
+    EXPECT_THAT(filename_max_idx, SizeIs(2));
+    EXPECT_EQ(filename_max_idx[first_file].min_idx, 0);
+    EXPECT_EQ(filename_max_idx[first_file].max_idx, 4);
+    EXPECT_EQ(filename_max_idx[cleanup_files[0]].min_idx, 9);
+    EXPECT_EQ(filename_max_idx[cleanup_files[0]].max_idx, 14);
+    
+    // TODO(mmucklo) maybe run a rotation here and verify.
+  }
 }
 
 }  // namespace witnesskvs::log
