@@ -8,13 +8,21 @@
 #include "replicated_log.hh"
 
 namespace witnesskvs::paxos {
+  enum PaxosResult
+  {
+    PAXOS_OK = 1,
+    PAXOS_ERROR_NOT_PERMITTED = 2,
+    PAXOS_ERROR_LEADER_NOT_READY = 3,
+    PAXOS_ERROR_NO_QUORUM = 4,
+  };
 
 class Paxos {
  private:
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
   std::unique_ptr<AcceptorService> acceptor_;
-  std::unique_ptr<ProposerService> proposer_;
+  std::unique_ptr<Proposer> proposer_;
+  uint8_t node_id_;
 
  public:
   Paxos(uint8_t node_id, std::function<void(std::string)> callback = nullptr);
@@ -24,7 +32,7 @@ class Paxos {
   // Paxos nodes. If value is empty this will trigger a NOP paxos round as
   // described in section 3 in
   // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
-  void Propose(const std::string& value);
+  PaxosResult Propose(const std::string& value, std::string* leader_address = nullptr, bool is_Read = false);
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
