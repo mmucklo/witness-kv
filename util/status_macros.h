@@ -42,7 +42,7 @@
   do {                                                                       \
     /* Using _status below to avoid capture problems if expr is "status". */ \
     const absl::Status _status = (expr);                                     \
-    if (ABSL_PREDICT_FALSE(!_status.ok())) return _status.status();          \
+    if (ABSL_PREDICT_FALSE(!_status.ok())) return _status;          \
   } while (0)
 
 // Executes an expression `rexpr` that returns a `absl::StatusOr<T>`. On
@@ -81,7 +81,7 @@
 // well as a `mediapipe::StatusBuilder` object populated with the error and
 // named by a single underscore `_`. The expression typically uses the
 // builder to modify the status and is returned directly in manner similar
-// to MP_RETURN_IF_ERROR. The expression may, however, evaluate to any type
+// to RETURN_IF_ERROR. The expression may, however, evaluate to any type
 // returnable by the function, including (void). For example:
 //
 // Example: Adjusting the error message.
@@ -145,7 +145,7 @@
 // because it thinks you might want the else to bind to the first if.  This
 // leads to problems with code like:
 //
-//   if (do_expr) MP_RETURN_IF_ERROR(expr) << "Some message";
+//   if (do_expr) RETURN_IF_ERROR(expr) << "Some message";
 //
 // The "switch (0) case 0:" idiom is used to suppress this.
 #define MP_STATUS_MACROS_IMPL_ELSE_BLOCKER_ \

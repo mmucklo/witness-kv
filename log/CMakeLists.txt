@@ -1,7 +1,9 @@
 add_library(file_writer_lib file_writer.cc)
+add_library(log_util_lib log_util.cc)
 add_library(log_writer_lib log_writer.cc)
 add_library(log_reader_lib log_reader.cc)
 add_library(logs_loader_lib logs_loader.cc)
+add_library(logs_truncator_lib logs_truncator.cc)
 
 find_package(re2 REQUIRED)
 
@@ -19,6 +21,12 @@ target_include_directories(log_reader_lib
 target_include_directories(logs_loader_lib
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 )
+target_include_directories(log_util_lib
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_include_directories(logs_truncator_lib
+    INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
+)
 
 add_executable(log_reader log_reader_main.cc)
 add_executable(log_faker log_faker.cc)
@@ -27,6 +35,7 @@ add_executable(file_writer_test file_writer_test.cc)
 add_executable(log_writer_test log_writer_test.cc)
 add_executable(log_reader_test log_reader_test.cc)
 add_executable(logs_loader_test logs_loader_test.cc)
+add_executable(logs_truncator_test logs_truncator_test.cc)
 
 target_include_directories(log_reader
     INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -42,8 +51,18 @@ target_link_libraries(file_writer_lib PUBLIC
     absl::log
 )
 
+target_link_libraries(log_util_lib PUBLIC
+    absl::flat_hash_map
+    absl::log
+    absl::status
+    absl::strings
+    re2::re2
+    status_macros
+)
+
 target_link_libraries(log_writer_lib PUBLIC
     file_writer_lib
+    log_util_lib
     logproto
     absl::base
     absl::core_headers
@@ -51,7 +70,6 @@ target_link_libraries(log_writer_lib PUBLIC
     absl::flags
     absl::log
     absl::synchronization
-    re2::re2
 )
 
 target_link_libraries(log_reader_lib PUBLIC
@@ -70,13 +88,26 @@ target_link_libraries(log_reader_lib PUBLIC
 target_link_libraries(logs_loader_lib PUBLIC
     log_reader_lib
     log_writer_lib
+    log_util_lib
     logproto
     absl::base
     absl::core_headers
     absl::flags
     absl::log
     absl::strings
-    re2::re2
+    status_macros
+)
+
+target_link_libraries(logs_truncator_lib PUBLIC
+    log_reader_lib
+    log_writer_lib
+    log_util_lib
+    logproto
+    absl::base
+    absl::core_headers
+    absl::flags
+    absl::log
+    absl::strings
     status_macros
 )
 
@@ -149,6 +180,24 @@ target_link_libraries(logs_loader_test PUBLIC
     test_util_lib
     absl::core_headers
     absl::flags
+    absl::flat_hash_set
+    absl::log
+    absl::strings
+    absl::status
+    gtest
+    protobuf_matchers
+    kvsproto
+)
+
+# TODO(mmucklo): why do we need kvsproto
+target_link_libraries(logs_truncator_test PUBLIC
+    test_main
+    gmock
+    log_util_lib
+    log_writer_lib
+    logs_loader_lib
+    logs_truncator_lib
+    test_util_lib
     absl::log
     absl::strings
     absl::status
@@ -158,4 +207,4 @@ target_link_libraries(logs_loader_test PUBLIC
 )
 
 include(GoogleTest)
-gtest_discover_tests(file_writer_test log_writer_test log_reader_test logs_loader_test)
+gtest_discover_tests(file_writer_test log_writer_test log_reader_test logs_loader_test logs_truncator_test)

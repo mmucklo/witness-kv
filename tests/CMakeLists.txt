@@ -30,6 +30,7 @@ target_link_libraries(protobuf_matchers PUBLIC
 target_link_libraries(test_util_lib PUBLIC 
     absl::status
     absl::strings
+    absl::time
 )
 
 set(This paxos_tests)

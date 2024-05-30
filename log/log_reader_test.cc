@@ -117,11 +117,11 @@ TEST(LogReaderTest, MultiTest) {
   log_message1.mutable_paxos()->set_accepted_value("test1234");
   log_message1.mutable_paxos()->set_is_chosen(true);
   Log::Message log_message2;
-  log_message1.mutable_paxos()->set_idx(1);
-  log_message1.mutable_paxos()->set_min_proposal(5);
-  log_message1.mutable_paxos()->set_accepted_proposal(10);
-  log_message1.mutable_paxos()->set_accepted_value("test12345");
-  log_message1.mutable_paxos()->set_is_chosen(true);
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12345");
+  log_message2.mutable_paxos()->set_is_chosen(true);
   {
     LogWriter log_writer("/tmp", "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
@@ -149,6 +149,47 @@ TEST(LogReaderTest, MultiTest) {
     EXPECT_EQ(count, 2);
     EXPECT_THAT(msgs, ElementsAre(EqualsProto(log_message1),
                                   EqualsProto(log_message2)));
+  }
+  ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
+}
+
+TEST(LogReaderTest, IdxTest) {
+  std::vector<std::string> cleanup_files;
+  std::string filename;
+  Log::Message log_message1;
+  log_message1.mutable_paxos()->set_idx(15);
+  log_message1.mutable_paxos()->set_min_proposal(4);
+  log_message1.mutable_paxos()->set_accepted_proposal(9);
+  log_message1.mutable_paxos()->set_accepted_value("test1234");
+  log_message1.mutable_paxos()->set_is_chosen(true);
+  Log::Message log_message2;
+  log_message2.mutable_paxos()->set_idx(1);
+  log_message2.mutable_paxos()->set_min_proposal(5);
+  log_message2.mutable_paxos()->set_accepted_proposal(10);
+  log_message2.mutable_paxos()->set_accepted_value("test12345");
+  log_message2.mutable_paxos()->set_is_chosen(true);
+  {
+    LogWriter log_writer("/tmp", "log_reader_test", [](const Log::Message& msg) { 
+      LOG(INFO) << "whatmsg:" << msg.DebugString();
+      LOG(INFO) << "paxosidx: " << msg.paxos().idx();
+      return msg.paxos().idx(); });
+    ASSERT_THAT(log_writer.Log(log_message1), IsOk());
+    ASSERT_THAT(log_writer.Log(log_message2), IsOk());
+    cleanup_files = log_writer.filenames();
+    filename = log_writer.filename();
+  }
+  {
+    LogReader log_reader(filename);
+    std::vector<Log::Message> msgs;
+    for (auto& log_msg : log_reader) {
+      msgs.push_back(log_msg);
+    }
+    EXPECT_THAT(msgs, ElementsAre(EqualsProto(log_message1),
+                                  EqualsProto(log_message2)));
+    absl::StatusOr<Log::Header> header = log_reader.header();                                  
+    ASSERT_THAT(header.status(), IsOk());
+    EXPECT_EQ(header.value().min_idx(), 1);
+    EXPECT_EQ(header.value().max_idx(), 15);
   }
   ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
 }
