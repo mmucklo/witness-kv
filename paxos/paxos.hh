@@ -2,7 +2,6 @@
 #define PAXOS_HH_
 
 #include "acceptor.hh"
-#include "common.hh"
 #include "node.hh"
 #include "proposer.hh"
 #include "replicated_log.hh"

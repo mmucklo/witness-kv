@@ -6,8 +6,6 @@
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
 
-#include "absl/flags/flag.h"
-
 ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
           "Heartbeat timeout for paxos node");
 

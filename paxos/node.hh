@@ -1,10 +1,7 @@
 #ifndef NODE_HH_
 #define NODE_HH_
 
-#include <cstdint>
-
 #include "acceptor.hh"
-#include "common.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
 #include "replicated_log.hh"

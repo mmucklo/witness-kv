@@ -1,7 +1,5 @@
 #include "replicated_log.hh"
 
-#include "absl/flags/flag.h"
-#include "absl/status/status.h"
 #include "log/logs_loader.h"
 
 ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
@@ -11,8 +9,8 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-ReplicatedLog::ReplicatedLog(
-    uint8_t node_id, std::function<void(std::string)> callback)
+ReplicatedLog::ReplicatedLog(uint8_t node_id,
+                             std::function<void(std::string)> callback)
     : node_id_{node_id},
       first_unchosen_index_{0},
       proposal_number_{0},
