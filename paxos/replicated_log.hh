@@ -3,6 +3,7 @@
 
 #include "common.hh"
 #include "log/log_writer.h"
+#include "log/logs_truncator.h"
 
 namespace witnesskvs::paxos {
 
@@ -29,6 +30,7 @@ class ReplicatedLog {
   static constexpr uint8_t max_node_id_ = (1ull << num_bits_for_node_id_) - 1;
   static constexpr uint64_t mask_ = ~(max_node_id_);
 
+  std::unique_ptr<witnesskvs::log::LogsTruncator> logs_truncator_;
   std::unique_ptr<witnesskvs::log::LogWriter> log_writer_;
 
   void UpdateFirstUnchosenIdx();

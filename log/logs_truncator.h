@@ -19,7 +19,8 @@
 namespace witnesskvs::log {
 
 // LogsTruncator, will periodically truncate logs
-// IMPORTANT: must be instantiated before LogWriter and destroyed after the same.
+// IMPORTANT: must be instantiated before LogWriter and destroyed after the
+// same.
 class LogsTruncator {
  public:
   LogsTruncator(std::string dir, std::string prefix,

@@ -20,8 +20,11 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
   const std::string prefix =
       absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
 
-  witnesskvs::log::LogsLoader log_loader{
-      absl::GetFlag(FLAGS_paxos_log_directory), prefix};
+  witnesskvs::log::SortingLogsLoader log_loader{
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix,
+      [](const Log::Message &a, const Log::Message &b) {
+        return a.paxos().idx() < b.paxos().idx();
+      }};
   for (auto &log_msg : log_loader) {
     ReplicatedLogEntry &entry = log_entries_[log_msg.paxos().idx()];
     entry.idx_ = log_msg.paxos().idx();
@@ -48,8 +51,13 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
           << first_unchosen_index_ << " and proposal number "
           << proposal_number_;
 
+  logs_truncator_ = std::make_unique<log::LogsTruncator>(
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix,
+      [](const Log::Message &msg) { return msg.paxos().idx(); });
   log_writer_ = std::make_unique<witnesskvs::log::LogWriter>(
-      absl::GetFlag(FLAGS_paxos_log_directory), prefix);
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix,
+      [](const Log::Message &msg) { return msg.paxos().idx(); });
+  log_writer_->RegisterRotateCallback(logs_truncator_->GetCallbackFn());
 }
 
 ReplicatedLog::~ReplicatedLog() {}
