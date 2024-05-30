@@ -26,7 +26,7 @@ struct Node {
   }
 };
 
-class PaxosNode {
+class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
  private:
   std::vector<Node> nodes_;
 
@@ -78,7 +78,7 @@ class PaxosNode {
 
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
-  std::string GetProposerServiceAddress(uint8_t nodes_id) const;
+  std::string GetProposerServiceAddress();
   bool IsLeader() const;
   bool IsLeaderCaughtUp() const {
     return IsLeader() && this->leader_caught_up_;
@@ -92,8 +92,6 @@ class PaxosNode {
                           paxos_rpc::AcceptResponse* response);
   grpc::Status CommitGrpc(uint8_t node_id, paxos_rpc::CommitRequest request,
                           paxos_rpc::CommitResponse* response);
-  grpc::Status SendProposeGrpc(paxos_rpc::ProposeRequest request,
-                               google::protobuf::Empty* response);
 };
 
 // This helper function will parse the node config file specified

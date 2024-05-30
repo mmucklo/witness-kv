@@ -15,17 +15,25 @@
 
 namespace witnesskvs::paxos {
 
-class ProposerService {
+class Proposer {
  private:
-  std::jthread service_thread_;
-  std::stop_source stop_source_ = {};
   uint8_t node_id_;
+  int majority_threshold_;
+
+  std::shared_ptr<ReplicatedLog> replicated_log_;
+  std::shared_ptr<PaxosNode> paxos_node_;
 
  public:
-  ProposerService(const std::string& address, uint8_t node_id,
-                  std::shared_ptr<ReplicatedLog> rlog,
-                  std::shared_ptr<PaxosNode> paxos_node);
-  ~ProposerService();
+  Proposer(int num_acceptors, uint8_t nodeId,
+           std::shared_ptr<ReplicatedLog> rlog,
+           std::shared_ptr<PaxosNode> paxos_node)
+      : majority_threshold_{num_acceptors / 2 + 1},
+        node_id_{nodeId},
+        replicated_log_{rlog},
+        paxos_node_{paxos_node} {}
+  ~Proposer() = default;
+
+  void Propose(const std::string& value);
 };
 
 }  // namespace witnesskvs::paxos
