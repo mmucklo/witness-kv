@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/log/log.h"
 #include "kvs.grpc.pb.h"
 
 using grpc::Channel;
@@ -32,7 +33,7 @@ class KvsClient {
 
     if (status.ok()) {
       return response.value();
-    } else if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    } else if (status.error_code() == grpc::StatusCode::PERMISSION_DENIED) {
       if (!status.error_message().empty()) {
         return GetFromLeader(status.error_message(), key);
       }
@@ -52,8 +53,10 @@ class KvsClient {
 
     if (status.ok()) {
       return response.status();
-    } else if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    } else if (status.error_code() == grpc::StatusCode::PERMISSION_DENIED) {
+      LOG(INFO) << status.error_message();
       if (!status.error_message().empty()) {
+        LOG(INFO) << "Forward to leader";
         return PutToLeader(status.error_message(), key, value);
       }
     }
@@ -71,7 +74,7 @@ class KvsClient {
 
     if (status.ok()) {
       return response.status();
-    } else if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
+    } else if (status.error_code() == grpc::StatusCode::PERMISSION_DENIED) {
       if (!status.error_message().empty()) {
         return DeleteFromLeader(status.error_message(), key);
       }
@@ -91,6 +94,7 @@ class KvsClient {
 
   std::string PutToLeader(const std::string& leader_address,
                           const std::string& key, const std::string& value) {
+    LOG(INFO) << "Put to leader! " << leader_address;
     KvsClient leader_client(grpc::CreateChannel(
         leader_address, grpc::InsecureChannelCredentials()));
     return leader_client.Put(key, value);

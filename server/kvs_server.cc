@@ -34,14 +34,18 @@ using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
 
 // TODO: Maybe parse these from config file.
-ABSL_FLAG(std::string, kvs_ip_address, "localhost", "kvs_ip_address");
-ABSL_FLAG(uint64_t, kvs_port, 40051, "kvs_port");
+ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
+          "KVS config file for nodes ip addresses and ports");
+
+// ABSL_FLAG(std::string, kvs_ip_address, "localhost", "kvs_ip_address");
+// ABSL_FLAG(uint64_t, kvs_port, 40051, "kvs_port");
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
 ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
-  KvsServiceImpl(const std::string& db_path);
+  KvsServiceImpl(const std::string& db_path,
+                 std::vector<witnesskvs::paxos::Node> nodes);
   ~KvsServiceImpl() { delete db_; }
 
   void InitPaxos(void);
@@ -59,9 +63,13 @@ class KvsServiceImpl final : public Kvs::Service {
  private:
   rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
+
+  std::vector<witnesskvs::paxos::Node> nodes_;
 };
 
-KvsServiceImpl::KvsServiceImpl(const std::string& db_path) {
+KvsServiceImpl::KvsServiceImpl(const std::string& db_path,
+                               std::vector<witnesskvs::paxos::Node> nodes)
+    : nodes_{nodes} {
   rocksdb::Options options;
   options.create_if_missing = true;
   rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
@@ -140,9 +148,24 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                         "[KVS]: Failed to serialize Put request.");
   }
 
-  // TODO[V]: Paxos propose should return a result that can be forwarded to
-  // client.
-  paxos_->Propose(serialized_request);
+  uint8_t leader_node_id;
+  witnesskvs::paxos::PaxosResult result =
+      paxos_->Propose(serialized_request, &leader_node_id);
+  if (witnesskvs::paxos::PAXOS_OK != result) {
+    LOG(WARNING) << "[KVS]: Paxos propose failed with error code: " << result;
+    if (witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED == result) {
+      LOG(INFO) << "[KVS]: Returning leader address: "
+                << nodes_[leader_node_id].GetAddressPortStr();
+      return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
+                          nodes_[leader_node_id].GetAddressPortStr());
+    } else {
+      // Either there is no-leader or more likely there are not enough nodes up
+      // and running.
+      return grpc::Status(
+          grpc::StatusCode::UNAVAILABLE,
+          "[KVS]: Cluster is not in a state to serve requests right now");
+    }
+  }
 
   response->set_status("[KVS]: Put operation Successful");
   return Status::OK;
@@ -188,12 +211,12 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return Status::OK;
 }
 
-void RunKvsServer(const std::string& db_path, uint16_t port) {
-  std::string port_str = std::to_string(port);
-  std::string server_address =
-      absl::GetFlag(FLAGS_kvs_ip_address) + ":" + port_str;
+void RunKvsServer(const std::string& db_path,
+                  std::vector<witnesskvs::paxos::Node> nodes, uint8_t node_id) {
+  // std::string port_str = std::to_string(port);
+  std::string server_address = nodes[node_id].GetAddressPortStr();
 
-  KvsServiceImpl service(db_path);
+  KvsServiceImpl service(db_path, nodes);
   service.InitPaxos();
 
   ServerBuilder builder;
@@ -208,11 +231,16 @@ int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // absl::InitializeLog();
 
-  uint16_t server_port = absl::GetFlag(FLAGS_kvs_port);
+  auto nodes = witnesskvs::paxos::ParseNodesConfig(
+      absl::GetFlag(FLAGS_kvs_node_config_file));
+  CHECK_NE(nodes.size(), 0);
+
+  // uint16_t server_port = absl::GetFlag(FLAGS_kvs_port);
+  uint8_t node_id = absl::GetFlag(FLAGS_kvs_node_id);
 
   std::string database_path =
-      absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), server_port, ".",
+      absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), node_id, ".",
                    absl::ToUnixMicros(absl::Now()));
 
-  RunKvsServer(database_path, server_port);
+  RunKvsServer(database_path, nodes, node_id);
 }
