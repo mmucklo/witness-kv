@@ -36,7 +36,6 @@ target_link_libraries(test_util_lib PUBLIC
 set(This paxos_tests)
 
 set(Sources
-    sanity.cc
     paxos_tests.cc
 )
 

@@ -1,11 +1,10 @@
 #include "node.hh"
+
 #include "proposer.hh"
 
 // GRPC headers
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
-
-#include "absl/flags/flag.h"
 
 ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
           "Heartbeat timeout for paxos node");
@@ -18,37 +17,11 @@ ABSL_FLAG(bool, lower_node_witness, false, "Lower nodes are witnesses");
 
 namespace witnesskvs::paxos {
 
-std::vector<Node> ParseNodesConfig() {
-  std::vector<Node> nodes{};
-  std::ifstream config_file(absl::GetFlag(FLAGS_paxos_node_config_file));
-
-  CHECK(config_file.is_open()) << "Failed to open nodes configuration file";
-
-  std::string line;
-  while (std::getline(config_file, line)) {
-    std::stringstream ss(line);
-    std::string ip_address, port_str;
-    int port;
-    if (std::getline(ss, ip_address, ':') && std::getline(ss, port_str)) {
-      try {
-        port = std::stoi(port_str);
-      } catch (const std::invalid_argument& e) {
-        throw std::runtime_error("Invalid port number in config file");
-      }
-      nodes.push_back({ip_address, port});
-    }
-  }
-
-  config_file.close();
-
-  return nodes;
-}
-
 PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
     : num_active_acceptors_conns_{},
       replicated_log_{rlog},
-      leader_node_id_{UINT8_MAX} {
-  nodes_ = ParseNodesConfig();
+      leader_node_id_{INVALID_NODE_ID} {
+  nodes_ = ParseNodesConfig(absl::GetFlag(FLAGS_paxos_node_config_file));
   CHECK_NE(nodes_.size(), 0);
 
   std::set<std::pair<std::string, int>> s;
@@ -145,7 +118,7 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
     {
       absl::MutexLock l(&node_mutex_);
       if (!(cluster_has_valid_leader && (num_active_acceptors_conns_ > 1))) {
-        leader_node_id_ = UINT8_MAX;
+        leader_node_id_ = INVALID_NODE_ID;
       } else if (leader_node_id_ != highest_node_id) {
         LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                   << "] New leader elected with node id: "
@@ -171,8 +144,8 @@ void PaxosNode::HeartbeatThread(const std::stop_source& ss) {
 }
 
 void PaxosNode::ProposeNopAsync(void) {
-  auto proposer = std::make_unique<Proposer>( this->GetNumNodes(), node_id_,
-                                          replicated_log_, shared_from_this());
+  auto proposer = std::make_unique<Proposer>(
+      this->GetNumNodes(), node_id_, replicated_log_, shared_from_this());
   proposer->Propose("");
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
             << "] Performed a Paxos No-op round";
@@ -242,14 +215,6 @@ void PaxosNode::CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs) {
 
 std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
   return nodes_[node_id].GetAddressPortStr();
-}
-
-std::string PaxosNode::GetProposerServiceAddress() {
-  absl::MutexLock l(&node_mutex_);
-  if (leader_node_id_ == UINT8_MAX) {
-    return "";
-  }
-  return nodes_[leader_node_id_].GetAddressPortStr();
 }
 
 bool PaxosNode::IsLeader() const { return nodes_[node_id_].IsLeader(); }

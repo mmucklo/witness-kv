@@ -1,8 +1,5 @@
 #include "proposer.hh"
 
-#include "absl/flags/flag.h"
-#include "absl/log/check.h"
-
 namespace witnesskvs::paxos {
 
 void Proposer::Propose(const std::string& value) {

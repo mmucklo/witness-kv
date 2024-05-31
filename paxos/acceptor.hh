@@ -1,7 +1,6 @@
 #ifndef ACCEPTOR_HH_
 #define ACCEPTOR_HH_
 
-#include "common.hh"
 #include "replicated_log.hh"
 
 namespace witnesskvs::paxos {
