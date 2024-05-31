@@ -48,6 +48,7 @@ void LogsTruncator::Register(TruncationFileInfo truncation_file_info) {
 
 void LogsTruncator::Run(std::stop_token& stop_token) {
   while (!stop_token.stop_requested()) {
+    // TODO(mmucklo): make this wait on a condition (entries in the queue).
     absl::SleepFor(absl::Seconds(1));
     while (true) {
       std::variant<TruncationIdx, TruncationFileInfo> entry;

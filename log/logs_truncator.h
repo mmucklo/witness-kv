@@ -65,7 +65,7 @@ class LogsTruncator {
   // could involve I/O).
   absl::Mutex queue_lock_;
   std::queue<std::variant<TruncationIdx, TruncationFileInfo>> queue_
-      ABSL_GUARDED_BY(truncation_queue_lock_);
+      ABSL_GUARDED_BY(queue_lock_);
 
   absl::Mutex lock_;
 
