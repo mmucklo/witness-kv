@@ -15,6 +15,7 @@
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "byte_conversion.h"
 #include "util/status_macros.h"
@@ -52,7 +53,8 @@ LogReader::LogReader(std::string filename)
   CheckFile(filename_);
   absl::MutexLock l(&lock_);
   f_ = std::fopen(filename_.c_str(), "rb");
-  CHECK(f_ != nullptr);
+  CHECK(f_ != nullptr) << filename_
+                       << " not openable: " << std::strerror(errno);
 }
 
 LogReader::~LogReader() {
@@ -73,7 +75,7 @@ void LogReader::MaybeSeekLocked(long pos) {
   }
 }
 
-absl::StatusOr<uint64_t> LogReader::ReadSizeBytesLocked() {
+absl::StatusOr<uint64_t> LogReader::ReadUInt64Locked() {
   lock_.AssertHeld();
   std::vector<unsigned char> size_buf(8);
   std::size_t bytes = std::fread(&size_buf[0], sizeof(unsigned char), 8, f_);
@@ -83,13 +85,7 @@ absl::StatusOr<uint64_t> LogReader::ReadSizeBytesLocked() {
                         "instead only read: %d bytes",
                         bytes));
   }
-  uint64_t size = fromBytes<uint64_t, std::endian::little>(size_buf);
-  if (size > absl::GetFlag(FLAGS_log_writer_max_msg_size)) {
-    return absl::OutOfRangeError(absl::StrFormat(
-        "Size of header msg is out of range (%d bytes, when max is %d bytes)",
-        size, absl::GetFlag(FLAGS_log_writer_max_msg_size)));
-  }
-  return size;
+  return fromBytes<uint64_t, std::endian::little>(size_buf);
 }
 
 absl::StatusOr<uint32_t> LogReader::ReadCRC32Locked() {
@@ -134,6 +130,20 @@ absl::StatusOr<Log::Message> LogReader::ReadNextMessage(long& pos) {
   return msg_or;
 }
 
+absl::StatusOr<uint64_t> LogReader::ReadIdxLocked() {
+  ASSIGN_OR_RETURN(uint64_t idx, ReadUInt64Locked());
+  ASSIGN_OR_RETURN(uint32_t crc32_idx, ReadCRC32Locked());
+  uint32_t crc32_idx_computed =
+      static_cast<uint32_t>(absl::ComputeCrc32c(absl::StrCat(idx)));
+
+  if (crc32_idx != crc32_idx_computed) {
+    return absl::DataLossError(
+        absl::StrFormat("idx{%d} crc32 {%d} not the same as computed {%d}.",
+                        idx, crc32_idx, crc32_idx_computed));
+  }
+  return idx;
+}
+
 absl::StatusOr<long> LogReader::ReadHeader() {
   absl::MutexLock l(&lock_);
 
@@ -141,7 +151,6 @@ absl::StatusOr<long> LogReader::ReadHeader() {
   // TODO(mmucklo): maybe header_valid_ should store a status so we don't
   // re-read an invalid header in a loop.
   if (pos_header_ != -1) {
-    // TODO(mmucklo): should this fail if called a second time?
     return pos_header_;
   }
 
@@ -149,8 +158,19 @@ absl::StatusOr<long> LogReader::ReadHeader() {
   // Move to the beginning of the file.
   MaybeSeekLocked(0);
 
+  // Read min and max idx
+  ASSIGN_OR_RETURN(uint64_t min_idx, ReadIdxLocked());
+  VLOG(2) << "LogReader::ReadHeader - min_idx" << min_idx;
+  ASSIGN_OR_RETURN(uint64_t max_idx, ReadIdxLocked());
+  VLOG(2) << "LogReader::ReadHeader - max_idx" << max_idx;
+
   // Read size
-  ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
+  ASSIGN_OR_RETURN(uint64_t size, ReadUInt64Locked());
+  if (size > absl::GetFlag(FLAGS_log_writer_max_msg_size)) {
+    return absl::OutOfRangeError(absl::StrFormat(
+        "Size of header msg is out of range (%d bytes, when max is %d bytes)",
+        size, absl::GetFlag(FLAGS_log_writer_max_msg_size)));
+  }
   VLOG(2) << "header after size position: " << std::ftell(f_)
           << " size: " << size;
   CHECK_NE(size, 0);
@@ -164,7 +184,16 @@ absl::StatusOr<long> LogReader::ReadHeader() {
     return absl::DataLossError(
         absl::StrFormat("Unable to ParseFromString the header."));
   }
+  header_.set_min_idx(min_idx);
+  header_.set_max_idx(max_idx);
   return (pos_ = pos_header_ = std::ftell(f_));
+}
+
+absl::StatusOr<Log::Header> LogReader::header() {
+  RETURN_IF_ERROR(ReadHeader().status());
+
+  absl::MutexLock l(&lock_);
+  return header_;
 }
 
 LogReader::iterator::iterator(LogReader* lr) : log_reader(lr), pos(0) {
@@ -215,7 +244,12 @@ absl::StatusOr<Log::Message> LogReader::NextLocked() {
   last_pos_ = pos_;
   CHECK_NE(nullptr, f_);
   // Read size
-  ASSIGN_OR_RETURN(uint64_t size, ReadSizeBytesLocked());
+  ASSIGN_OR_RETURN(uint64_t size, ReadUInt64Locked());
+  if (size > absl::GetFlag(FLAGS_log_writer_max_msg_size)) {
+    return absl::OutOfRangeError(absl::StrFormat(
+        "Size of msg is out of range (%d bytes, when max is %d bytes)",
+        size, absl::GetFlag(FLAGS_log_writer_max_msg_size)));
+  }
   ASSIGN_OR_RETURN(uint32_t crc32, ReadCRC32Locked());
   if (size == 0) {
     // Just a blank message.

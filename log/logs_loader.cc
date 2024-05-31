@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cerrno>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <list>
@@ -10,21 +11,19 @@
 #include <string>
 #include <vector>
 
+#include "log.pb.h"
+#include "log_reader.h"
+#include "log_util.h"
+#include "log_writer.h"
+
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/strings/match.h"
-#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "log.pb.h"
-#include "log_reader.h"
-#include "log_writer.h"
-#include "re2/re2.h"
 
 // The maximum amount of memory we can use for loading and sorting the log
 // entries if we need to sort.
@@ -34,99 +33,6 @@ ABSL_FLAG(uint64_t, logs_loader_max_memory_for_sorting, 1 << 30,
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 
 namespace witnesskvs::log {
-
-extern const char kFilenamePrefix[];
-
-void CheckDir(absl::string_view dir) {
-  // Should be an existing readable, executable directory.
-  // Do a bunch of tests to make sure, otherwise we crash.
-  const std::filesystem::file_status dir_status =
-      std::filesystem::status(std::string(dir));
-  if (!std::filesystem::exists(dir_status)) {
-    LOG(FATAL) << "LogsLoader: dir '" << dir << "' should exist.";
-  }
-  if (!std::filesystem::is_directory(dir_status)) {
-    LOG(FATAL) << "LogsLoader: dir '" << dir << "' should be a directory.";
-  }
-  std::filesystem::perms perms = dir_status.permissions();
-  if ((perms & std::filesystem::perms::owner_write) !=
-          std::filesystem::perms::owner_write ||
-      (perms & std::filesystem::perms::owner_exec) !=
-          std::filesystem::perms::owner_exec) {
-    LOG(FATAL) << "LogWriter: dir '" << dir
-               << "' should be readable and executable.";
-  }
-}
-
-void CheckPrefix(absl::string_view prefix) {
-  if (!re2::RE2::FullMatch(prefix, kFilenamePrefix)) {
-    LOG(FATAL) << "LogLoader: prefix should match " << kFilenamePrefix;
-  }
-}
-
-// Reads the list of files under prefix from the directory.
-// and optionally sorts them by their suffix (presumes suffix is a
-// uint64).
-absl::StatusOr<std::vector<std::filesystem::path>> ReadDir(
-    absl::string_view dir, absl::string_view prefix, bool sort = true) {
-  const std::filesystem::path path{std::string(dir)};
-  struct FileEntry {
-    uint64_t ext_micros;
-    std::filesystem::path path;
-  };
-  std::vector<FileEntry> entries;
-  for (const auto& dir_entry : std::filesystem::directory_iterator{path}) {
-    if (!dir_entry.is_regular_file()) {
-      // TODO(mmucklo): maybe consider following symlinks or not?
-      continue;
-    }
-    std::string filename = dir_entry.path().filename();
-    if (!absl::StartsWith(filename, prefix)) {
-      continue;
-    }
-    const std::filesystem::file_status file_status =
-        std::filesystem::status(dir_entry.path());
-    std::filesystem::perms perms = file_status.permissions();
-    if ((perms & std::filesystem::perms::owner_read) !=
-        std::filesystem::perms::owner_read) {
-      return absl::PermissionDeniedError(
-          absl::StrFormat("log file %s is not readable", filename));
-    }
-    std::vector<absl::string_view> parts = absl::StrSplit(filename, ".");
-    if (parts.size() != 2) {
-      LOG(WARNING) << "LogsLoader: expect parts of filename to be splittable "
-                      "in two, instead there are "
-                   << parts.size() << " for " << filename << " - skipping.";
-      continue;
-    }
-    std::string ext = std::string(parts[1]);
-    uint64_t ext_micros;
-    if (!absl::SimpleAtoi(ext, &ext_micros)) {
-      return absl::OutOfRangeError(absl::StrFormat(
-          "file extension is not parsable as an uint64_t: %s", filename));
-    }
-    entries.push_back(
-        FileEntry{.ext_micros = ext_micros, .path = dir_entry.path()});
-  }
-
-  if (sort) {
-    // Read the earliest file first. As long as we don't write parallel log
-    // streams, the files themselves should have a happens-before relationship.
-    // However given that we have the ability to have multiple threads writing
-    // to the log file simulatenously, we still have the possibility for
-    // unsorted entries to cross log file boundaries, this should be handled
-    // by our external merge sort on the files themselves.
-    std::sort(entries.begin(), entries.end(),
-              [](const FileEntry& a, const FileEntry& b) {
-                return a.ext_micros < b.ext_micros;
-              });
-  }
-  std::vector<std::filesystem::path> ret;
-  for (auto& entry : entries) {
-    ret.push_back(std::move(entry.path));
-  }
-  return ret;
-}
 
 LogsLoader::LogsLoader(
     absl::string_view dir, absl::string_view prefix,
@@ -151,10 +57,10 @@ LogsLoader::LogsLoader(
     : files_(std::move(files)), sortfn_(std::move(sortfn)) {}
 
 void LogsLoader::Init(absl::string_view dir, absl::string_view prefix) {
-  CheckDir(dir);
+  CheckReadDir(dir);
   CheckPrefix(prefix);
   absl::StatusOr<std::vector<std::filesystem::path>> entries =
-      ReadDir(dir, prefix);
+      ReadDir(dir, prefix, /*cleanup=*/true, /*sort=*/true);
   CHECK_OK(entries) << "Bad result reading the directory: "
                     << entries.status().ToString();
   files_ = std::move(entries.value());
@@ -296,15 +202,6 @@ std::vector<std::string> SortLogsFile(
   return log_writer.filenames();
 }
 
-void CleanupFiles(const std::vector<std::string>& files) {
-  for (const auto& filename : files) {
-    if (!std::filesystem::remove(std::filesystem::path(filename))) {
-      LOG(FATAL) << absl::StrCat("Can't cleanup: ", filename, " ",
-                                 std::strerror(errno));
-    }
-  }
-}
-
 // Merges the list of input_prefixes into output_prefix in directory dir.
 // Returns a list of filenames outputted into.
 std::vector<std::string> MergeSortedFiles(
@@ -362,7 +259,7 @@ SortingLogsLoader::SortingLogsLoader(
 
 void CleanupDir(absl::string_view dir, absl::string_view prefix) {
   absl::StatusOr<std::vector<std::filesystem::path>> entries =
-      ReadDir(dir, prefix);
+      ReadDir(dir, prefix, /*cleanup=*/false, /*sort=*/false);
   CHECK_OK(entries);
   if (entries.value().size() > 0) {
     std::vector<std::string> files;
@@ -383,7 +280,7 @@ void CleanupDir(absl::string_view dir, absl::string_view prefix) {
 void SortingLogsLoader::Init(
     absl::string_view dir, absl::string_view prefix,
     std::function<bool(const Log::Message& a, const Log::Message& b)> sortfn) {
-  CheckDir(dir);
+  CheckReadDir(dir);
   CheckPrefix(prefix);
   const std::string prefix_sorted = absl::StrCat(prefix, "_sorted");
   const std::string prefix_merge = absl::StrCat(prefix, "_merge_sorted");
@@ -391,15 +288,10 @@ void SortingLogsLoader::Init(
   CleanupDir(dir, prefix_merge);
 
   absl::StatusOr<std::vector<std::filesystem::path>> entries =
-      ReadDir(dir, prefix);
+      ReadDir(dir, prefix, /*cleanup=*/true, /*sort=*/false);
   CHECK_OK(entries) << "Bad result reading the directory: "
                     << entries.status().ToString();
   std::vector<std::filesystem::path> files = std::move(entries.value());
-  if (files.size() <= 1) {
-    logs_loader_ =
-        std::make_unique<LogsLoader>(std::move(files), std::move(sortfn));
-    return;
-  }
 
   // Step 1, sort all the files.
   std::vector<std::string>

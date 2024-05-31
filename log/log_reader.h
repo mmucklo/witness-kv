@@ -23,6 +23,8 @@ class LogReader {
   LogReader& operator=(const LogReader&) = delete;
   ~LogReader();
 
+  absl::StatusOr<Log::Header> header();
+
   std::string& filename() { return filename_; }
 
   struct iterator {
@@ -76,22 +78,29 @@ class LogReader {
   iterator end() { return iterator(this, nullptr); }
 
   // Returns the next message if any, or an error if not.
-  absl::StatusOr<Log::Message> next();
+  absl::StatusOr<Log::Message> next() ABSL_LOCKS_EXCLUDED(lock_);
 
  private:
   // Returns the position of the header or
-  absl::StatusOr<Log::Message> NextLocked();
-  absl::StatusOr<long> ReadHeader();
-  void MaybeSeekLocked(long pos);
-  absl::StatusOr<uint64_t> ReadSizeBytesLocked();
-  absl::StatusOr<uint32_t> ReadCRC32Locked();
+  absl::StatusOr<Log::Message> NextLocked()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  absl::StatusOr<long> ReadHeader() ABSL_LOCKS_EXCLUDED(lock_);
+  void MaybeSeekLocked(long pos) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+
+  absl::StatusOr<uint64_t> ReadUInt64Locked()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  absl::StatusOr<uint32_t> ReadCRC32Locked()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  absl::StatusOr<uint64_t> ReadIdxLocked() ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
   absl::StatusOr<std::unique_ptr<char[]>> ReadBufferLocked(uint64_t size,
-                                                           uint32_t crc32_val);
+                                                           uint32_t crc32_val)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
   // Reads the next message from the file position specified, incrementing the
   // position.
-  absl::StatusOr<Log::Message> ReadNextMessage(long& pos);
+  absl::StatusOr<Log::Message> ReadNextMessage(long& pos)
+      ABSL_LOCKS_EXCLUDED(lock_);
   std::string filename_;
-  absl::Mutex lock_;
+  mutable absl::Mutex lock_;
 
   // Technically we could just mark this class as non-threadsafe, but with the
   // iterator paradigm you could still have two iterators trying to read through
@@ -106,7 +115,6 @@ class LogReader {
   // Current position in f_
   long pos_ ABSL_GUARDED_BY(lock_);
   long last_pos_ ABSL_GUARDED_BY(lock_);
-  bool header_valid_ ABSL_GUARDED_BY(lock_);
   Log::Header header_ ABSL_GUARDED_BY(lock_);
 };
 
