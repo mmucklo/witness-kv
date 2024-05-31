@@ -35,8 +35,11 @@ class ReplicatedLog {
 
   void MakeLogEntryStable(const ReplicatedLogEntry &entry);
 
+  std::function<void(std::string)> app_registered_callback_;
+
  public:
-  ReplicatedLog(uint8_t node_id);
+  ReplicatedLog(uint8_t node_id,
+                std::function<void(std::string)> callback = nullptr);
   ~ReplicatedLog();
 
   uint64_t GetFirstUnchosenIdx();

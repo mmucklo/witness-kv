@@ -1,7 +1,6 @@
 #ifndef PROPOSER_HH_
 #define PROPOSER_HH_
 
-#include "common.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
 #include "replicated_log.hh"
@@ -10,7 +9,6 @@
 #include <grpc/grpc.h>
 #include <grpcpp/server_builder.h>
 
-#include "common.hh"
 #include "node.hh"
 
 namespace witnesskvs::paxos {

@@ -1,0 +1,3 @@
+localhost:40050
+localhost:40051
+localhost:40052

@@ -2,29 +2,12 @@
 #define NODE_HH_
 
 #include "acceptor.hh"
-#include "common.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
 #include "replicated_log.hh"
+#include "utils.hh"
 
 namespace witnesskvs::paxos {
-
-struct Node {
-  std::string ip_address_;
-  int port_;
-  bool is_witness_;
-  bool is_leader_;
-  bool IsWitness() const { return is_witness_; }
-  bool IsLeader() const { return is_leader_; }
-  std::string GetAddressPortStr() const {
-    return this->ip_address_ + ":" + std::to_string(this->port_);
-  }
-
-  std::string GetProposerServiceAddressPortStr(uint64_t nodes_size) const {
-    int leader_port = this->port_ + nodes_size;
-    return this->ip_address_ + ":" + std::to_string(leader_port);
-  }
-};
 
 class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
  private:
@@ -41,6 +24,9 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   size_t quorum_;
   uint8_t node_id_;
   uint8_t leader_node_id_ ABSL_GUARDED_BY(node_mutex_);
+
+  bool is_witness_;
+  bool is_leader_;
 
   std::jthread heartbeat_thread_;
   std::stop_source hb_ss_ = {};
@@ -78,11 +64,16 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 
   size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
-  std::string GetProposerServiceAddress();
+
   bool IsLeader() const;
   bool IsLeaderCaughtUp() const {
     return IsLeader() && this->leader_caught_up_;
   }
+  uint8_t GetLeaderNodeId() {
+    absl::MutexLock l(&node_mutex_);
+    return leader_node_id_;
+  }
+
   bool IsWitness() const;
   bool ClusterHasEnoughNodesUp();
 
@@ -93,9 +84,5 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   grpc::Status CommitGrpc(uint8_t node_id, paxos_rpc::CommitRequest request,
                           paxos_rpc::CommitResponse* response);
 };
-
-// This helper function will parse the node config file specified
-// by flag `paxos_node_config_file`.
-std::vector<Node> ParseNodesConfig();
 }  // namespace witnesskvs::paxos
 #endif  // NODE_HH_

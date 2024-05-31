@@ -1,7 +1,5 @@
 #include "replicated_log.hh"
 
-#include "absl/flags/flag.h"
-#include "absl/status/status.h"
 #include "log/logs_loader.h"
 
 ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
@@ -11,8 +9,12 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id)
-    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
+ReplicatedLog::ReplicatedLog(uint8_t node_id,
+                             std::function<void(std::string)> callback)
+    : node_id_{node_id},
+      first_unchosen_index_{0},
+      proposal_number_{0},
+      app_registered_callback_{callback} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
 
   bool found_unchosen_idx = false;
@@ -87,6 +89,17 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
     if (!it->second.is_chosen_) {
       break;
     }
+
+    // This entry is chosen and it is now safe to be applied to application
+    // state. The update to the application state happens as the
+    // `first_unchosen_index_` is incremented. This ensures that even if the
+    // paxos log has holes, the callback is invoked in log order instead of
+    // commit order.
+    if (this->app_registered_callback_) {
+      LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                << "] Calling App registered callback";
+      this->app_registered_callback_(it->second.accepted_value_);
+    }
     first_unchosen_index_++;
   }
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
@@ -106,6 +119,7 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
             << " with value: " << entry.accepted_value_
             << " with chosenness: " << entry.is_chosen_;
   absl::Status status = log_writer_->Log(log_message);
+
   CHECK_EQ(status, absl::OkStatus());
 }
 
@@ -115,6 +129,7 @@ void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   entry.is_chosen_ = true;
 
   MakeLogEntryStable(entry);
+
   UpdateFirstUnchosenIdx();
 }
 
