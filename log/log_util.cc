@@ -54,14 +54,22 @@ void CheckPrefix(absl::string_view prefix) {
 }
 
 absl::StatusOr<FileParts> ParseFilename(absl::string_view filename) {
+  std::string prepend;
+  if (absl::StartsWith(filename, "./")) {
+    filename = absl::ClippedSubstr(filename, 2);
+    prepend = "./";
+  }
   std::vector<absl::string_view> parts = absl::StrSplit(filename, ".");
+
+  // We don't yet support relative, but valid pathnames like ../../
+  // Nor do we support files with more than one extension.
   if (parts.size() != 2) {
     return absl::InvalidArgumentError(
         absl::StrCat("LogsLoader: expect parts of filename to be splittable "
                      "in two, instead there are ",
                      parts.size(), " for ", filename));
   }
-  FileParts file_parts{.prefix = std::string(parts[0])};
+  FileParts file_parts{.prefix = prepend + std::string(parts[0])};
   std::string ext = std::string(parts[1]);
   if (!absl::SimpleAtoi(ext, &file_parts.micros)) {
     return absl::OutOfRangeError(absl::StrFormat(

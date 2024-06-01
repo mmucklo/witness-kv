@@ -79,12 +79,12 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
 ReplicatedLog::~ReplicatedLog() {}
 
 uint64_t ReplicatedLog::GetFirstUnchosenIdx() {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   return first_unchosen_index_;
 }
 
 uint64_t ReplicatedLog::GetNextProposalNumber() {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   proposal_number_ =
       ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) |
       (uint64_t)node_id_;
@@ -94,14 +94,14 @@ uint64_t ReplicatedLog::GetNextProposalNumber() {
 }
 
 void ReplicatedLog::UpdateProposalNumber(uint64_t prop_num) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   if (prop_num > proposal_number_) {
     proposal_number_ = prop_num;
   }
 }
 
 void ReplicatedLog::UpdateFirstUnchosenIdx() {
-  log_mutex_.AssertHeld();
+  lock_.AssertHeld();
   for (uint64_t i = first_unchosen_index_; i <= log_entries_.rbegin()->first;
        i++) {
     auto it = log_entries_.find(i);
@@ -146,7 +146,7 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
 }
 
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   entry.is_chosen_ = true;
 
@@ -156,7 +156,7 @@ void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
 }
 
 void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   if (entry.accepted_value_ != value) {
     // This is fine, as it is possible we may be the only node that accepted a
@@ -177,14 +177,14 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
 }
 
 uint64_t ReplicatedLog::GetMinProposalForIdx(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   return entry.min_proposal_;
 }
 
 void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
                                             uint64_t new_min_proposal) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
   CHECK(it != log_entries_.end()) << "Attempting to update min proposal for "
                                      "a log entry that does not exist.";
@@ -198,14 +198,14 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
 }
 
 ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
   CHECK(it != log_entries_.end());
   return it->second;
 }
 
 uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
     current_entry.min_proposal_ = new_entry.min_proposal_;
