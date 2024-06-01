@@ -2,14 +2,13 @@ syntax = "proto3";
 
 package Log;
 
-// Test log message
-// TODO: just a placeholder for now.
 message Message {
-    // Final fields TBD...
     message Paxos {
-        int32 round = 1;
-        int32 proposal_id = 2;
-        string value = 3;
+        uint64 idx = 1;
+        uint64 min_proposal = 2;
+        uint64 accepted_proposal = 3;
+        string accepted_value = 4;
+        bool is_chosen = 5;
     }
     Paxos paxos = 1;
 }
@@ -18,9 +17,15 @@ message Header {
     // When this log entry file was officially created
     int64 timestamp_micros = 1;
 
-    // An index id for this entry. Should be unique relative to the prefx.
-    int64 idx = 2;
+    // A unique index id for this file. Should be unique relative to the prefix.
+    int64 id = 2;
 
     // The prefix for this log file.
     string prefix = 3;
+
+    // The minimum idx for the messages in this log file.
+    uint64 min_idx = 4;
+
+    // The maximum idx for the messages in this log file.
+    uint64 max_idx = 5;
 }

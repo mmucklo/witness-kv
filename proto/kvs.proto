@@ -1,24 +1,48 @@
 syntax = "proto3";
 
-import "google/protobuf/empty.proto";
-
 package KeyValueStore;
 
-message KvsKey {
-  string Key = 1;
+service Kvs {
+  rpc Get(GetRequest)       returns (GetResponse);
+  rpc Put(PutRequest)       returns (PutResponse);
+  rpc Delete(DeleteRequest) returns (DeleteResponse); 
 }
 
-message KvsValue {
-  string Value = 1;
+message GetRequest {
+  string key = 1;
 }
 
-message KvsSetRequest {
+message GetResponse {
+  string value = 1;
+}
+
+message PutRequest {
   string key = 1;
   string value = 2;
 }
 
-service Kvs {
-  rpc Get(KvsKey) returns (KvsValue);
-  rpc Set(KvsSetRequest) returns (google.protobuf.Empty);
-  rpc Delete(KvsKey) returns (google.protobuf.Empty); 
+message PutResponse {
+  string status = 1;
+}
+
+message DeleteRequest {
+  string key = 1;
+}
+
+message DeleteResponse {
+  string status = 1;
+}
+
+message OperationType {
+  enum Type {
+    PUT = 0;
+    DELETE = 1;
+  }
+
+  Type type = 1;
+
+  oneof data {
+    PutRequest put_data  = 2;    // Key-value pair for PUT operation
+    DeleteRequest del_data = 3;  // Key for DELETE operation
+  }
 }

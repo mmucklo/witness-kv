@@ -1,31 +1,44 @@
 #ifndef PAXOS_HH_
 #define PAXOS_HH_
 
-#include "common.hh"
+#include "acceptor.hh"
+#include "node.hh"
+#include "proposer.hh"
+#include "replicated_log.hh"
 
-class PaxosImpl;
-
-struct Node
-{
-  std::string ip_address_;
-  int port;
-  std::string GetAddressPortStr() {
-    return this->ip_address_ + ":" + std::to_string( this->port );
-  }
+namespace witnesskvs::paxos {
+enum PaxosResult {
+  PAXOS_OK = 1,
+  PAXOS_ERROR_NOT_PERMITTED = 2,
+  PAXOS_ERROR_LEADER_NOT_READY = 3,
+  PAXOS_ERROR_NO_QUORUM = 4,
 };
 
-class Paxos
-{
+std::ostream& operator<<(std::ostream& os, PaxosResult error);
+
+class Paxos {
  private:
-  PaxosImpl *paxos_impl_;
+  std::shared_ptr<ReplicatedLog> replicated_log_;
+  std::shared_ptr<PaxosNode> paxos_node_;
+  std::unique_ptr<AcceptorService> acceptor_;
+  std::unique_ptr<Proposer> proposer_;
+  uint8_t node_id_;
 
  public:
-  Paxos( const std::string& config_file_name, uint8_t node_id );
+  Paxos(uint8_t node_id, std::function<void(std::string)> callback = nullptr);
   ~Paxos();
 
-  void Propose( const std::string& value );
+  // Function to add a command to the replicated state machine across all alive
+  // Paxos nodes. If value is empty this will trigger a NOP paxos round as
+  // described in section 3 in
+  // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
+  PaxosResult Propose(const std::string& value,
+                      uint8_t* leader_node_id = nullptr, bool is_read = false);
+
+  // Helper functions for unit testing.
+  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
+  bool IsLeader() { return paxos_node_->IsLeader(); }
+  bool IsWitness() { return paxos_node_->IsWitness(); }
 };
-
-std::vector<Node> ParseNodesConfig( const std::string& config_file_name );
-
-#endif // PAXOS_HH_
+}  // namespace witnesskvs::paxos
+#endif  // PAXOS_HH_

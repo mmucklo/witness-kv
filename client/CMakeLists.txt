@@ -1,6 +1,8 @@
 
 find_package(Threads)
 
+include_directories(${PROJECT_SOURCE_DIR})
+
 set(SOURCES
     client.cc
 )
@@ -11,5 +13,9 @@ include_directories(${PROJECT_SOURCE_DIR}/paxos)
 add_executable(client ${SOURCES})
 target_link_libraries(client
     PRIVATE
+    kvsproto
     paxos
+    absl::flags
+    absl::flags_parse
+    absl::log
 )

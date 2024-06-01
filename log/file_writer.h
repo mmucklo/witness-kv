@@ -3,11 +3,14 @@
 
 #include <sys/types.h>
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/strings/cord.h"
+
+namespace witnesskvs::log {
 
 /**
  * A single writer for a single file. It will output in file system block size
@@ -23,9 +26,10 @@
  */
 class FileWriter {
  public:
- public:
   FileWriter(std::string filename);
   FileWriter() = delete;
+
+  // Disable copy (and move) semantics.
   FileWriter(const FileWriter&) = delete;
   FileWriter& operator=(const FileWriter&) = delete;
   ~FileWriter();
@@ -39,16 +43,33 @@ class FileWriter {
   // Flushes all buffers to disk.
   void Flush();
 
+  // The number of bytes received (includes bytes written to disk and bytes
+  // still buffered).
+  ssize_t bytes_received() { return bytes_received_; }
+
+  // The number of bytes actually written to disk.
   ssize_t bytes_written() { return bytes_written_; }
   std::string& filename() { return filename_; }
 
+  std::string& filename() { return filename_; }
+
+  // Writes out header to the beginning of a file.
+  //
+  // Will FATAL on failure. Assumes path exists and is writable.
+  static void WriteHeader(const std::filesystem::path& path, absl::Cord header);
+  static void SyncDir(const std::string& dir);
  private:
+  void InitialSync(const std::filesystem::path& path);
   void WriteBuffer();
 
   int fd_;
   std::string filename_;
   std::unique_ptr<char[]> buffer_;  // A buffer for contents we will output.
   int buffer_size_;                 // The current filled size of the buffer.
+  const uint64_t buffer_size_max_;  // The size of the buffer when full.
   ssize_t bytes_written_;
+  ssize_t bytes_received_;
 };
+
+}  // namespace witnesskvs::log
 #endif

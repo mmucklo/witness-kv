@@ -4,20 +4,21 @@
 
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <iterator>
+#include <string>
 
 #include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
 #include "absl/log/log.h"
 #include "absl/random/random.h"
 #include "absl/strings/cord.h"
-#include "absl/strings/str_join.h"
 #include "absl/time/time.h"
 
 ABSL_FLAG(std::string, file_writer_test_flag, "", "This just a test flag");
 
-std::string getTempFilename() {
+namespace witnesskvs::log {
+namespace {
+
+std::string GetTempFilename() {
   absl::Time now = absl::Now();
   std::string filename = "/tmp/file_writer_test.";
   filename.append(absl::StrCat(absl::ToUnixMicros(now)));
@@ -41,7 +42,7 @@ absl::Cord getLargeCord(int rounds = 128) {
 }
 
 TEST(FileWriterTest, Smoke) {
-  std::string filename = getTempFilename();
+  std::string filename = GetTempFilename();
   {
     FileWriter file_writer(filename);
     absl::Cord cord;
@@ -54,7 +55,7 @@ TEST(FileWriterTest, Smoke) {
 }
 
 TEST(FileWriterTest, Large) {
-  std::string filename = getTempFilename();
+  std::string filename = GetTempFilename();
   {
     FileWriter file_writer(filename);
     absl::Cord cord = getLargeCord();
@@ -73,7 +74,7 @@ TEST(FileWriterTest, Large) {
 }
 
 TEST(FileWriterTest, LargMultiCord) {
-  std::string filename = getTempFilename();
+  std::string filename = GetTempFilename();
   {
     FileWriter file_writer(filename);
     absl::Cord cord1 = getLargeCord();
@@ -99,4 +100,8 @@ TEST(FlagTest, Smoke) {
   LOG(INFO) << "file_writer_test_flag: "
             << absl::GetFlag(FLAGS_file_writer_test_flag);
 }
+
 // TODO microbenchmark to watch flush cycles and timing.
+
+}  // namespace
+}  // namespace witnesskvs::log
