@@ -21,5 +21,7 @@ add_library(paxos STATIC ${SOURCES})
 target_link_libraries(paxos
     PUBLIC
 	paxosproto
+    log_writer_lib
     logs_loader_lib
+    logs_truncator_lib
 )

@@ -29,13 +29,17 @@ ABSL_FLAG(uint64_t, file_writer_buffer_size, BLOCK_SIZE,
 
 namespace witnesskvs::log {
 
-void VerifyFilename(const std::filesystem::path& path) {
+constexpr mode_t kFileMode = S_IRUSR | S_IWUSR;
+
+void VerifyFilename(const std::filesystem::path& path, bool exists = false) {
   // Should be a new file in an exisiting writeable directory.
   // Do a bunch of tests to make sure, otherwise we crash.
   // TODO(mmucklo): maybe convert these into LOG(FATAL)s so more information
   // about the state can be outputted?
-  CHECK(!std::filesystem::exists(std::filesystem::status(path)))
-      << path << ": file should not exist already.";
+  if (!exists) {
+    CHECK(!std::filesystem::exists(std::filesystem::status(path)))
+        << path << ": file should not exist already.";
+  }
   CHECK(path.has_parent_path()) << path << ": file should have a parent path.";
   std::filesystem::file_status path_status =
       std::filesystem::status(path.parent_path());
@@ -70,8 +74,7 @@ FileWriter::FileWriter(std::string filename)
   // be selected. This could be another option.
   //
   // TODO(mmucklo): Time permitting microbenchmark various sync strategies.
-  fd_ =
-      open(filename_.c_str(), O_APPEND | O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR);
+  fd_ = open(filename_.c_str(), O_APPEND | O_CREAT | O_WRONLY, kFileMode);
   if (fd_ == -1) {
     LOG(FATAL) << "Could not open file descriptor for " << filename_
                << " errno: " << errno << " " << std::strerror(errno);
@@ -106,19 +109,23 @@ void FileWriter::InitialSync(const std::filesystem::path& path) {
     LOG(FATAL) << "first fsync returned -1, errno: " << errno << ": "
                << std::strerror(errno) << ", filename: " << filename_;
   }
+  const std::string dir = path.parent_path().string();
+  SyncDir(dir);
+}
 
-  int dirfd = open(path.parent_path().c_str(), O_DIRECTORY);
+void FileWriter::SyncDir(const std::string& dir) {
+  int dirfd = open(dir.c_str(), O_DIRECTORY);
   if (dirfd == -1) {
-    LOG(FATAL) << "Could not open file descriptor for " << path.parent_path()
+    LOG(FATAL) << "Could not open file descriptor for " << dir
                << " errno: " << errno << " " << std::strerror(errno);
   }
   if (fsync(dirfd) == -1) {
     LOG(FATAL) << "fsync of directory returned -1, errno: " << errno << ": "
-               << std::strerror(errno) << ", filename: " << filename_;
+               << std::strerror(errno) << ", dir: " << dir;
   }
   if (close(dirfd) == -1) {
     LOG(FATAL) << "Error closing dirfd: " << dirfd << " for directory "
-               << path.parent_path() << " errno: " << errno << " "
+               << dir << " errno: " << errno << " "
                << std::strerror(errno);
   }
 }
@@ -200,6 +207,33 @@ void FileWriter::Flush() {
   if (fsync(fd_) == -1) {
     LOG(FATAL) << "fsync returned -1, errno: " << errno << ": "
                << std::strerror(errno) << ", filename: " << filename_;
+  }
+}
+
+void FileWriter::WriteHeader(const std::filesystem::path& path,
+                             absl::Cord header) {
+  VerifyFilename(path, /*exists=*/true);
+  std::string path_str = path.string();
+  int fd = open(path_str.c_str(), O_WRONLY, kFileMode);
+  if (fd == -1) {
+    LOG(FATAL) << "Could not open file descriptor for " << path.string()
+               << " errno: " << errno << " " << std::strerror(errno);
+  }
+  for (absl::string_view chunk : header.Chunks()) {
+    ssize_t res = write(fd, chunk.data(), chunk.size());
+    if (res != chunk.size()) {
+      LOG(FATAL)
+          << "FileWriter::WriteHeader - Could not write header chunk of size "
+          << chunk.size() << " instead wrote " << res;
+    }
+  }
+  if (fdatasync(fd) == -1) {
+    LOG(FATAL) << "fdatasync returned -1, errno: " << errno << ": "
+               << std::strerror(errno) << ", filename: " << path_str;
+  }
+  if (close(fd) == -1) {
+    LOG(FATAL) << "Error closing fd: " << fd << " for filename " << path_str
+               << " errno: " << errno << " " << std::strerror(errno);
   }
 }
 

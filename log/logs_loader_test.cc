@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <string>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -58,17 +59,9 @@ class LogWriterTestPeer {
 
 namespace {
 
-std::string GetTempPrefix() {
-  absl::Time now = absl::Now();
-  std::string filename = "logs_loader_";
-  filename.append(absl::StrCat(absl::ToUnixMicros(now)));
-  filename.append("_test");
-  return filename;
-}
-
 TEST(LogsLoader, Basic) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = witnesskvs::test::GetTempPrefix("logs_loader_");
   Log::Message log_message;
   log_message.mutable_paxos()->set_idx(0);
   log_message.mutable_paxos()->set_min_proposal(4);
@@ -106,7 +99,7 @@ TEST(LogsLoader, Basic) {
 
 TEST(LogsLoaderTest, MultiTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(0);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -151,7 +144,7 @@ TEST(LogsLoaderTest, MultiTest) {
 
 TEST(LogsLoaderTest, MultiFileTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(0);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -213,7 +206,7 @@ TEST(LogsLoaderTest, MultiFileTest) {
 
 TEST(LogsLoaderTest, MultiFileTestWithBlank) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(0);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -311,7 +304,7 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
 
 TEST(LogsLoaderTest, SortingTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(0);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -382,7 +375,7 @@ TEST(LogsLoaderTest, SortingTest) {
 
 TEST(LogsLoaderTest, SortingMultiFileTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(2);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -479,7 +472,7 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
 
 TEST(SortingLogsLoaderTest, Basic) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message;
   log_message.mutable_paxos()->set_idx(0);
   log_message.mutable_paxos()->set_min_proposal(4);
@@ -520,7 +513,7 @@ TEST(SortingLogsLoaderTest, Basic) {
 
 TEST(SortingLogsLoaderTest, SortingTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(0);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -580,7 +573,7 @@ TEST(SortingLogsLoaderTest, SortingTest) {
 
 TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
   std::vector<std::string> cleanup_files;
-  std::string prefix = GetTempPrefix();
+  std::string prefix = test::GetTempPrefix("logs_loader_");
   Log::Message log_message1;
   log_message1.mutable_paxos()->set_idx(3);
   log_message1.mutable_paxos()->set_min_proposal(4);
@@ -683,7 +676,7 @@ TEST(SortingLogsLoaderTest, Large) {
       msgs.push_back(msg);
     }
   }
-  const std::string prefix = GetTempPrefix();
+  const std::string prefix = test::GetTempPrefix("logs_loader_");
   absl::SetFlag(&FLAGS_log_writer_max_file_size, 256);
   std::vector<std::string> cleanup_files;
   {
