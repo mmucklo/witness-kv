@@ -51,13 +51,12 @@ class FileWriter {
   ssize_t bytes_written() { return bytes_written_; }
   std::string& filename() { return filename_; }
 
-  std::string& filename() { return filename_; }
-
   // Writes out header to the beginning of a file.
   //
   // Will FATAL on failure. Assumes path exists and is writable.
   static void WriteHeader(const std::filesystem::path& path, absl::Cord header);
   static void SyncDir(const std::string& dir);
+
  private:
   void InitialSync(const std::filesystem::path& path);
   void WriteBuffer();
