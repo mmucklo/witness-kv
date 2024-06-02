@@ -27,10 +27,6 @@ ABSL_FLAG(absl::Duration, paxos_node_heartbeat, absl::Seconds(3),
 ABSL_FLAG(absl::Duration, paxos_node_truncation_interval, absl::Seconds(60),
           "How often we should query for truncation.");
 
-// Note: for demo purposes this should be set to be small.
-ABSL_FLAG(absl::Duration, paxos_node_truncation_interval, absl::Seconds(60),
-          "How often we should query for truncation.");
-
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
           "Paxos config file for nodes ip addresses and ports");
 
@@ -132,12 +128,6 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
       acceptor_stubs_size = acceptor_stubs_.size();
     }
     for (size_t i = 0; i < acceptor_stubs_size; i++) {
-    size_t acceptor_stubs_size;
-    {
-      absl::ReaderMutexLock l(&lock_);
-      acceptor_stubs_size = acceptor_stubs_.size();
-    }
-    for (size_t i = 0; i < acceptor_stubs_size; i++) {
       paxos_rpc::PingRequest request;
       paxos_rpc::PingResponse response;
       grpc::ClientContext context;
@@ -150,7 +140,6 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
         if (!status.ok()) {
           LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
                        << "] Connection lost with node: " << i;
-          absl::MutexLock l(&lock_);
           absl::MutexLock l(&lock_);
           acceptor_stubs_[i].reset();
           CHECK(num_active_acceptors_conns_);
@@ -165,8 +154,6 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
           LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                     << "] [Witness: " << nodes_[node_id_].IsWitness()
                     << "] Connection established with node: " << i;
-          absl::MutexLock l(&lock_);
-          stub = std::move(new_stub);
           absl::MutexLock l(&lock_);
           stub = std::move(new_stub);
           num_active_acceptors_conns_++;
@@ -186,9 +173,6 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
 
     bool node_is_new_leader = false;
     {
-      // TODO(vishnu/ritesh): the purpose behind this logic should be explained
-      // probably in a not-so-short comment here.
-      absl::MutexLock l(&lock_);
       // TODO(vishnu/ritesh): the purpose behind this logic should be explained
       // probably in a not-so-short comment here.
       absl::MutexLock l(&lock_);
@@ -250,12 +234,6 @@ void PaxosNode::CommitAsync(uint8_t node_id, uint64_t idx) {
       grpc::ClientContext context;
       absl::ReaderMutexLock rl(&lock_);
       if (stub == nullptr) {
-      // Limit the scope of this shared_ptr within these braces.
-      std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub =
-          GetAcceptorStub(node_id);
-      grpc::ClientContext context;
-      absl::ReaderMutexLock rl(&lock_);
-      if (stub == nullptr) {
         status = grpc::Status(grpc::StatusCode::UNAVAILABLE,
                               "Acceptor not available right now.");
       } else {
@@ -306,19 +284,9 @@ bool PaxosNode::IsWitness() const { return nodes_[node_id_].IsWitness(); }
 
 bool PaxosNode::ClusterHasEnoughNodesUp() {
   absl::MutexLock l(&lock_);
-  absl::MutexLock l(&lock_);
   bool result = this->num_active_acceptors_conns_ >= quorum_;
   return result;
 }
-
-// Make boilerplate code a bit more readable with this macro.
-#define RETURN_IF_NULLPTR(expr)                                 \
-  do {                                                          \
-    if (ABSL_PREDICT_FALSE(expr == nullptr)) {                  \
-      return grpc::Status(grpc::StatusCode::UNAVAILABLE,        \
-                          "Acceptor not available right now."); \
-    }                                                           \
-  } while (0)
 
 // Make boilerplate code a bit more readable with this macro.
 #define RETURN_IF_NULLPTR(expr)                                 \
@@ -333,19 +301,7 @@ grpc::Status PaxosNode::PrepareGrpc(uint8_t node_id,
                                     paxos_rpc::PrepareRequest request,
                                     paxos_rpc::PrepareResponse* response) {
   std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
-  std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
   grpc::ClientContext context;
-  absl::ReaderMutexLock rl(&lock_);
-  RETURN_IF_NULLPTR(stub);
-  return stub->Prepare(&context, request, response);
-}
-
-std::unique_ptr<paxos_rpc::Acceptor::Stub>& PaxosNode::GetAcceptorStub(
-    uint8_t node_id) {
-  absl::ReaderMutexLock l(&lock_);
-  if (acceptor_stubs_.size() <= node_id) {
-    LOG(FATAL) << "PaxosNode::GetAcceptorStub - acceptor_stubs_ size("
-               << acceptor_stubs_.size() << ") is <= node_id: " << node_id;
   absl::ReaderMutexLock rl(&lock_);
   RETURN_IF_NULLPTR(stub);
   return stub->Prepare(&context, request, response);
@@ -359,18 +315,13 @@ std::unique_ptr<paxos_rpc::Acceptor::Stub>& PaxosNode::GetAcceptorStub(
                << acceptor_stubs_.size() << ") is <= node_id: " << node_id;
   }
   return acceptor_stubs_[node_id];
-  return acceptor_stubs_[node_id];
 }
 
 grpc::Status PaxosNode::AcceptGrpc(uint8_t node_id,
                                    paxos_rpc::AcceptRequest request,
                                    paxos_rpc::AcceptResponse* response) {
   std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
-  std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
   grpc::ClientContext context;
-  absl::ReaderMutexLock rl(&lock_);
-  RETURN_IF_NULLPTR(stub);
-  return stub->Accept(&context, request, response);
   absl::ReaderMutexLock rl(&lock_);
   RETURN_IF_NULLPTR(stub);
   return stub->Accept(&context, request, response);
@@ -379,7 +330,6 @@ grpc::Status PaxosNode::AcceptGrpc(uint8_t node_id,
 grpc::Status PaxosNode::CommitGrpc(uint8_t node_id,
                                    paxos_rpc::CommitRequest request,
                                    paxos_rpc::CommitResponse* response) {
-  std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
   std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
   grpc::ClientContext context;
   absl::ReaderMutexLock rl(&lock_);
