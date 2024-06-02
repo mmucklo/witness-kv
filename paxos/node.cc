@@ -2,18 +2,11 @@
 
 #include <functional>
 
-#include <functional>
-
 #include "proposer.hh"
 
 // GRPC headers
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
-
-#include "absl/base/optimization.h"
-#include "absl/flags/flag.h"
-#include "absl/log/log.h"
-#include "absl/synchronization/mutex.h"
 
 #include "absl/base/optimization.h"
 #include "absl/flags/flag.h"
@@ -117,7 +110,8 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
 
 void PaxosNode::HeartbeatThread(std::stop_token st) {
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-            << "] Heartbeat Timeout " <<  absl::GetFlag(FLAGS_paxos_node_heartbeat);
+            << "] Heartbeat Timeout "
+            << absl::GetFlag(FLAGS_paxos_node_heartbeat);
 
   while (!st.stop_requested()) {
     uint8_t highest_node_id = 0;
@@ -196,7 +190,8 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
     }
     absl::MutexLock l(&lock_);
     auto stopping = [&st]() { return st.stop_requested(); };
-    lock_.AwaitWithTimeout(absl::Condition(&stopping),  absl::GetFlag(FLAGS_paxos_node_heartbeat));
+    lock_.AwaitWithTimeout(absl::Condition(&stopping),
+                           absl::GetFlag(FLAGS_paxos_node_heartbeat));
   }
 
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
@@ -340,4 +335,3 @@ grpc::Status PaxosNode::CommitGrpc(uint8_t node_id,
 #undef RETURN_IF_NULLPTR
 
 }  // namespace witnesskvs::paxos
-

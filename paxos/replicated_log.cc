@@ -27,8 +27,6 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
   witnesskvs::log::SortingLogsLoader log_loader{
       absl::GetFlag(FLAGS_paxos_log_directory), prefix,
       [](const Log::Message &a, const Log::Message &b) {
-        LOG(INFO) << "a: " << a.DebugString();
-        LOG(INFO) << "b: " << b.DebugString();
         if (a.paxos().idx() < b.paxos().idx()) {
           return true;
         } else if (a.paxos().idx() == b.paxos().idx()) {
