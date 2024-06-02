@@ -16,6 +16,10 @@ using paxos_rpc::PingRequest;
 using paxos_rpc::PingResponse;
 using paxos_rpc::PrepareRequest;
 using paxos_rpc::PrepareResponse;
+using paxos_rpc::TruncateProposeRequest;
+using paxos_rpc::TruncateProposeResponse;
+using paxos_rpc::TruncateRequest;
+using paxos_rpc::TruncateResponse;
 
 namespace witnesskvs::paxos {
 
@@ -33,10 +37,15 @@ class AcceptorImpl final : public Acceptor::Service {
                  PrepareResponse* response) override;
   Status Accept(ServerContext* context, const AcceptRequest* request,
                 AcceptResponse* response) override;
-  Status SendPing(ServerContext* context, const PingRequest* request,
-                  PingResponse* response) override;
+  Status Ping(ServerContext* context, const PingRequest* request,
+              PingResponse* response) override;
   Status Commit(ServerContext* context, const CommitRequest* request,
                 CommitResponse* response) override;
+  Status TruncatePropose(ServerContext* context,
+                         const TruncateProposeRequest* request,
+                         TruncateProposeResponse* response) override;
+  Status Truncate(ServerContext* context, const TruncateRequest* request,
+                  TruncateResponse* response) override;
 };
 
 Status AcceptorImpl::Prepare(ServerContext* context,
@@ -83,10 +92,23 @@ Status AcceptorImpl::Accept(ServerContext* context,
   return Status::OK;
 }
 
-Status AcceptorImpl::SendPing(ServerContext* context,
-                              const PingRequest* request,
-                              PingResponse* response) {
+Status AcceptorImpl::Ping(ServerContext* context, const PingRequest* request,
+                          PingResponse* response) {
   response->set_node_id(node_id_);
+  return Status::OK;
+}
+
+Status AcceptorImpl::TruncatePropose(ServerContext* context,
+                                     const TruncateProposeRequest* request,
+                                     TruncateProposeResponse* response) {
+  response->set_index(this->replicated_log_->GetFirstUnchosenIdx() - 1);
+  return Status::OK;
+}
+
+Status AcceptorImpl::Truncate(ServerContext* context,
+                              const TruncateRequest* request,
+                              TruncateResponse* response) {
+  // TODO(mmucklo): run truncation.
   return Status::OK;
 }
 
