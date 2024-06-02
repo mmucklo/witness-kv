@@ -71,16 +71,40 @@ PaxosNode::~PaxosNode() {
 }
 
 void PaxosNode::TruncationLoop(std::stop_token st) {
-  auto sleep_time = absl::GetFlag(FLAGS_paxos_node_truncation_interval);
-
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-            << "] TruncationLoop Interval " << sleep_time;
+            << "] TruncationLoop Interval "
+            << absl::GetFlag(FLAGS_paxos_node_truncation_interval);
 
   while (!st.stop_requested()) {
     // TODO(mmucklo): fill with Truncation logic.
+    size_t acceptor_stubs_size;
+    {
+      absl::ReaderMutexLock l(&lock_);
+      acceptor_stubs_size = acceptor_stubs_.size();
+    }
+    for (size_t i = 0; i < acceptor_stubs_size; i++) {
+      std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
+      paxos_rpc::TruncateProposeRequest request;
+      paxos_rpc::TruncateProposeResponse response;
+      grpc::ClientContext context;
+      absl::ReaderMutexLock l(&lock_);
+      if (stub == nullptr) {
+        // We can't truncate without agreement. Since a node is down, we skip
+        // this round.
+        LOG(INFO) << "Skipping truncation because node: " << i
+                  << " is offline.";
+        break;
+      }
+
+      grpc::Status status = stub->TruncatePropose(&context, request, &response);
+      LOG(INFO) << "Got Truncate Response for node: " << i << ": "
+                << response.index();
+    }
+
     absl::MutexLock l(&lock_);
-    auto stopping = [&st](){ return st.stop_requested(); };
-    lock_.AwaitWithTimeout(absl::Condition(&stopping), sleep_time);
+    auto stopping = [&st]() { return st.stop_requested(); };
+    lock_.AwaitWithTimeout(absl::Condition(&stopping),
+                           absl::GetFlag(FLAGS_paxos_node_truncation_interval));
   }
 }
 
@@ -109,7 +133,7 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
       if (stub != nullptr) {
         // Don't need a lock around this call like the others do since we're the
         // only one that will change the stub.
-        status = stub->SendPing(&context, request, &response);
+        status = stub->Ping(&context, request, &response);
         if (!status.ok()) {
           LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
                        << "] Connection lost with node: " << i;
@@ -122,7 +146,7 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
         auto channel = grpc::CreateChannel(nodes_[i].GetAddressPortStr(),
                                            grpc::InsecureChannelCredentials());
         auto new_stub = paxos_rpc::Acceptor::NewStub(channel);
-        status = new_stub->SendPing(&context, request, &response);
+        status = new_stub->Ping(&context, request, &response);
         if (status.ok()) {
           LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                     << "] [Witness: " << nodes_[node_id_].IsWitness()
@@ -168,7 +192,7 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
       PerformLeaderCatchUp();
     }
     absl::MutexLock l(&lock_);
-    auto stopping = [&st](){ return st.stop_requested(); };
+    auto stopping = [&st]() { return st.stop_requested(); };
     lock_.AwaitWithTimeout(absl::Condition(&stopping), sleep_time);
   }
 
@@ -229,7 +253,7 @@ void PaxosNode::CommitAsync(uint8_t node_id, uint64_t idx) {
 void PaxosNode::MakeReady() {
   heartbeat_thread_ =
       std::jthread(std::bind_front(&PaxosNode::HeartbeatThread, this));
-  truncation_thread_ = 
+  truncation_thread_ =
       std::jthread(std::bind_front(&PaxosNode::TruncationLoop, this));
   commit_futures_.resize(GetNumNodes());
 }
@@ -308,16 +332,6 @@ grpc::Status PaxosNode::CommitGrpc(uint8_t node_id,
   absl::ReaderMutexLock rl(&lock_);
   RETURN_IF_NULLPTR(stub);
   return stub->Commit(&context, request, response);
-}
-
-grpc::Status PaxosNode::SendPingGrpc(uint8_t node_id,
-                                     paxos_rpc::PingRequest request,
-                                     paxos_rpc::PingResponse* response) {
-  std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(node_id);
-  grpc::ClientContext context;
-  absl::ReaderMutexLock rl(&lock_);
-  RETURN_IF_NULLPTR(stub);
-  return stub->SendPing(&context, request, response);
 }
 
 #undef RETURN_IF_NULLPTR
