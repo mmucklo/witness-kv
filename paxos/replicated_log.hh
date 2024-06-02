@@ -23,8 +23,7 @@ class ReplicatedLog {
   uint64_t first_unchosen_index_ ABSL_GUARDED_BY(lock_);
   uint64_t proposal_number_ ABSL_GUARDED_BY(lock_);
 
-  std::map<uint64_t, ReplicatedLogEntry> log_entries_
-      ABSL_GUARDED_BY(lock_);
+  std::map<uint64_t, ReplicatedLogEntry> log_entries_ ABSL_GUARDED_BY(lock_);
 
   static constexpr uint8_t num_bits_for_node_id_ = 3;
   static constexpr uint8_t max_node_id_ = (1ull << num_bits_for_node_id_) - 1;
