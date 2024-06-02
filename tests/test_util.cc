@@ -4,11 +4,17 @@
 #include <string>
 #include <vector>
 
-#include "absl/time/time.h"
+#include "absl/flags/flag.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/time/time.h"
 
+// https://superuser.com/questions/45342/when-should-i-use-dev-shm-and-when-should-i-use-tmp
+ABSL_FLAG(std::string, tests_test_util_temp_dir, ".",
+          "Where to store temporary files during testing. Note it's "
+          "recommended not to use /tmp for running log-related tests since "
+          "/tmp is generally run on tmpfs which doesn't respect fsync.");
 namespace witnesskvs::test {
 
 absl::Status Cleanup(std::vector<std::string> filenames) {
@@ -30,6 +36,5 @@ std::string GetTempPrefix(std::string base_prefix) {
   base_prefix.append("_test");
   return base_prefix;
 }
-
 
 }  // namespace witnesskvs::test

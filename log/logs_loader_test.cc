@@ -36,6 +36,7 @@ using ::testing::UnorderedElementsAre;
 ABSL_DECLARE_FLAG(uint64_t, logs_loader_max_memory_for_sorting);
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
+ABSL_DECLARE_FLAG(std::string, tests_test_util_temp_dir);
 
 MATCHER(IsError, "") { return (!arg.ok()); }
 
@@ -69,13 +70,14 @@ TEST(LogsLoader, Basic) {
   log_message.mutable_paxos()->set_accepted_value("test1234");
   log_message.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
   {
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message));
@@ -113,14 +115,15 @@ TEST(LogsLoaderTest, MultiTest) {
   log_message2.mutable_paxos()->set_accepted_value("test12344");
   log_message2.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
     EXPECT_THAT(log_writer.Log(log_message2), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
   {
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message1));
@@ -164,13 +167,13 @@ TEST(LogsLoaderTest, MultiFileTest) {
   log_message3.mutable_paxos()->set_accepted_value("test1234124");
   log_message3.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message2), IsOk());
     LOG(INFO) << "third log message";
@@ -181,7 +184,8 @@ TEST(LogsLoaderTest, MultiFileTest) {
     }
   }
   {
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message1));
@@ -236,7 +240,7 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
     absl::SleepFor(absl::Milliseconds(1));
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     for (const auto& filename : log_writer.filenames()) {
@@ -254,12 +258,13 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
   }
   {
     // A blank file with a header only.
-    LogWriterTestPeer log_writer("/tmp", prefix);
+    LogWriterTestPeer log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                                 prefix);
     cleanup_files.push_back(log_writer.filename());
     absl::SleepFor(absl::Milliseconds(1));
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message2), IsOk());
     LOG(INFO) << "third log message";
@@ -279,7 +284,8 @@ TEST(LogsLoaderTest, MultiFileTestWithBlank) {
     cleanup_files.push_back(filename);
   }
   {
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     auto it = logs_loader.begin();
     ASSERT_NE(it, logs_loader.end());
     EXPECT_THAT(*it, EqualsProto(log_message1));
@@ -324,7 +330,7 @@ TEST(LogsLoaderTest, SortingTest) {
   log_message3.mutable_paxos()->set_accepted_value("test1234124");
   log_message3.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message3), IsOk());
     LOG(INFO) << "third log message";
@@ -336,7 +342,8 @@ TEST(LogsLoaderTest, SortingTest) {
   }
   {
     // Unsorted should return 3, 2, 1 in terms of message order.
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     std::vector<Log::Message> msgs;
     for (auto& log_msg : logs_loader) {
       msgs.push_back(log_msg);
@@ -347,7 +354,8 @@ TEST(LogsLoaderTest, SortingTest) {
   }
   {
     // Try a logs loader that sorts by idx.
-    LogsLoader logs_loader("/tmp", prefix,
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix,
                            [](const Log::Message& a, const Log::Message& b) {
                              return a.paxos().idx() < b.paxos().idx();
                            });
@@ -408,7 +416,7 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
   log_message6.mutable_paxos()->set_accepted_value("test1234124");
   log_message6.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message3), IsOk());
     LOG(INFO) << "third log message";
@@ -419,7 +427,7 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
     }
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message4), IsOk());
     EXPECT_THAT(log_writer.Log(log_message5), IsOk());
     EXPECT_THAT(log_writer.Log(log_message6), IsOk());
@@ -429,7 +437,8 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
   }
   {
     // Unsorted should return 3, 2, 1, 4, 6, 5 in terms of message order.
-    LogsLoader logs_loader("/tmp", prefix);
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix);
     std::vector<Log::Message> msgs;
     for (auto& log_msg : logs_loader) {
       msgs.push_back(log_msg);
@@ -442,7 +451,8 @@ TEST(LogsLoaderTest, SortingMultiFileTest) {
   }
   {
     // Try a logs loader that sorts by idx.
-    LogsLoader logs_loader("/tmp", prefix,
+    LogsLoader logs_loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                           prefix,
                            [](const Log::Message& a, const Log::Message& b) {
                              return a.paxos().idx() < b.paxos().idx();
                            });
@@ -480,14 +490,15 @@ TEST(SortingLogsLoaderTest, Basic) {
   log_message.mutable_paxos()->set_accepted_value("test1234");
   log_message.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
   }
   {
     SortingLogsLoader logs_loader(
-        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& a, const Log::Message& b) {
           return a.paxos().idx() < b.paxos().idx();
         });
     auto it = logs_loader.begin();
@@ -533,7 +544,7 @@ TEST(SortingLogsLoaderTest, SortingTest) {
   log_message3.mutable_paxos()->set_accepted_value("test1234124");
   log_message3.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message3), IsOk());
     LOG(INFO) << "third log message";
@@ -546,7 +557,8 @@ TEST(SortingLogsLoaderTest, SortingTest) {
   {
     // Try a logs loader that sorts by idx.
     SortingLogsLoader logs_loader(
-        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& a, const Log::Message& b) {
           return a.paxos().idx() < b.paxos().idx();
         });
     auto it = logs_loader.begin();
@@ -606,7 +618,7 @@ TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
   log_message6.mutable_paxos()->set_accepted_value("test1234124");
   log_message6.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     LOG(INFO) << "second log message";
     EXPECT_THAT(log_writer.Log(log_message3), IsOk());
     LOG(INFO) << "third log message";
@@ -617,7 +629,7 @@ TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
     }
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     EXPECT_THAT(log_writer.Log(log_message4), IsOk());
     EXPECT_THAT(log_writer.Log(log_message5), IsOk());
     EXPECT_THAT(log_writer.Log(log_message6), IsOk());
@@ -628,7 +640,8 @@ TEST(SortingLogsLoaderTest, SortingMultiFileTest) {
   {
     // Try a logs loader that sorts by idx.
     SortingLogsLoader logs_loader(
-        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& a, const Log::Message& b) {
           return a.paxos().idx() < b.paxos().idx();
         });
     auto it = logs_loader.begin();
@@ -680,7 +693,7 @@ TEST(SortingLogsLoaderTest, Large) {
   absl::SetFlag(&FLAGS_log_writer_max_file_size, 256);
   std::vector<std::string> cleanup_files;
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     for (size_t i = 0; i < msgs.size(); i++) {
       ASSERT_THAT(log_writer.Log(msgs[i]), IsOk()) << i;
     }
@@ -693,7 +706,8 @@ TEST(SortingLogsLoaderTest, Large) {
 
     // Try a logs loader that sorts by idx.
     SortingLogsLoader logs_loader(
-        "/tmp", prefix, [](const Log::Message& a, const Log::Message& b) {
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& a, const Log::Message& b) {
           return a.paxos().idx() < b.paxos().idx();
         });
     int prev_idx = -1;

@@ -1,6 +1,8 @@
 #ifndef NODE_HH_
 #define NODE_HH_
 
+#include <memory>
+
 #include "acceptor.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
@@ -15,21 +17,21 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
-  absl::Mutex node_mutex_;
-
+  absl::Mutex lock_;
   std::vector<std::unique_ptr<paxos_rpc::Acceptor::Stub>> acceptor_stubs_
-      ABSL_GUARDED_BY(node_mutex_);
-  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(node_mutex_);
+      ABSL_GUARDED_BY(lock_);
+
+  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(lock_);
 
   size_t quorum_;
   uint8_t node_id_;
-  uint8_t leader_node_id_ ABSL_GUARDED_BY(node_mutex_);
+  uint8_t leader_node_id_ ABSL_GUARDED_BY(lock_);
 
   bool is_witness_;
   bool is_leader_;
 
   std::jthread heartbeat_thread_;
-  std::stop_source hb_ss_ = {};
+  std::jthread truncation_thread_;
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
   // This thread then goes to sleep for `paxos_node_heartbeat` number of
@@ -37,7 +39,8 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   // vector, and next time will attempt to establish a connection hoping the
   // node is back. If it detects a successful re-connection, reinstate the new
   // stub in the vector at the index corresponding to the node.
-  void HeartbeatThread(const std::stop_source& ss);
+  void HeartbeatThread(std::stop_token st);
+  void TruncationLoop(std::stop_token st);
 
   void CommitAsync(uint8_t node_id, uint64_t idx);
   std::vector<std::future<void>> commit_futures_;
@@ -55,10 +58,12 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   grpc::Status SendPingGrpc(uint8_t node_id, paxos_rpc::PingRequest request,
                             paxos_rpc::PingResponse* response);
 
+  std::unique_ptr<paxos_rpc::Acceptor::Stub>& GetAcceptorStub(uint8_t node_id)
+      ABSL_LOCKS_EXCLUDED(lock_);
+
  public:
   PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog);
   ~PaxosNode();
-
   void MakeReady(void);
   void CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs);
 
@@ -70,7 +75,7 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
     return IsLeader() && this->leader_caught_up_;
   }
   uint8_t GetLeaderNodeId() {
-    absl::MutexLock l(&node_mutex_);
+    absl::MutexLock l(&lock_);
     return leader_node_id_;
   }
 

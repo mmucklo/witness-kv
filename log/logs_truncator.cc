@@ -1,6 +1,8 @@
 #include "logs_truncator.h"
 
 #include <cstdint>
+#include <functional>
+#include <memory>
 #include <queue>
 #include <stop_token>
 #include <system_error>
@@ -10,9 +12,11 @@
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
+#include "absl/flags/flag.h"
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "file_writer.h"
@@ -32,8 +36,12 @@ LogsTruncator::LogsTruncator(std::string dir, std::string prefix,
       prefix_(std::move(prefix)),
       idxfn_(std::move(idxfn)) {
   Init();
-  worker_ =
-      std::jthread([this](std::stop_token stop_token) { Run(stop_token); });
+  worker_ = std::jthread(std::bind_front(&LogsTruncator::Run, this));
+}
+
+LogsTruncator::~LogsTruncator() {
+  absl::MutexLock l(&queue_lock_);
+  worker_.get_stop_source().request_stop();
 }
 
 void LogsTruncator::Truncate(TruncationIdx max_idx) {
@@ -46,33 +54,37 @@ void LogsTruncator::Register(TruncationFileInfo truncation_file_info) {
   queue_.push(std::move(truncation_file_info));
 }
 
-void LogsTruncator::Run(std::stop_token& stop_token) {
+void LogsTruncator::Run(std::stop_token stop_token) {
   while (!stop_token.stop_requested()) {
-    // TODO(mmucklo): make this wait on a condition (entries in the queue).
-    absl::SleepFor(absl::Seconds(1));
-    while (true) {
-      std::variant<TruncationIdx, TruncationFileInfo> entry;
-      {
-        absl::MutexLock l(&queue_lock_);
-        if (queue_.empty()) {
-          break;
-        }
-        entry = queue_.front();
-        queue_.pop();
+    std::variant<TruncationIdx, TruncationFileInfo> entry;
+    {
+      absl::MutexLock l(&queue_lock_);
+      auto check_queue_not_empty = [this, &stop_token] {
+        queue_lock_.AssertReaderHeld();
+        return !queue_.empty() || stop_token.stop_requested();
+      };
+      queue_lock_.Await(absl::Condition(&check_queue_not_empty));
+      if (stop_token.stop_requested()) {
+        break;
       }
-      if (std::holds_alternative<TruncationIdx>(entry)) {
-        DoTruncation(std::get<TruncationIdx>(entry));
-      } else {
-        CHECK(std::holds_alternative<TruncationFileInfo>(entry));
-        TruncationFileInfo& file_info = std::get<TruncationFileInfo>(entry);
-        // We should always have a filename.
-        CHECK(file_info.filename.has_value());
+      if (queue_.empty()) {
+        continue;
+      }
+      entry = queue_.front();
+      queue_.pop();
+    }
+    if (std::holds_alternative<TruncationIdx>(entry)) {
+      DoTruncation(std::get<TruncationIdx>(entry));
+    } else {
+      CHECK(std::holds_alternative<TruncationFileInfo>(entry));
+      TruncationFileInfo& file_info = std::get<TruncationFileInfo>(entry);
+      // We should always have a filename.
+      CHECK(file_info.filename.has_value());
 
-        absl::MutexLock l(&lock_);
-        // Insertion shouldn't fail.
-        CHECK(filename_max_idx_.emplace(file_info.filename.value(), file_info)
-                  .second);
-      }
+      absl::MutexLock l(&lock_);
+      // Insertion shouldn't fail.
+      CHECK(filename_max_idx_.emplace(file_info.filename.value(), file_info)
+                .second);
     }
   }
 }
@@ -238,7 +250,7 @@ void LogsTruncator::Init() {
 }
 
 absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
-LogsTruncator::filename_max_idx() {
+LogsTruncator::filename_max_idx() const {
   absl::MutexLock l(&lock_);
   return filename_max_idx_;
 }
