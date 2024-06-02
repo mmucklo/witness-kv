@@ -67,7 +67,6 @@ TEST(LogsTruncator, Basic) {
 
     logs_truncator.Truncate(3);
     absl::SleepFor(absl::Seconds(4));
-    LOG(INFO) << "mmucklohere1";
     SortingLogsLoader loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
                              prefix,
                              [](const Log::Message& a, const Log::Message& b) {
@@ -88,7 +87,6 @@ TEST(LogsTruncator, Basic) {
       }
       indexes.push_back(msg.paxos().idx());
     }
-    LOG(INFO) << "mmucklohere2";
   }
   EXPECT_EQ(min_idx, 3);
   EXPECT_EQ(max_idx, 4);
