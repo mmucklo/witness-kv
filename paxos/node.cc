@@ -92,9 +92,10 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
       bool skip = false;
       for (size_t i = 0; i < acceptor_stubs_size; i++) {
         if (!IsLeader()) {
+          // small optimization, but as explained above still okay if we don't
+          // catch it here due to races between nodes during leader changes.
           break;
-        }  // small optimization, but as explained above still okay if we don't
-           // catch it here.
+        }
         std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
         paxos_rpc::TruncateProposeRequest request;
         paxos_rpc::TruncateProposeResponse response;
@@ -127,8 +128,10 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
       if (!IsLeader()) {
         skip = true;
         LOG(INFO) << "Stopping truncation process as we're no longer leader.";
-      }  // small optimization, but as explained above still okay if we don't
-         // catch it here.
+        // This is a small optimization, but as explained above still okay if we
+        // don't catch it here due to races between the nodes during leader
+        // changes.
+      }
       if (skip) {
         continue;
       }
@@ -142,9 +145,14 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
         grpc::ClientContext context;
         absl::ReaderMutexLock l(&lock_);
         if (stub == nullptr) {
-          // We could still truncate as we've heard back from everyone.
-          // Just the down node will not be able to truncate, which is okay
-          // it will truncate in another round.
+          // We can still truncate as we've heard back from everyone.
+          //
+          // Because this node is down, it won't get the truncation request
+          // (nor is it theoritically guaranteed that any nodes will receive
+          // our truncation request), however it's okay as it can just
+          // truncate in a subsequent round assuming the node comes back online
+          // and we're at least able to get another truncation message through
+          // to it at some point.
           LOG(INFO) << "Skipping truncation of node: " << i
                     << " because it offline.";
           continue;
