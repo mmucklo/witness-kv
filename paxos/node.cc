@@ -97,7 +97,7 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
       }
 
       grpc::Status status = stub->TruncatePropose(&context, request, &response);
-      LOG(INFO) << "Got Truncate Response for node: " << i << ": "
+      LOG(INFO) << "Got TruncatePropose Response for node: " << i << ": "
                 << response.index();
     }
 
