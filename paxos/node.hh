@@ -19,7 +19,11 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
   absl::Mutex lock_;
+  absl::Mutex lock_;
   std::vector<std::unique_ptr<paxos_rpc::Acceptor::Stub>> acceptor_stubs_
+      ABSL_GUARDED_BY(lock_);
+
+  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(lock_);
       ABSL_GUARDED_BY(lock_);
 
   size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(lock_);
@@ -27,11 +31,13 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   size_t quorum_;
   uint8_t node_id_;
   uint8_t leader_node_id_ ABSL_GUARDED_BY(lock_);
+  uint8_t leader_node_id_ ABSL_GUARDED_BY(lock_);
 
   bool is_witness_;
   bool is_leader_;
 
   std::jthread heartbeat_thread_;
+  std::jthread truncation_thread_;
   std::jthread truncation_thread_;
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
@@ -40,6 +46,8 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   // vector, and next time will attempt to establish a connection hoping the
   // node is back. If it detects a successful re-connection, reinstate the new
   // stub in the vector at the index corresponding to the node.
+  void HeartbeatThread(std::stop_token st);
+  void TruncationLoop(std::stop_token st);
   void HeartbeatThread(std::stop_token st);
   void TruncationLoop(std::stop_token st);
 
@@ -91,6 +99,7 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   }
   uint8_t GetLeaderNodeId() {
     absl::MutexLock l(&lock_);
+    absl::MutexLock l(&lock_);
     return leader_node_id_;
   }
 
@@ -106,3 +115,4 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 };
 }  // namespace witnesskvs::paxos
 #endif  // NODE_HH_
+
