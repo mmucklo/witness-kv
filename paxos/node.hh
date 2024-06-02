@@ -18,15 +18,6 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
   absl::Mutex lock_;
-
-  // std::shared_ptr here is not a free abstraction, it's more expensive
-  // to copy due to the atomic synchronization and reference counting
-  // that needs to be done. RCU would be an alternative here, but given
-  // there's no widely-popular generic std:: or absl:: or equivalent c++ RCU
-  // library publicly available (a proposal exists for c++ '26), we'll use
-  // std::shared_ptr. Also it would be worth benchmarking to identify that using
-  // std::shared_ptr here is a source of performance degredation significant
-  // enough to optimize.
   std::vector<std::unique_ptr<paxos_rpc::Acceptor::Stub>> acceptor_stubs_
       ABSL_GUARDED_BY(lock_);
 
