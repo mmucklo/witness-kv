@@ -30,6 +30,15 @@ absl::Status Cleanup(std::vector<std::string> filenames) {
       absl::StrCat("Could not delete files: ", absl::StrJoin(filenames, ",")));
 }
 
+void Cleanup(const std::string& directory, const std::string& prefix) {
+  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+    if (entry.is_regular_file() &&
+        entry.path().filename().string().starts_with(prefix)) {
+      std::filesystem::remove(entry.path());
+    }
+  }
+}
+
 std::string GetTempPrefix(std::string base_prefix) {
   absl::Time now = absl::Now();
   base_prefix.append(absl::StrCat(absl::ToUnixMicros(now)));

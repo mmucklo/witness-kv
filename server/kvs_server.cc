@@ -143,8 +143,6 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
     return Status::OK;
   }
 
-  LOG(WARNING) << "[KVS]: Paxos propose failed with error code: " << result;
-
   if (PAXOS_ERROR_NOT_PERMITTED == result) {
     CHECK_NE(leader_node_id, INVALID_NODE_ID)
         << "[KVS]: Paxos library returned us an invalid leader node id";
