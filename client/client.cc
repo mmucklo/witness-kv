@@ -270,6 +270,7 @@ static int DeleteHelper(const std::vector<Node>& nodes,
   return -1;
 }
 
+#if 1
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // absl::InitializeLog();
@@ -346,12 +347,12 @@ int main(int argc, char** argv) {
         LOG(FATAL) << "Invalid test step";
     }
 
-    absl::SleepFor(absl::Milliseconds(300));
+    absl::SleepFor(absl::Milliseconds(600));
   }
 
   return 0;
 }
-#if 0
+#else
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // absl::InitializeLog();
@@ -380,28 +381,30 @@ int main(int argc, char** argv) {
 
   std::string op = absl::GetFlag(FLAGS_op);
 
-  KvsClient client(grpc::CreateChannel(absl::GetFlag(FLAGS_server_address),
-                                       grpc::InsecureChannelCredentials()));
+  // KvsClient client(grpc::CreateChannel(absl::GetFlag(FLAGS_server_address),
+  //                                      grpc::InsecureChannelCredentials()));
+  const std::vector<Node> nodes =
+      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
   std::transform(op.begin(), op.end(), op.begin(),
                  [](unsigned char c) { return std::tolower(c); });
 
   if (op == "put") {
-    if (PutHelper(client, absl::GetFlag(FLAGS_key),
+    if (PutHelper(nodes, absl::GetFlag(FLAGS_key),
                   absl::GetFlag(FLAGS_value)) != 0) {
       LOG(WARNING) << "[Client]: Put operation failed!";
       std::cout << "[Client]: Put operation failed!";
     }
   } else if (op == "get") {
     int ret = 0;
-    std::string value = GetHelper(client, absl::GetFlag(FLAGS_key), &ret);
+    std::string value = GetHelper(nodes, absl::GetFlag(FLAGS_key), &ret);
     if (ret != 0) {
       LOG(WARNING) << "[Client]: Get operation failed!";
     } else {
       LOG(INFO) << "[Client]: Get response: " << value;
     }
   } else if (op == "delete") {
-    if (DeleteHelper(client, absl::GetFlag(FLAGS_key)) != 0) {
+    if (DeleteHelper(nodes, absl::GetFlag(FLAGS_key)) != 0) {
       LOG(WARNING) << "[Client]: Delete operation failed!";
     }
   } else {
