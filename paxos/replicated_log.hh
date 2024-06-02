@@ -61,7 +61,7 @@ class ReplicatedLog {
 
   // Useful for unit testing.
   std::map<uint64_t, ReplicatedLogEntry> GetLogEntries() const {
-    absl::MutexLock l(&lock_);
+    absl::ReaderMutexLock l(&lock_);
     return log_entries_;
   }
 };
