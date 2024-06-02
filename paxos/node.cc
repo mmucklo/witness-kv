@@ -119,19 +119,10 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
   }
 }
 
-// TODO(mmucklo): make this more idiomatic (rename flag, update means of
-// calling/joining,  )
 void PaxosNode::HeartbeatThread(std::stop_token st) {
-  absl::Duration sleep_time = absl::GetFlag(FLAGS_paxos_node_heartbeat);
-// TODO(mmucklo): make this more idiomatic (rename flag, update means of
-// calling/joining,  )
-void PaxosNode::HeartbeatThread(std::stop_token st) {
-  absl::Duration sleep_time = absl::GetFlag(FLAGS_paxos_node_heartbeat);
-
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-            << "] Heartbeat Timeout " << sleep_time;
+            << "] Heartbeat Timeout " <<  absl::GetFlag(FLAGS_paxos_node_heartbeat);
 
-  while (!st.stop_requested()) {
   while (!st.stop_requested()) {
     uint8_t highest_node_id = 0;
     bool cluster_has_valid_leader = false;
@@ -221,7 +212,7 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
     }
     absl::MutexLock l(&lock_);
     auto stopping = [&st]() { return st.stop_requested(); };
-    lock_.AwaitWithTimeout(absl::Condition(&stopping), sleep_time);
+    lock_.AwaitWithTimeout(absl::Condition(&stopping),  absl::GetFlag(FLAGS_paxos_node_heartbeat));
   }
 
   LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
@@ -267,8 +258,6 @@ void PaxosNode::CommitAsync(uint8_t node_id, uint64_t idx) {
       if (stub == nullptr) {
         status = grpc::Status(grpc::StatusCode::UNAVAILABLE,
                               "Acceptor not available right now.");
-      } else {
-        status = stub->Commit(&context, commit_request, &commit_response);
       } else {
         status = stub->Commit(&context, commit_request, &commit_response);
       }

@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package paxos_rpc;
 
-import "google/protobuf/empty.proto";
-
 service Acceptor {
     rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
     rpc Accept(AcceptRequest) returns (AcceptResponse) {}
