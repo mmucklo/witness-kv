@@ -7,8 +7,6 @@
 #include <filesystem>
 #include <string>
 
-#include "log.pb.h"
-
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -18,11 +16,13 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
-#include "tests/test_util.h"
+#include "log.pb.h"
 #include "tests/test_macros.h"
+#include "tests/test_util.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
+ABSL_DECLARE_FLAG(std::string, tests_test_util_temp_dir);
 
 using ::testing::AllOf;
 using ::testing::HasSubstr;
@@ -35,7 +35,8 @@ namespace {
 TEST(LogWriterTest, Basic) {
   std::vector<std::string> cleanup_files;
   {
-    LogWriter log_writer("/tmp", "log_writer_test");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_writer_test");
     Log::Message log_message;
     log_message.mutable_paxos()->set_min_proposal(4);
     log_message.mutable_paxos()->set_accepted_proposal(9);
@@ -52,7 +53,8 @@ TEST(LogWriterTest, TooBig) {
   std::vector<std::string> cleanup_files;
   {
     absl::SetFlag(&FLAGS_log_writer_max_msg_size, 1);
-    LogWriter log_writer("/tmp", "log_writer_test");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_writer_test");
     Log::Message log_message;
     log_message.mutable_paxos()->set_min_proposal(4);
     log_message.mutable_paxos()->set_accepted_proposal(9);
@@ -73,7 +75,8 @@ TEST(LogWriterTest, Rotation) {
   {
     // Make the max filesize small.
     absl::SetFlag(&FLAGS_log_writer_max_file_size, 100);
-    LogWriter log_writer("/tmp", "log_writer_test_rotation");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_writer_test_rotation");
     Log::Message log_message;
     log_message.mutable_paxos()->set_idx(0);
     log_message.mutable_paxos()->set_min_proposal(4);

@@ -8,6 +8,10 @@
 #include <filesystem>
 #include <string>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/flags/declare.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "log.pb.h"
 #include "log_util.h"
 #include "log_writer.h"
@@ -23,6 +27,8 @@ using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::UnorderedElementsAre;
 
+ABSL_DECLARE_FLAG(std::string, tests_test_util_temp_dir);
+
 namespace witnesskvs::log {
 extern const uint64_t kIdxSentinelValue;
 
@@ -30,7 +36,7 @@ TEST(LogsTruncator, Basic) {
   std::vector<std::string> cleanup_files;
   std::string prefix = test::GetTempPrefix("logs_truncator_");
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     for (int i = 0; i < 5; i++) {
       Log::Message log_message;
       log_message.mutable_paxos()->set_idx(i);
@@ -47,9 +53,9 @@ TEST(LogsTruncator, Basic) {
   uint64_t min_idx = kIdxSentinelValue;
   std::vector<uint64_t> indexes;
   {
-    LogsTruncator logs_truncator("/tmp", prefix, [](const Log::Message& msg) {
-      return msg.paxos().idx();
-    });
+    LogsTruncator logs_truncator(
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& msg) { return msg.paxos().idx(); });
     absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
         filename_max_idx = logs_truncator.filename_max_idx();
     EXPECT_THAT(filename_max_idx, SizeIs(1));
@@ -61,7 +67,8 @@ TEST(LogsTruncator, Basic) {
 
     logs_truncator.Truncate(3);
     absl::SleepFor(absl::Seconds(4));
-    SortingLogsLoader loader("/tmp", prefix,
+    SortingLogsLoader loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                             prefix,
                              [](const Log::Message& a, const Log::Message& b) {
                                return a.paxos().idx() < b.paxos().idx();
                              });
@@ -92,7 +99,7 @@ TEST(LogsTruncator, MultiFile) {
   std::string first_file;
   std::string prefix = test::GetTempPrefix("logs_truncator_");
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     for (int i = 0; i < 5; i++) {
       Log::Message log_message;
       log_message.mutable_paxos()->set_idx(i);
@@ -105,7 +112,7 @@ TEST(LogsTruncator, MultiFile) {
     first_file = log_writer.filename();
   }
   {
-    LogWriter log_writer("/tmp", prefix);
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix);
     for (int i = 9; i < 15; i++) {
       Log::Message log_message;
       log_message.mutable_paxos()->set_idx(i);
@@ -123,9 +130,9 @@ TEST(LogsTruncator, MultiFile) {
   uint64_t min_idx = kIdxSentinelValue;
   std::vector<uint64_t> indexes;
   {
-    LogsTruncator logs_truncator("/tmp", prefix, [](const Log::Message& msg) {
-      return msg.paxos().idx();
-    });
+    LogsTruncator logs_truncator(
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& msg) { return msg.paxos().idx(); });
     absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
         filename_max_idx = logs_truncator.filename_max_idx();
     EXPECT_THAT(filename_max_idx, SizeIs(2));
@@ -136,7 +143,8 @@ TEST(LogsTruncator, MultiFile) {
 
     logs_truncator.Truncate(11);
     absl::SleepFor(absl::Seconds(4));
-    SortingLogsLoader loader("/tmp", prefix,
+    SortingLogsLoader loader(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                             prefix,
                              [](const Log::Message& a, const Log::Message& b) {
                                return a.paxos().idx() < b.paxos().idx();
                              });
@@ -159,7 +167,8 @@ TEST(LogsTruncator, MultiFile) {
     EXPECT_EQ(max_idx, 14);
     EXPECT_THAT(indexes, ElementsAre(11, 12, 13, 14));
     EXPECT_FALSE(std::filesystem::exists(std::filesystem::path(first_file)));
-    EXPECT_TRUE(std::filesystem::exists(std::filesystem::path(cleanup_files[0])));
+    EXPECT_TRUE(
+        std::filesystem::exists(std::filesystem::path(cleanup_files[0])));
     filename_max_idx = logs_truncator.filename_max_idx();
     EXPECT_THAT(filename_max_idx, SizeIs(1));
     EXPECT_EQ(filename_max_idx[cleanup_files[0]].min_idx, 11);
@@ -173,16 +182,16 @@ TEST(LogTruncatorTest, RotationTest) {
   std::string first_file;
   std::string prefix = test::GetTempPrefix("logs_truncator_");
   {
-    LogsTruncator logs_truncator("/tmp", prefix, [](const Log::Message& msg) {
-      return msg.paxos().idx();
-    });
+    LogsTruncator logs_truncator(
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& msg) { return msg.paxos().idx(); });
     absl::flat_hash_map<std::string, LogsTruncator::TruncationFileInfo>
         filename_max_idx = logs_truncator.filename_max_idx();
     EXPECT_THAT(filename_max_idx, SizeIs(0));
 
-    LogWriter log_writer("/tmp", prefix, [](const Log::Message& msg) {
-      return msg.paxos().idx();
-    });
+    LogWriter log_writer(
+        absl::GetFlag(FLAGS_tests_test_util_temp_dir), prefix,
+        [](const Log::Message& msg) { return msg.paxos().idx(); });
     for (int i = 0; i < 5; i++) {
       Log::Message log_message;
       log_message.mutable_paxos()->set_idx(i);
@@ -231,7 +240,7 @@ TEST(LogTruncatorTest, RotationTest) {
     EXPECT_EQ(filename_max_idx[first_file].max_idx, 4);
     EXPECT_EQ(filename_max_idx[cleanup_files[0]].min_idx, 9);
     EXPECT_EQ(filename_max_idx[cleanup_files[0]].max_idx, 14);
-    
+
     // TODO(mmucklo) maybe run a rotation here and verify.
   }
 }

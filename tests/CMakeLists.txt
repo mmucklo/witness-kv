@@ -27,7 +27,10 @@ target_link_libraries(protobuf_matchers PUBLIC
     absl::strings
 )
 
-target_link_libraries(test_util_lib PUBLIC 
+target_link_libraries(test_util_lib PUBLIC
+    absl::flags
+    # See https://github.com/abseil/abseil-cpp/blob/c14dfbf9/absl/log/CMakeLists.txt#L464-L467
+    $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
     absl::status
     absl::strings
     absl::time
@@ -44,11 +47,12 @@ include_directories(${PROJECT_SOURCE_DIR}/paxos)
 
 enable_testing()
 
-add_executable(${This} ${Sources})
+add_executable(paxos_tests paxos_tests.cc)
 
-target_link_libraries(${This} PUBLIC
-    gtest_main
-    gmock_main
+target_link_libraries(paxos_tests PUBLIC
+    gtest
+    gmock
+    test_main
     kvsproto
     paxos
     absl::flags
