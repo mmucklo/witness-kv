@@ -138,7 +138,7 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
   uint8_t leader_node_id = INVALID_NODE_ID;
 
-  PaxosResult result = paxos_->Propose(value, &leader_node_id);
+  PaxosResult result = paxos_->Propose(value, &leader_node_id, is_read);
   if (PAXOS_OK == result) {
     return Status::OK;
   }
