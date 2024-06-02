@@ -218,4 +218,12 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   }
   return current_entry.min_proposal_;
 }
+
+void ReplicatedLog::Truncate(uint64_t index) {
+  // Note maybe we should put this under a lock and make sure
+  // we're not shutting down / going through destruction.
+  CHECK(logs_truncator_ != nullptr);
+  logs_truncator_->Truncate(index);
+}
+
 }  // namespace witnesskvs::paxos

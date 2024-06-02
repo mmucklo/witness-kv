@@ -59,6 +59,9 @@ class ReplicatedLog {
   // be updated.
   uint64_t UpdateLogEntry(const ReplicatedLogEntry &new_entry);
 
+  // Enqueues index in the truncator for log truncation.
+  void Truncate(uint64_t index);
+
   // Useful for unit testing.
   std::map<uint64_t, ReplicatedLogEntry> GetLogEntries() const {
     absl::ReaderMutexLock l(&lock_);

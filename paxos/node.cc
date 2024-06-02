@@ -1,6 +1,7 @@
 #include "node.hh"
 
 #include <functional>
+#include <limits>
 
 #include "proposer.hh"
 
@@ -37,7 +38,7 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
 
   std::set<std::pair<std::string, int>> s;
   for (const auto& node : nodes_) {
-    CHECK(s.insert({node.ip_address_, node.port_}).second)
+    CHECK(s.insert({node->ip_address(), node->port()}).second)
         << "Invalid config file : Duplicate IP address and port found";
   }
 
@@ -48,15 +49,15 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
   size_t num_witnesses = floor(static_cast<double>(nodes_.size()) / 2);
 
   for (size_t i = 0; i < nodes_.size(); ++i) {
-    nodes_[i].is_witness_ = false;
-    nodes_[i].is_leader_ = false;
+    nodes_[i]->SetIsWitness(false);
+    nodes_[i]->SetIsLeader(false);
     if (absl::GetFlag(FLAGS_witness_support)) {
       if (i >= nodes_.size() - num_witnesses &&
           !absl::GetFlag(FLAGS_lower_node_witness)) {
-        nodes_[i].is_witness_ = true;
+        nodes_[i]->SetIsWitness(true);
       }
       if (i < num_witnesses && absl::GetFlag(FLAGS_lower_node_witness)) {
-        nodes_[i].is_witness_ = true;
+        nodes_[i]->SetIsWitness(true);
       }
     }
   }
@@ -77,30 +78,86 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
 
   while (!st.stop_requested()) {
     // TODO(mmucklo): fill with Truncation logic.
-    size_t acceptor_stubs_size;
-    {
-      absl::ReaderMutexLock l(&lock_);
-      acceptor_stubs_size = acceptor_stubs_.size();
-    }
-    for (size_t i = 0; i < acceptor_stubs_size; i++) {
-      std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
-      paxos_rpc::TruncateProposeRequest request;
-      paxos_rpc::TruncateProposeResponse response;
-      grpc::ClientContext context;
-      absl::ReaderMutexLock l(&lock_);
-      if (stub == nullptr) {
-        // We can't truncate without agreement. Since a node is down, we skip
-        // this round.
-        LOG(INFO) << "Skipping truncation because node: " << i
-                  << " is offline.";
-        break;
+    if (IsLeader()) {
+      // What happens if two truncation loops run on two different nodes
+      // such as during a leader flip. This is okay. We will just enqueue
+      // two truncations at worse. We can optimize this edge case later,
+      // which would only add potentially extra RPCs during leader moves.
+      size_t acceptor_stubs_size;
+      {
+        absl::ReaderMutexLock l(&lock_);
+        acceptor_stubs_size = acceptor_stubs_.size();
       }
+      uint64_t min_index = std::numeric_limits<uint64_t>::max();
+      bool skip = false;
+      for (size_t i = 0; i < acceptor_stubs_size; i++) {
+        if (!IsLeader()) {
+          break;
+        }  // small optimization, but as explained above still okay if we don't
+           // catch it here.
+        std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
+        paxos_rpc::TruncateProposeRequest request;
+        paxos_rpc::TruncateProposeResponse response;
+        grpc::ClientContext context;
+        absl::ReaderMutexLock l(&lock_);
+        if (stub == nullptr) {
+          // We can't truncate without agreement. Since a node is down, we skip
+          // this round.
+          LOG(INFO) << "Skipping truncation because node: " << i
+                    << " is offline.";
+          skip = true;
+          break;
+        }
 
-      grpc::Status status = stub->TruncatePropose(&context, request, &response);
-      LOG(INFO) << "Got TruncatePropose Response for node: " << i << ": "
-                << response.index();
+        grpc::Status status =
+            stub->TruncatePropose(&context, request, &response);
+        if (!status.ok()) {
+          LOG(INFO) << "Skipping truncation because TruncatePropose for node : "
+                    << i
+                    << " returned invalid status:" << status.error_message();
+          skip = true;
+          break;
+        }
+        LOG(INFO) << "Got TruncatePropose Response for node: " << i << ": "
+                  << response.index();
+        if (response.index() < min_index) {
+          min_index = response.index();
+        }
+      }
+      if (!IsLeader()) {
+        skip = true;
+        LOG(INFO) << "Stopping truncation process as we're no longer leader.";
+      }  // small optimization, but as explained above still okay if we don't
+         // catch it here.
+      if (skip) {
+        continue;
+      }
+      CHECK_NE(min_index, std::numeric_limits<uint64_t>::max());
+      LOG(INFO) << "Truncation min_index determined: " << min_index;
+      for (size_t i = 0; i < acceptor_stubs_size; i++) {
+        std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
+        paxos_rpc::TruncateRequest request;
+        request.set_index(min_index);
+        paxos_rpc::TruncateResponse response;
+        grpc::ClientContext context;
+        absl::ReaderMutexLock l(&lock_);
+        if (stub == nullptr) {
+          // We could still truncate as we've heard back from everyone.
+          // Just the down node will not be able to truncate, which is okay
+          // it will truncate in another round.
+          LOG(INFO) << "Skipping truncation of node: " << i
+                    << " because it offline.";
+          continue;
+        }
+        grpc::Status status = stub->Truncate(&context, request, &response);
+        if (!status.ok()) {
+          LOG(INFO) << "Truncate at node: " << i << " returned invalid status."
+                    << status.error_message();
+          // As min_index is already determined, safe to continue here.
+          continue;
+        }
+      }
     }
-
     absl::MutexLock l(&lock_);
     auto stopping = [&st]() { return st.stop_requested(); };
     lock_.AwaitWithTimeout(absl::Condition(&stopping),
@@ -140,13 +197,13 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
           num_active_acceptors_conns_--;
         }
       } else {
-        auto channel = grpc::CreateChannel(nodes_[i].GetAddressPortStr(),
+        auto channel = grpc::CreateChannel(nodes_[i]->GetAddressPortStr(),
                                            grpc::InsecureChannelCredentials());
         auto new_stub = paxos_rpc::Acceptor::NewStub(channel);
         status = new_stub->Ping(&context, request, &response);
         if (status.ok()) {
           LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-                    << "] [Witness: " << nodes_[node_id_].IsWitness()
+                    << "] [Witness: " << nodes_[node_id_]->IsWitness()
                     << "] Connection established with node: " << i;
           absl::MutexLock l(&lock_);
           stub = std::move(new_stub);
@@ -155,7 +212,7 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
       }
 
       if (status.ok()) {
-        if (!nodes_[response.node_id()].is_witness_) {
+        if (!nodes_[response.node_id()]->IsWitness()) {
           // If there is atleast one non-witness node, we have a valid leader
           // node.
           cluster_has_valid_leader = true;
@@ -178,8 +235,8 @@ void PaxosNode::HeartbeatThread(std::stop_token st) {
                   << static_cast<uint32_t>(highest_node_id);
         leader_node_id_ = highest_node_id;
         std::for_each(nodes_.begin(), nodes_.end(),
-                      [](auto& e) { e.is_leader_ = false; });
-        nodes_[leader_node_id_].is_leader_ = true;
+                      [](auto& e) { e->SetIsLeader(false); });
+        nodes_[leader_node_id_]->SetIsLeader(true);
         leader_caught_up_ = false;
         node_is_new_leader = (node_id_ == leader_node_id_);
       }
@@ -270,12 +327,12 @@ void PaxosNode::CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs) {
 }
 
 std::string PaxosNode::GetNodeAddress(uint8_t node_id) const {
-  return nodes_[node_id].GetAddressPortStr();
+  return nodes_[node_id]->GetAddressPortStr();
 }
 
-bool PaxosNode::IsLeader() const { return nodes_[node_id_].IsLeader(); }
+bool PaxosNode::IsLeader() const { return nodes_[node_id_]->IsLeader(); }
 
-bool PaxosNode::IsWitness() const { return nodes_[node_id_].IsWitness(); }
+bool PaxosNode::IsWitness() const { return nodes_[node_id_]->IsWitness(); }
 
 bool PaxosNode::ClusterHasEnoughNodesUp() {
   absl::MutexLock l(&lock_);

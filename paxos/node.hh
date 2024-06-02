@@ -14,7 +14,7 @@ namespace witnesskvs::paxos {
 
 class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
  private:
-  std::vector<Node> nodes_;
+  std::vector<std::unique_ptr<Node>> nodes_;
 
   std::shared_ptr<ReplicatedLog> replicated_log_;
 
@@ -27,9 +27,6 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   size_t quorum_;
   uint8_t node_id_;
   uint8_t leader_node_id_ ABSL_GUARDED_BY(lock_);
-
-  bool is_witness_;
-  bool is_leader_;
 
   std::jthread heartbeat_thread_;
   std::jthread truncation_thread_;
@@ -106,4 +103,3 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 };
 }  // namespace witnesskvs::paxos
 #endif  // NODE_HH_
-

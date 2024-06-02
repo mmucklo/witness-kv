@@ -6,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <ostream>
+#include <vector>
 
 #include "absl/flags/flag.h"
 #include "paxos.hh"
@@ -38,12 +39,12 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  std::vector<Node> nodes = ParseNodesConfig(filename);
+  std::vector<std::unique_ptr<Node>> nodes = ParseNodesConfig(filename);
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {
-    ASSERT_EQ(addrs[i], nodes[i].ip_address_);
-    ASSERT_EQ(std::stoi(ports[i]), nodes[i].port_);
+    ASSERT_EQ(addrs[i], nodes[i]->ip_address());
+    ASSERT_EQ(std::stoi(ports[i]), nodes[i]->port());
   }
 
   temp_file.close();
