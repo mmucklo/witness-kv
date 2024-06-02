@@ -1,5 +1,7 @@
 #include "replicated_log.hh"
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include "log/logs_loader.h"
 
 ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
@@ -28,13 +30,10 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
         if (a.paxos().idx() < b.paxos().idx()) {
           return true;
         } else if (a.paxos().idx() == b.paxos().idx()) {
+          if (a.paxos().is_chosen() == b.paxos().is_chosen()) {
+            return false;  // for strict weak ordering criteria.
+          }
           if (!a.paxos().is_chosen()) {
-            return true;
-          } else if (b.paxos().is_chosen()) {
-            // This means a.paxos().is_chosen() && b.paxos()is_chosen(), so
-            // always choose a for ordering.
-            VLOG(2) << "Two log entries found that are chosen for idx: "
-                         << a.paxos().idx();
             return true;
           }
           return false;

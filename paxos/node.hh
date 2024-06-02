@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include "absl/base/optimization.h"
 #include "acceptor.hh"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
@@ -55,11 +56,25 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   std::future<void> async_leader_catch_up_;
   std::atomic<bool> leader_caught_up_;
 
-  grpc::Status SendPingGrpc(uint8_t node_id, paxos_rpc::PingRequest request,
-                            paxos_rpc::PingResponse* response);
-
   std::unique_ptr<paxos_rpc::Acceptor::Stub>& GetAcceptorStub(uint8_t node_id)
       ABSL_LOCKS_EXCLUDED(lock_);
+
+  // TODO(mmucklo): maybe use a template like this for the boilerplate in grpc
+  // functions
+  //
+  // template<typename T, typename U, auto F>
+  // grpc::Status Send(uint8_t node_id,
+  //                   T request,
+  //                   U& response) {
+  //   std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub =
+  //   GetAcceptorStub(node_id); grpc::ClientContext context;
+  //   absl::ReaderMutexLock rl(&lock_);
+  //   if (ABSL_PREDICT_FALSE(stub == nullptr)) {
+  //     return grpc::Status(grpc::StatusCode::UNAVAILABLE,
+  //                         "Acceptor not available right now.");
+  //   }
+  //   return (stub->*F)(&context, request, response);
+  // }
 
  public:
   PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog);
@@ -91,3 +106,4 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 };
 }  // namespace witnesskvs::paxos
 #endif  // NODE_HH_
+
