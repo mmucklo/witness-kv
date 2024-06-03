@@ -79,16 +79,6 @@ void VerifyLogIntegrity(
   }
 }
 
-void deleteAllFilesWithPrefix(const std::string& directory,
-                              const std::string& prefix) {
-  for (const auto& entry : std::filesystem::directory_iterator(directory)) {
-    if (entry.is_regular_file() &&
-        entry.path().filename().string().starts_with(prefix)) {
-      std::filesystem::remove(entry.path());
-    }
-  }
-}
-
 struct PaxosSanity : public ::testing::Test {
   static constexpr uint64_t heartbeat_timer = 300;  // ms
   // Setup up abseil flags for paxos library to suit these tests.
@@ -104,14 +94,6 @@ struct PaxosSanity : public ::testing::Test {
 
   // Cleanup all log files we may have created.
   virtual void TearDown() override {
-    /*for (const auto& entry : std::filesystem::directory_iterator(
-             absl::GetFlag(FLAGS_paxos_log_directory))) {
-      if (entry.is_regular_file() &&
-          entry.path().filename().string().starts_with(
-              absl::GetFlag(FLAGS_paxos_log_file_prefix))) {
-        std::filesystem::remove(entry.path());
-      }
-    }*/
     witnesskvs::test::Cleanup(absl::GetFlag(FLAGS_paxos_log_directory),
                               absl::GetFlag(FLAGS_paxos_log_file_prefix));
   }
