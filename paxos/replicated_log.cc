@@ -147,6 +147,7 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
+  entry.idx_ = idx;
   entry.is_chosen_ = true;
 
   MakeLogEntryStable(entry);
@@ -207,6 +208,7 @@ uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
   absl::MutexLock l(&lock_);
   ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
+    current_entry.idx_ = new_entry.idx_;
     current_entry.min_proposal_ = new_entry.min_proposal_;
     current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.accepted_value_ = new_entry.accepted_value_;

@@ -293,6 +293,73 @@ TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   VerifyLogIntegrity(nodes, 3 * num_proposals);
 }
 
+TEST_F(PaxosSanity, BasicMultiPaxosSanity) {
+  absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
+  const size_t num_nodes = 3;
+  std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
+  uint8_t leader_id;
+  uint64_t first_proposal_number = 0;
+  uint64_t second_proposal_number = 0;
+  for (size_t i = 0; i < num_nodes; i++) {
+    nodes[i] = std::make_unique<witnesskvs::paxos::Paxos>(i);
+  }
+
+  absl::SleepFor(sleep_timer);
+
+  const size_t num_proposals = 5;
+  for (size_t i = 0; i < num_proposals; i++) {
+    auto status = nodes[num_nodes - 1]->Propose(std::to_string(i), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+  }
+
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    auto status = nodes[leader_id]->Propose(std::to_string( i ), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
+  }
+  std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry> log =
+      nodes[0]->GetReplicatedLog()->GetLogEntries();
+  ASSERT_EQ(log.size(), num_proposals);
+
+  first_proposal_number = nodes[0]->GetReplicatedLog()->GetLogEntries().find(0)->second.accepted_proposal_;
+  for (size_t i = 0; i < log.size(); i++) {
+    auto entry = log.find(i)->second;
+    ASSERT_EQ(entry.accepted_proposal_, first_proposal_number)
+        << "Prposal number for log entry mistmatch at index: " << i << " observed: ("
+        << entry.accepted_proposal_ << ") and expected: (" << first_proposal_number
+        << ")";
+  }
+
+  // Mimic leader going away 
+  nodes[1].reset();
+  absl::SleepFor(sleep_timer);
+  for (size_t i = 0; i < num_proposals; i++) {
+    auto status = nodes[num_nodes - 1]->Propose(std::to_string((num_proposals + i) * 2), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+  }
+
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    auto status = nodes[leader_id]->Propose(std::to_string((num_proposals + i) * 2), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
+  }
+  log = nodes[0]->GetReplicatedLog()->GetLogEntries();
+  ASSERT_EQ(log.size(), 2 * num_proposals);
+
+  /*we want to check proposal numbers of second set after leader change
+  they should be different than original one*/
+  second_proposal_number = nodes[0]->GetReplicatedLog()->GetLogEntries().find(5)->second.accepted_proposal_;
+  for (size_t i = 5; i < log.size(); i++) {
+    auto entry = log.find(i)->second;
+    ASSERT_EQ(entry.accepted_proposal_, second_proposal_number)
+        << "Prposal number for log entry mistmatch at index: " << i << " observed: ("
+        << entry.accepted_proposal_ << ") and expected: (" << second_proposal_number
+        << ")";
+  }
+  ASSERT_NE( first_proposal_number, second_proposal_number )
+      << "Prposal number for same after leader change "
+      << " observed: (" << second_proposal_number << ") and previous proposal number ("
+      << first_proposal_number << ")";
+}
+
 TEST_F(PaxosSanity, WitnessNotLeader) {
   using witnesskvs::paxos::Paxos;
 
