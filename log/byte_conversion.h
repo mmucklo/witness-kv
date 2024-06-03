@@ -72,7 +72,6 @@ T fromBytes(std::vector<uint8_t> bytes) {
 // Source:
 // https://gist.github.com/PanForPancakes/3989f91371661dc76d4e87263d6da3e8
 
-
 // New Code goes here:
 
 // Helper function to convert funamental type bytes into a little-endian ordered
