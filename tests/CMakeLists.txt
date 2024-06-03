@@ -56,6 +56,7 @@ target_link_libraries(paxos_tests PUBLIC
     kvsproto
     paxos
     absl::flags
+    test_util_lib
 )
 
 add_test(

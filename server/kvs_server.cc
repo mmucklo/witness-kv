@@ -42,10 +42,11 @@ ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
-  KvsServiceImpl(const std::string& db_path, std::vector<Node> nodes);
+  KvsServiceImpl(std::vector<Node> nodes);
   ~KvsServiceImpl() { delete db_; }
 
   void InitPaxos(void);
+  void InitRocksDb(const std::string& db_path);
 
   // GRPC routines mapping directly to rocksdb operations.
   Status Get(ServerContext* context, const GetRequest* request,
@@ -66,23 +67,33 @@ class KvsServiceImpl final : public Kvs::Service {
   void KvsPaxosCommitCallback(std::string value);
 };
 
-KvsServiceImpl::KvsServiceImpl(const std::string& db_path,
-                               std::vector<Node> nodes)
-    : nodes_{nodes} {
-  rocksdb::Options options;
-  options.create_if_missing = true;
-  rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
-  if (!status.ok()) {
-    LOG(FATAL) << "[KVS]: Failed to open RocksDB: " << status.ToString();
+KvsServiceImpl::KvsServiceImpl(std::vector<Node> nodes) : nodes_{nodes} {}
+
+void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
+  CHECK(this->paxos_ != nullptr)
+      << "[KVS]: Attempting to initialize Rocks DB before PaxosNode";
+
+  if (!this->paxos_->IsWitness()) {
+    rocksdb::Options options;
+    options.create_if_missing = true;
+    rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
+    if (!status.ok()) {
+      LOG(FATAL) << "[KVS]: Failed to open RocksDB: " << status.ToString();
+    }
+
+    auto callback = std::bind(&KvsServiceImpl::KvsPaxosCommitCallback, this,
+                              std::placeholders::_1);
+    if (witnesskvs::paxos::PAXOS_OK !=
+        this->paxos_->RegisterAppCallback(callback)) {
+      LOG(FATAL) << "[KVS]: Failed Regsiter DB callback with paxos";
+    }
+    LOG(INFO) << "[KVS]: Registered Database callback.";
   }
 }
 
 void KvsServiceImpl::InitPaxos(void) {
-  auto callback = std::bind(&KvsServiceImpl::KvsPaxosCommitCallback, this,
-                            std::placeholders::_1);
-
   paxos_ = std::make_unique<witnesskvs::paxos::Paxos>(
-      absl::GetFlag(FLAGS_kvs_node_id), callback);
+      absl::GetFlag(FLAGS_kvs_node_id));
 }
 
 void KvsServiceImpl::KvsPaxosCommitCallback(std::string value) {
@@ -138,12 +149,10 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
   uint8_t leader_node_id = INVALID_NODE_ID;
 
-  PaxosResult result = paxos_->Propose(value, &leader_node_id);
+  PaxosResult result = paxos_->Propose(value, &leader_node_id, is_read);
   if (PAXOS_OK == result) {
     return Status::OK;
   }
-
-  LOG(WARNING) << "[KVS]: Paxos propose failed with error code: " << result;
 
   if (PAXOS_ERROR_NOT_PERMITTED == result) {
     CHECK_NE(leader_node_id, INVALID_NODE_ID)
@@ -230,13 +239,13 @@ Status KvsServiceImpl::Delete(ServerContext* context,
 
 void RunKvsServer(const std::string& db_path, std::vector<Node> nodes,
                   uint8_t node_id) {
-  std::string server_address = nodes[node_id].GetAddressPortStr();
-
-  KvsServiceImpl service(db_path, nodes);
+  KvsServiceImpl service(nodes);
   service.InitPaxos();
+  service.InitRocksDb(db_path);
 
   ServerBuilder builder;
-  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+  builder.AddListeningPort(nodes[node_id].GetAddressPortStr(),
+                           grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server(builder.BuildAndStart());
 
@@ -245,7 +254,6 @@ void RunKvsServer(const std::string& db_path, std::vector<Node> nodes,
 
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
-  // absl::InitializeLog();
 
   auto nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
   CHECK_NE(nodes.size(), 0);
@@ -253,8 +261,7 @@ int main(int argc, char** argv) {
   uint8_t node_id = absl::GetFlag(FLAGS_kvs_node_id);
 
   std::string database_path =
-      absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), node_id, ".",
-                   absl::ToUnixMicros(absl::Now()));
+      absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), node_id);
 
   RunKvsServer(database_path, nodes, node_id);
 }

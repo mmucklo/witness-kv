@@ -9,6 +9,8 @@
 
 #include "absl/flags/flag.h"
 #include "paxos.hh"
+#include "replicated_log.hh"
+#include "tests/test_util.h"
 #include "utils.hh"
 
 ABSL_DECLARE_FLAG(uint64_t, absl_log_min_level);
@@ -52,7 +54,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
 
 // Helper function to check replicated log on all nodes.
 void VerifyLogIntegrity(
-    const std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> &nodes,
+    const std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>>& nodes,
     size_t total_proposals) {
   std::vector<std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry>> logs(
       nodes.size());
@@ -79,7 +81,7 @@ void VerifyLogIntegrity(
 
 struct PaxosSanity : public ::testing::Test {
   static constexpr uint64_t heartbeat_timer = 300;  // ms
-  // Setup up abseil flags for paxos library to suit these test.
+  // Setup up abseil flags for paxos library to suit these tests.
   // Log directory and prefix are chosen such that they do not collide with
   // existing default logs.
   // Heartbeat timer is set so that the tests can run faster.
@@ -92,13 +94,8 @@ struct PaxosSanity : public ::testing::Test {
 
   // Cleanup all log files we may have created.
   virtual void TearDown() override {
-    std::string log_files = absl::GetFlag(FLAGS_paxos_log_directory) + "/" +
-                            absl::GetFlag(FLAGS_paxos_log_file_prefix) + "*";
-
-    // TODO [V]: Use a more portable std::filesystem (or something) to remove
-    // these files
-    std::string command = "rm -f " + log_files;
-    CHECK_EQ(system(command.c_str()), 0);
+    witnesskvs::test::Cleanup(absl::GetFlag(FLAGS_paxos_log_directory),
+                              absl::GetFlag(FLAGS_paxos_log_file_prefix));
   }
 };
 
@@ -379,4 +376,72 @@ TEST_F(PaxosSanity, WitnessCount) {
 
   temp_file.close();
   ASSERT_EQ(remove(filename), 0);
+}
+
+struct ReplicatedLogTest : public ::testing::Test {
+  std::unique_ptr<witnesskvs::paxos::ReplicatedLog> log;
+
+  virtual void SetUp() override {
+    absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
+    absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
+
+    log = std::make_unique<witnesskvs::paxos::ReplicatedLog>(0);
+  }
+
+  virtual void TearDown() override {}
+};
+
+TEST_F(PaxosSanity, BasicLogTest) {
+  std::unique_ptr<witnesskvs::paxos::ReplicatedLog> log =
+      std::make_unique<witnesskvs::paxos::ReplicatedLog>(0);
+  uint64_t proposal_number = 0;
+  uint64_t num_idx = 10;
+
+  for (uint64_t i = 0; i < num_idx; i++) {
+    uint64_t proposal = log->GetNextProposalNumber();
+    ASSERT_GT(proposal, proposal_number);
+    proposal_number = proposal;
+
+    witnesskvs::paxos::ReplicatedLogEntry entry = {};
+    entry.idx_ = i;
+    entry.min_proposal_ = proposal;
+    entry.accepted_proposal_ = proposal;
+    entry.accepted_value_ = std::to_string(i);
+    entry.is_chosen_ = false;
+
+    ASSERT_EQ(log->UpdateLogEntry(entry), proposal);
+  }
+
+  ASSERT_EQ(log->GetFirstUnchosenIdx(), 0);
+
+  for (uint64_t i = 0; i < num_idx; i += 2) {
+    log->MarkLogEntryChosen(i);
+  }
+
+  ASSERT_EQ(log->GetFirstUnchosenIdx(), 1);
+
+  for (uint64_t i = 1; i < num_idx; i += 2) {
+    log->MarkLogEntryChosen(i);
+
+    uint64_t expected_idx = (i == (num_idx - 1)) ? num_idx : (i + 2);
+    ASSERT_EQ(log->GetFirstUnchosenIdx(), expected_idx);
+  }
+}
+
+TEST(ProposalNumberTest, BasicProposalNumberTest) {
+  std::unique_ptr<witnesskvs::paxos::ReplicatedLog> log =
+      std::make_unique<witnesskvs::paxos::ReplicatedLog>(0);
+
+  uint64_t proposal_number = 10;
+  uint64_t num_proposals = 10;
+
+  for (uint64_t i = 0; i < num_proposals; i++) {
+    log->UpdateProposalNumber(proposal_number);
+    uint64_t proposal = log->GetNextProposalNumber();
+    ASSERT_GT(proposal, proposal_number)
+        << "The Next proposal number should never be less than the previously "
+           "updated proposal number";
+
+    proposal_number = proposal * num_proposals;
+  }
 }

@@ -9,6 +9,7 @@
 namespace witnesskvs::test {
 
 absl::Status Cleanup(std::vector<std::string> filenames);
+void Cleanup(const std::string& directory, const std::string& prefix);
 std::string GetTempPrefix(std::string base_prefix);
 
 }  // namespace witnesskvs::test
