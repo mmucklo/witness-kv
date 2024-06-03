@@ -25,7 +25,7 @@ class Paxos {
   uint8_t node_id_;
 
  public:
-  Paxos(uint8_t node_id, std::function<void(std::string)> callback = nullptr);
+  Paxos(uint8_t node_id);
   ~Paxos();
 
   // Function to add a command to the replicated state machine across all alive
@@ -34,6 +34,8 @@ class Paxos {
   // https://lamport.azurewebsites.net/pubs/paxos-simple.pdf
   PaxosResult Propose(const std::string& value,
                       uint8_t* leader_node_id = nullptr, bool is_read = false);
+
+  PaxosResult RegisterAppCallback(std::function<void(std::string)> callback);
 
   // Helper functions for unit testing.
   std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }

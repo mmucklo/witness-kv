@@ -2,9 +2,8 @@
 
 namespace witnesskvs::paxos {
 
-Paxos::Paxos(uint8_t node_id, std::function<void(std::string)> callback)
-    : node_id_{node_id} {
-  replicated_log_ = std::make_shared<ReplicatedLog>(node_id, callback);
+Paxos::Paxos(uint8_t node_id) : node_id_{node_id} {
+  replicated_log_ = std::make_shared<ReplicatedLog>(node_id);
   paxos_node_ = std::make_shared<PaxosNode>(node_id, replicated_log_);
 
   acceptor_ = std::make_unique<AcceptorService>(
@@ -51,6 +50,12 @@ PaxosResult Paxos::Propose(const std::string& value, uint8_t* leader_node_id,
     }
   }
 
+  // If the new leader is in the process of catching up, do not service
+  // reads/writes.
+  while (!this->paxos_node_->IsLeaderCaughtUp()) {
+    absl::SleepFor(absl::Milliseconds(900));
+  }
+
   if (!is_read) {
     proposer_->Propose(value);
   }
@@ -76,6 +81,16 @@ std::ostream& operator<<(std::ostream& os, PaxosResult error) {
       LOG(FATAL) << "Unrecognized error returned by paxos";
   }
   return os;
+}
+
+PaxosResult Paxos::RegisterAppCallback(
+    std::function<void(std::string)> callback) {
+  if (this->IsWitness()) {
+    return PAXOS_ERROR_NOT_PERMITTED;
+  }
+
+  this->replicated_log_->RegisterAppCallback(callback);
+  return PAXOS_OK;
 }
 
 }  // namespace witnesskvs::paxos
