@@ -12,7 +12,6 @@
 #include "absl/log/log.h"
 #include "kvs.grpc.pb.h"
 #include "paxos/utils.hh"
-// #include "utils.hh"
 
 using grpc::Channel;
 using grpc::ClientContext;
@@ -24,6 +23,8 @@ using KeyValueStore::GetResponse;
 using KeyValueStore::Kvs;
 using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
+
+ABSL_FLAG(bool, interactive, false, "Mode for running the client test");
 
 ABSL_FLAG(std::string, server_address, "",
           "Address of the key-value server (host:port)");
@@ -88,7 +89,7 @@ Status KvsClient::DeleteGrpc(const std::string& key,
 // count loop ?
 static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
                      const std::string& value) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   PutRequest request;
   request.set_key(key);
@@ -96,7 +97,7 @@ static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
 
   PutResponse response;
   Status status;
-  // for (uint8_t i = 0; i < nodes.size(); i++) {
+
   while (true) {
     auto channel = grpc::CreateChannel(nodes[node_id].GetAddressPortStr(),
                                        grpc::InsecureChannelCredentials());
@@ -136,7 +137,6 @@ static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
       return 0;
     } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
       absl::SleepFor(absl::Seconds(1));
-      // continue;
     } else {
       LOG(WARNING) << "[Client]: Error from KVS server leader node: "
                    << status.error_code();
@@ -149,7 +149,7 @@ static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
 
 static std::string GetHelper(const std::vector<Node>& nodes,
                              const std::string& key, int* return_code) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   GetRequest request;
   request.set_key(key);
@@ -165,7 +165,6 @@ static std::string GetHelper(const std::vector<Node>& nodes,
     ClientContext context;
     status = stub->Get(&context, request, &response);
     if (status.ok()) {
-      // LOG(INFO) << response.status();
       return response.value();
     }
     if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
@@ -198,7 +197,6 @@ static std::string GetHelper(const std::vector<Node>& nodes,
       return response.value();
     } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
       absl::SleepFor(absl::Seconds(2));
-      // continue;
     } else {
       LOG(WARNING) << "[Client]: Error from KVS server leader node: "
                    << status.error_code();
@@ -212,14 +210,14 @@ static std::string GetHelper(const std::vector<Node>& nodes,
 
 static int DeleteHelper(const std::vector<Node>& nodes,
                         const std::string& key) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   DeleteRequest request;
   request.set_key(key);
 
   DeleteResponse response;
   Status status;
-  // for (uint8_t i = 0; i < nodes.size(); i++) {
+
   while (true) {
     auto channel = grpc::CreateChannel(nodes[node_id].GetAddressPortStr(),
                                        grpc::InsecureChannelCredentials());
@@ -259,7 +257,6 @@ static int DeleteHelper(const std::vector<Node>& nodes,
       return 0;
     } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
       absl::SleepFor(absl::Seconds(1));
-      // continue;
     } else {
       LOG(WARNING) << "[Client]: Error from KVS server leader node: "
                    << status.error_code();
@@ -270,11 +267,7 @@ static int DeleteHelper(const std::vector<Node>& nodes,
   return -1;
 }
 
-#if 1
-int main(int argc, char** argv) {
-  absl::ParseCommandLine(argc, argv);
-  // absl::InitializeLog();
-
+int NonInteractiveClientTest(void) {
   const std::vector<Node> nodes =
       ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
@@ -347,15 +340,19 @@ int main(int argc, char** argv) {
         LOG(FATAL) << "Invalid test step";
     }
 
-    absl::SleepFor(absl::Milliseconds(600));
+    absl::SleepFor(absl::Milliseconds(500));
   }
 
   return 0;
 }
-#else
+
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
   // absl::InitializeLog();
+
+  if (!absl::GetFlag(FLAGS_interactive)) {
+    return NonInteractiveClientTest();
+  }
 
   if (absl::GetFlag(FLAGS_server_address).empty()) {
     LOG(ERROR) << "[Client]: Usage: --server_address is required.";
@@ -413,4 +410,3 @@ int main(int argc, char** argv) {
 
   return 0;
 }
-#endif

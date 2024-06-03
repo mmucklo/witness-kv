@@ -11,15 +11,9 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id,
-                             std::function<void(std::string)> callback)
-    : node_id_{node_id},
-      first_unchosen_index_{0},
-      proposal_number_{0},
-      app_registered_callback_{callback} {
+ReplicatedLog::ReplicatedLog(uint8_t node_id)
+    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-
-  bool found_unchosen_idx = false;
 
   const std::string prefix =
       absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
@@ -48,23 +42,23 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
     entry.accepted_value_ = log_msg.paxos().accepted_value();
     entry.is_chosen_ = log_msg.paxos().is_chosen();
 
-    if (!found_unchosen_idx) {
-      if (entry.is_chosen_) {
-        first_unchosen_index_ = log_msg.paxos().idx() + 1;
-      } else {
-        first_unchosen_index_ = log_msg.paxos().idx();
-        found_unchosen_idx = true;
-      }
-    }
-
     proposal_number_ =
         std::max(proposal_number_, log_msg.paxos().min_proposal());
   }
 
-  VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
-          << "] Constructed Replicated log with first unchosen index : "
-          << first_unchosen_index_ << " and proposal number "
-          << proposal_number_;
+  for (const auto &[key, value] : log_entries_) {
+    if (value.is_chosen_) {
+      first_unchosen_index_ = value.idx_ + 1;
+    } else {
+      first_unchosen_index_ = value.idx_;
+      break;
+    }
+  }
+
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Constructed Replicated log with first unchosen index : "
+            << first_unchosen_index_ << " and proposal number "
+            << proposal_number_;
 
   logs_truncator_ = std::make_unique<log::LogsTruncator>(
       absl::GetFlag(FLAGS_paxos_log_directory), prefix,
@@ -116,10 +110,10 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
     // `first_unchosen_index_` is incremented. This ensures that even if the
     // paxos log has holes, the callback is invoked in log order instead of
     // commit order.
-    if (this->app_registered_callback_) {
+    if (this->app_callback_) {
       LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                 << "] Calling App registered callback";
-      this->app_registered_callback_(it->second.accepted_value_);
+      this->app_callback_(it->second.accepted_value_);
     }
     first_unchosen_index_++;
   }
@@ -202,6 +196,7 @@ ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
   absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
   CHECK(it != log_entries_.end());
+  it->second.idx_ = idx;
   return it->second;
 }
 
