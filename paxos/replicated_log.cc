@@ -1,5 +1,7 @@
 #include "replicated_log.hh"
 
+#include <google/protobuf/util/message_differencer.h>
+
 #include "log/logs_loader.h"
 
 ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
@@ -9,15 +11,9 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id,
-                             std::function<void(std::string)> callback)
-    : node_id_{node_id},
-      first_unchosen_index_{0},
-      proposal_number_{0},
-      app_registered_callback_{callback} {
+ReplicatedLog::ReplicatedLog(uint8_t node_id)
+    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
   CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-
-  bool found_unchosen_idx = false;
 
   const std::string prefix =
       absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
@@ -28,13 +24,10 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
         if (a.paxos().idx() < b.paxos().idx()) {
           return true;
         } else if (a.paxos().idx() == b.paxos().idx()) {
+          if (a.paxos().is_chosen() == b.paxos().is_chosen()) {
+            return false;  // for strict weak ordering criteria.
+          }
           if (!a.paxos().is_chosen()) {
-            return true;
-          } else if (b.paxos().is_chosen()) {
-            // This means a.paxos().is_chosen() && b.paxos()is_chosen(), so
-            // always choose a for ordering.
-            VLOG(2) << "Two log entries found that are chosen for idx: "
-                         << a.paxos().idx();
             return true;
           }
           return false;
@@ -49,23 +42,23 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
     entry.accepted_value_ = log_msg.paxos().accepted_value();
     entry.is_chosen_ = log_msg.paxos().is_chosen();
 
-    if (!found_unchosen_idx) {
-      if (entry.is_chosen_) {
-        first_unchosen_index_ = log_msg.paxos().idx() + 1;
-      } else {
-        first_unchosen_index_ = log_msg.paxos().idx();
-        found_unchosen_idx = true;
-      }
-    }
-
     proposal_number_ =
         std::max(proposal_number_, log_msg.paxos().min_proposal());
   }
 
-  VLOG(1) << "NODE: [" << static_cast<uint32_t>(node_id_)
-          << "] Constructed Replicated log with first unchosen index : "
-          << first_unchosen_index_ << " and proposal number "
-          << proposal_number_;
+  for (const auto &[key, value] : log_entries_) {
+    if (value.is_chosen_) {
+      first_unchosen_index_ = value.idx_ + 1;
+    } else {
+      first_unchosen_index_ = value.idx_;
+      break;
+    }
+  }
+
+  LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+            << "] Constructed Replicated log with first unchosen index : "
+            << first_unchosen_index_ << " and proposal number "
+            << proposal_number_;
 
   logs_truncator_ = std::make_unique<log::LogsTruncator>(
       absl::GetFlag(FLAGS_paxos_log_directory), prefix,
@@ -79,12 +72,12 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id,
 ReplicatedLog::~ReplicatedLog() {}
 
 uint64_t ReplicatedLog::GetFirstUnchosenIdx() {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   return first_unchosen_index_;
 }
 
 uint64_t ReplicatedLog::GetNextProposalNumber() {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   proposal_number_ =
       ((proposal_number_ & mask_) + (1ull << num_bits_for_node_id_)) |
       (uint64_t)node_id_;
@@ -94,14 +87,14 @@ uint64_t ReplicatedLog::GetNextProposalNumber() {
 }
 
 void ReplicatedLog::UpdateProposalNumber(uint64_t prop_num) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   if (prop_num > proposal_number_) {
     proposal_number_ = prop_num;
   }
 }
 
 void ReplicatedLog::UpdateFirstUnchosenIdx() {
-  log_mutex_.AssertHeld();
+  lock_.AssertHeld();
   for (uint64_t i = first_unchosen_index_; i <= log_entries_.rbegin()->first;
        i++) {
     auto it = log_entries_.find(i);
@@ -117,10 +110,10 @@ void ReplicatedLog::UpdateFirstUnchosenIdx() {
     // `first_unchosen_index_` is incremented. This ensures that even if the
     // paxos log has holes, the callback is invoked in log order instead of
     // commit order.
-    if (this->app_registered_callback_) {
+    if (this->app_callback_) {
       LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
                 << "] Calling App registered callback";
-      this->app_registered_callback_(it->second.accepted_value_);
+      this->app_callback_(it->second.accepted_value_);
     }
     first_unchosen_index_++;
   }
@@ -146,9 +139,10 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
 }
 
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   entry.is_chosen_ = true;
+  CHECK_EQ(entry.idx_, idx);
 
   MakeLogEntryStable(entry);
 
@@ -156,7 +150,7 @@ void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
 }
 
 void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
   if (entry.accepted_value_ != value) {
     // This is fine, as it is possible we may be the only node that accepted a
@@ -177,14 +171,15 @@ void ReplicatedLog::SetLogEntryAtIdx(uint64_t idx, std::string value) {
 }
 
 uint64_t ReplicatedLog::GetMinProposalForIdx(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
+  entry.idx_ = idx;
   return entry.min_proposal_;
 }
 
 void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
                                             uint64_t new_min_proposal) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
   CHECK(it != log_entries_.end()) << "Attempting to update min proposal for "
                                      "a log entry that does not exist.";
@@ -198,16 +193,18 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
 }
 
 ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
   CHECK(it != log_entries_.end());
+  it->second.idx_ = idx;
   return it->second;
 }
 
 uint64_t ReplicatedLog::UpdateLogEntry(const ReplicatedLogEntry &new_entry) {
-  absl::MutexLock l(&log_mutex_);
+  absl::MutexLock l(&lock_);
   ReplicatedLogEntry &current_entry = log_entries_[new_entry.idx_];
   if (new_entry.min_proposal_ >= current_entry.min_proposal_) {
+    current_entry.idx_ = new_entry.idx_;
     current_entry.min_proposal_ = new_entry.min_proposal_;
     current_entry.accepted_proposal_ = new_entry.accepted_proposal_;
     current_entry.accepted_value_ = new_entry.accepted_value_;

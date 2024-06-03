@@ -7,9 +7,6 @@
 #include <filesystem>
 #include <string>
 
-#include "log.pb.h"
-#include "log_writer.h"
-
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -19,15 +16,19 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
+#include "log.pb.h"
+#include "log_writer.h"
 #include "tests/protobuf_matchers.h"
-#include "tests/test_util.h"
 #include "tests/test_macros.h"
+#include "tests/test_util.h"
 
 using ::protobuf_matchers::EqualsProto;
 using ::testing::AllOf;
 using ::testing::HasSubstr;
 using ::testing::Not;
 using ::testing::UnorderedElementsAre;
+
+ABSL_DECLARE_FLAG(std::string, tests_test_util_temp_dir);
 
 MATCHER(IsError, "") { return (!arg.ok()); }
 
@@ -44,7 +45,8 @@ TEST(LogReaderTest, Basic) {
   log_message.mutable_paxos()->set_accepted_value("test1234");
   log_message.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", "log_reader_test");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
@@ -78,7 +80,8 @@ TEST(LogReaderTest, BlankMessage) {
   std::string filename;
   Log::Message log_message;
   {
-    LogWriter log_writer("/tmp", "log_reader_test");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
     cleanup_files = log_writer.filenames();
@@ -123,7 +126,8 @@ TEST(LogReaderTest, MultiTest) {
   log_message2.mutable_paxos()->set_accepted_value("test12345");
   log_message2.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", "log_reader_test");
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_reader_test");
     EXPECT_THAT(log_writer.Log(log_message1), IsOk());
     EXPECT_THAT(log_writer.Log(log_message2), IsOk());
     EXPECT_GT(std::filesystem::file_size(log_writer.filename()), 1);
@@ -169,10 +173,12 @@ TEST(LogReaderTest, IdxTest) {
   log_message2.mutable_paxos()->set_accepted_value("test12345");
   log_message2.mutable_paxos()->set_is_chosen(true);
   {
-    LogWriter log_writer("/tmp", "log_reader_test", [](const Log::Message& msg) { 
-      LOG(INFO) << "whatmsg:" << msg.DebugString();
-      LOG(INFO) << "paxosidx: " << msg.paxos().idx();
-      return msg.paxos().idx(); });
+    LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
+                         "log_reader_test", [](const Log::Message& msg) {
+                           LOG(INFO) << "whatmsg:" << msg.DebugString();
+                           LOG(INFO) << "paxosidx: " << msg.paxos().idx();
+                           return msg.paxos().idx();
+                         });
     ASSERT_THAT(log_writer.Log(log_message1), IsOk());
     ASSERT_THAT(log_writer.Log(log_message2), IsOk());
     cleanup_files = log_writer.filenames();
@@ -186,7 +192,7 @@ TEST(LogReaderTest, IdxTest) {
     }
     EXPECT_THAT(msgs, ElementsAre(EqualsProto(log_message1),
                                   EqualsProto(log_message2)));
-    absl::StatusOr<Log::Header> header = log_reader.header();                                  
+    absl::StatusOr<Log::Header> header = log_reader.header();
     ASSERT_THAT(header.status(), IsOk());
     EXPECT_EQ(header.value().min_idx(), 1);
     EXPECT_EQ(header.value().max_idx(), 15);

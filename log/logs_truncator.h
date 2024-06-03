@@ -25,7 +25,7 @@ class LogsTruncator {
  public:
   LogsTruncator(std::string dir, std::string prefix,
                 std::function<uint64_t(const Log::Message&)> idxfn);
-
+  ~LogsTruncator();
   using TruncationIdx = uint64_t;
   struct TruncationFileInfo {
     uint64_t min_idx;
@@ -34,10 +34,10 @@ class LogsTruncator {
   };
 
   // Truncates log files up to max_idx.
-  void Truncate(TruncationIdx max_idx);
+  void Truncate(TruncationIdx max_idx) ABSL_LOCKS_EXCLUDED(queue_lock_);
 
-  absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx()
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
+  absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx() const
+      ABSL_LOCKS_EXCLUDED(lock_);
 
   // Returns a callback function primarily for use in LogWriter during log
   // rotations.
@@ -46,18 +46,19 @@ class LogsTruncator {
  private:
   // TODO(mmucklo): method comments.
   void Init();
-  void Run(std::stop_token& stop_token);
-  void DoTruncation(uint64_t max_idx);
+  void Run(std::stop_token stop_token) ABSL_LOCKS_EXCLUDED(queue_lock_);
+  void DoTruncation(uint64_t max_idx) ABSL_LOCKS_EXCLUDED(lock_);
   void DoSingleFileTruncation(absl::string_view filename, uint64_t max_idx);
 
   // Registers a set of max_idx and min_idx against a filename.
-  void Register(TruncationFileInfo truncation_file_info);
+  void Register(TruncationFileInfo truncation_file_info)
+      ABSL_LOCKS_EXCLUDED(lock_);
 
   // Reads a header and updates filename_max_idx_ hash.
   //
   // insert signals whether we expect an insert or update.
-  absl::Status ReadHeader(const std::filesystem::path& path,
-                          bool insert = true);
+  absl::Status ReadHeader(const std::filesystem::path& path, bool insert = true)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
   // The truncation queue is a lightweight place to enqueue requests into
   // the truncator without the need to hold locks for an extended period of
@@ -67,8 +68,7 @@ class LogsTruncator {
   std::queue<std::variant<TruncationIdx, TruncationFileInfo>> queue_
       ABSL_GUARDED_BY(queue_lock_);
 
-  absl::Mutex lock_;
-
+  mutable absl::Mutex lock_;
   // Map of filename to max_idx.
   // This is a list of rotatable filenames, and their min/max idx values.
   absl::flat_hash_map<std::string, TruncationFileInfo> filename_max_idx_

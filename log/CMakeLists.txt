@@ -108,6 +108,7 @@ target_link_libraries(logs_truncator_lib PUBLIC
     absl::core_headers
     absl::flags
     absl::log
+    absl::synchronization
     absl::strings
     status_macros
 )
@@ -134,6 +135,7 @@ target_link_libraries(log_faker PRIVATE
 target_link_libraries(file_writer_test PUBLIC
     test_main
     file_writer_lib
+    test_util_lib
     absl::core_headers
     absl::flags
     absl::log

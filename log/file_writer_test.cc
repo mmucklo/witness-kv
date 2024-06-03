@@ -7,20 +7,22 @@
 #include <iterator>
 #include <string>
 
+#include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
 #include "absl/random/random.h"
 #include "absl/strings/cord.h"
 #include "absl/time/time.h"
 
-ABSL_FLAG(std::string, file_writer_test_flag, "", "This just a test flag");
+ABSL_DECLARE_FLAG(std::string, tests_test_util_temp_dir);
 
 namespace witnesskvs::log {
 namespace {
 
 std::string GetTempFilename() {
   absl::Time now = absl::Now();
-  std::string filename = "/tmp/file_writer_test.";
+  std::string filename =
+      absl::GetFlag(FLAGS_tests_test_util_temp_dir) + "/file_writer_test.";
   filename.append(absl::StrCat(absl::ToUnixMicros(now)));
   return filename;
 }
@@ -94,11 +96,6 @@ TEST(FileWriterTest, LargMultiCord) {
     EXPECT_EQ(combined_cord.size(), file_writer.bytes_written());
   }
   ASSERT_TRUE(std::filesystem::remove(std::filesystem::path(filename)));
-}
-
-TEST(FlagTest, Smoke) {
-  LOG(INFO) << "file_writer_test_flag: "
-            << absl::GetFlag(FLAGS_file_writer_test_flag);
 }
 
 // TODO microbenchmark to watch flush cycles and timing.

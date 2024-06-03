@@ -263,9 +263,9 @@ void CleanupDir(absl::string_view dir, absl::string_view prefix) {
   CHECK_OK(entries);
   if (entries.value().size() > 0) {
     std::vector<std::string> files;
-    std::transform(
-        entries.value().cbegin(), entries.value().cend(), files.begin(),
-        [](const std::filesystem::path& path) { return path.string(); });
+    for (const auto& entry : entries.value()) {
+      files.push_back(entry.string());
+    }
     CleanupFiles(files);
   }
 }

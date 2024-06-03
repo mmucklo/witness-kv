@@ -21,6 +21,12 @@ add_library(paxos STATIC ${SOURCES})
 target_link_libraries(paxos
     PUBLIC
 	paxosproto
+    absl::base
+    absl::core_headers
+    absl::flags
+    absl::log
+    absl::synchronization
+    absl::strings
     log_writer_lib
     logs_loader_lib
     logs_truncator_lib

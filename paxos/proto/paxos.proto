@@ -2,13 +2,13 @@ syntax = "proto3";
 
 package paxos_rpc;
 
-import "google/protobuf/empty.proto";
-
 service Acceptor {
     rpc Prepare(PrepareRequest) returns (PrepareResponse) {}
     rpc Accept(AcceptRequest) returns (AcceptResponse) {}
     rpc Commit(CommitRequest) returns (CommitResponse) {}
-    rpc SendPing(PingRequest) returns (PingResponse) {}
+    rpc Ping(PingRequest) returns (PingResponse) {}
+    rpc TruncatePropose(TruncateProposeRequest) returns (TruncateProposeResponse) {}
+    rpc Truncate(TruncateRequest) returns (TruncateResponse) {}
 }
 
 message PrepareRequest {
@@ -42,6 +42,18 @@ message CommitRequest {
 message CommitResponse {
     uint64 first_unchosen_index = 1;
 }
+
+// When truncating, we just query all 
+message TruncateProposeRequest {}
+message TruncateProposeResponse {
+    uint64 index = 1;
+}
+
+message TruncateRequest {
+    uint64 index = 1;
+}
+
+message TruncateResponse {}
 
 message PingRequest {
     uint32 node_id = 1;
