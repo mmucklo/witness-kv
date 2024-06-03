@@ -378,8 +378,6 @@ int main(int argc, char** argv) {
 
   std::string op = absl::GetFlag(FLAGS_op);
 
-  // KvsClient client(grpc::CreateChannel(absl::GetFlag(FLAGS_server_address),
-  //                                      grpc::InsecureChannelCredentials()));
   const std::vector<Node> nodes =
       ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
