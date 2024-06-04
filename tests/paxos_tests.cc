@@ -6,8 +6,15 @@
 #include <iostream>
 #include <memory>
 #include <ostream>
+#include <vector>
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
+#include "absl/strings/str_cat.h"
+#include "absl/time/time.h"
+#include "log.pb.h"
+#include "log/logs_loader.h"
 #include "paxos.hh"
 #include "replicated_log.hh"
 #include "tests/test_util.h"
@@ -19,7 +26,9 @@ ABSL_DECLARE_FLAG(std::string, paxos_log_directory);
 ABSL_DECLARE_FLAG(std::string, paxos_log_file_prefix);
 
 ABSL_DECLARE_FLAG(std::string, paxos_node_config_file);
-ABSL_DECLARE_FLAG(absl::Duration, paxos_node_heartbeat);
+ABSL_DECLARE_FLAG(absl::Duration, paxos_node_heartbeat_interval);
+ABSL_DECLARE_FLAG(absl::Duration, paxos_node_truncation_interval);
+ABSL_DECLARE_FLAG(bool, paxos_node_truncation_enabled);
 ABSL_DECLARE_FLAG(bool, lower_node_witness);
 
 // Simple test to sanity check file parsing logic.
@@ -29,9 +38,9 @@ TEST(FileParseTest, ConfigFileParseTest) {
   std::vector<std::string> ports = {"10", "20", "30", "40"};
   ASSERT_EQ(addrs.size(), ports.size());
 
-  char filename[] = "/tmp/paxos_config_file_test";
+  char filename[] = "/var/tmp/paxos_config_file_test";
   // absl::SetFlag(&FLAGS_paxos_node_config_file,
-  // "/tmp/paxos_config_file_test");
+  // "/var/tmp/paxos_config_file_test");
   std::ofstream temp_file(filename);
   ASSERT_TRUE(temp_file.is_open()) << "Failed to create temporary file\n";
 
@@ -40,62 +49,116 @@ TEST(FileParseTest, ConfigFileParseTest) {
   }
   temp_file << std::endl;
 
-  std::vector<Node> nodes = ParseNodesConfig(filename);
+  std::vector<std::unique_ptr<Node>> nodes = ParseNodesConfig(filename);
   ASSERT_EQ(addrs.size(), nodes.size());
 
   for (size_t i = 0; i < addrs.size(); i++) {
-    ASSERT_EQ(addrs[i], nodes[i].ip_address_);
-    ASSERT_EQ(std::stoi(ports[i]), nodes[i].port_);
+    ASSERT_EQ(addrs[i], nodes[i]->ip_address());
+    ASSERT_EQ(std::stoi(ports[i]), nodes[i]->port());
   }
 
   temp_file.close();
   ASSERT_EQ(remove(filename), 0);
 }
 
-// Helper function to check replicated log on all nodes.
-void VerifyLogIntegrity(
-    const std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>>& nodes,
-    size_t total_proposals) {
-  std::vector<std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry>> logs(
-      nodes.size());
-  for (size_t i = 0; i < nodes.size(); i++) {
-    if (nodes[i]) {
-      logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
-      ASSERT_EQ(logs[i].size(), total_proposals);
-    }
-  }
-
-  // Ensure all the nodes see the same value in their log positions.
-  for (size_t i = 0; i < total_proposals; i++) {
-    for (size_t n = 1; n < nodes.size() - 1; n++) {
-      if (!nodes[i]) continue;
-      auto left = logs[0].find(i)->second;
-      auto right = logs[n].find(i)->second;
-      ASSERT_EQ(left.accepted_value_, right.accepted_value_)
-          << "Log values do not match at index: " << i << " on nodes 0("
-          << left.accepted_value_ << ") and " << n << "("
-          << right.accepted_value_ << ")";
-    }
-  }
-}
-
-struct PaxosSanity : public ::testing::Test {
+class PaxosSanity : public ::testing::Test {
+ public:
   static constexpr uint64_t heartbeat_timer = 300;  // ms
   // Setup up abseil flags for paxos library to suit these tests.
   // Log directory and prefix are chosen such that they do not collide with
   // existing default logs.
   // Heartbeat timer is set so that the tests can run faster.
   virtual void SetUp() override {
-    absl::SetFlag(&FLAGS_paxos_node_heartbeat,
+    absl::SetFlag(&FLAGS_paxos_node_heartbeat_interval,
                   absl::Milliseconds(heartbeat_timer));
-    absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
+    absl::SetFlag(&FLAGS_paxos_log_directory, "/var/tmp");
     absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
+    witnesskvs::test::Cleanup(absl::GetFlag(FLAGS_paxos_log_directory),
+                              absl::GetFlag(FLAGS_paxos_log_file_prefix));
+    // Effectively disable the background truncation loop.
+    absl::SetFlag(&FLAGS_paxos_node_truncation_interval, absl::Seconds(86400));
   }
 
   // Cleanup all log files we may have created.
   virtual void TearDown() override {
     witnesskvs::test::Cleanup(absl::GetFlag(FLAGS_paxos_log_directory),
                               absl::GetFlag(FLAGS_paxos_log_file_prefix));
+  }
+
+  // Helper function to check replicated log on all nodes.
+  void VerifyLogIntegrity(
+      const std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>>& nodes,
+      size_t total_proposals) {
+    std::vector<std::map<uint64_t, witnesskvs::paxos::ReplicatedLogEntry>> logs(
+        nodes.size());
+    for (size_t i = 0; i < nodes.size(); i++) {
+      if (nodes[i]) {
+        logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+        ASSERT_EQ(logs[i].size(), total_proposals) << " node: " << i;
+      }
+    }
+
+    // Ensure all the nodes see the same value in their log positions.
+    for (size_t i = 0; i < total_proposals; i++) {
+      for (size_t n = 1; n < nodes.size() - 1; n++) {
+        if (!nodes[i]) continue;
+        auto left = logs[0].find(i)->second;
+        auto right = logs[n].find(i)->second;
+        ASSERT_EQ(left.accepted_value_, right.accepted_value_)
+            << "Log values do not match at index: " << i << " on nodes 0("
+            << left.accepted_value_ << ") and " << n << "("
+            << right.accepted_value_ << ")";
+      }
+    }
+
+    // Logs should be complete.
+    for (size_t i = 0; i < nodes.size(); i++) {
+      witnesskvs::log::SortingLogsLoader logs_loader(
+          absl::GetFlag(FLAGS_paxos_log_directory),
+          absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
+          witnesskvs::paxos::GetLogSortFn());
+      // Make sure there's one accept per proposal.
+      absl::flat_hash_set<uint64_t> accepts;
+      for (const Log::Message& msg : logs_loader) {
+        if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
+          accepts.insert(msg.paxos().idx());
+        }
+      }
+      // Make sure a log message exists for every proposal.
+      CHECK_EQ(accepts.size(), total_proposals) << "node: " << i;
+    }
+    if (absl::GetFlag(FLAGS_paxos_node_truncation_enabled)) {
+      for (size_t i = 0; i < nodes.size(); i++) {
+        nodes[i]->RunTruncationOnce();
+        // TODO(mmucklo): somehow instrument logs_truncator so we can know in
+        // tests when a truncation has taken place.
+      }
+      absl::SleepFor(absl::Seconds(1));
+    }
+
+    for (size_t i = 0; i < nodes.size(); i++) {
+      witnesskvs::log::SortingLogsLoader logs_loader(
+          absl::GetFlag(FLAGS_paxos_log_directory),
+          absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
+          witnesskvs::paxos::GetLogSortFn());
+      // Make sure there's one accept per proposal.
+      absl::flat_hash_set<uint64_t> accepts;
+      for (const Log::Message& msg : logs_loader) {
+        if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
+          accepts.insert(msg.paxos().idx());
+        }
+      }
+      // Make sure a log message exists for every proposal.
+      CHECK_EQ(accepts.size(), 1) << "node: " << i;
+    }
+
+    // Make sure the log was truncated as well.
+    for (size_t i = 0; i < nodes.size(); i++) {
+      if (nodes[i]) {
+        logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+        ASSERT_EQ(logs[i].size(), 1) << " node: " << i;
+      }
+    }
   }
 };
 
@@ -329,7 +392,7 @@ TEST_F(PaxosSanity, WitnessCount) {
   std::vector<std::string> ports = {"50051", "50052", "50053", "50054",
                                     "50055"};
 
-  char filename[] = "/tmp/nodes_config_5nodes";
+  char filename[] = "/var/tmp/nodes_config_5nodes";
   absl::SetFlag(&FLAGS_paxos_node_config_file, filename);
   std::ofstream temp_file(filename);
   ASSERT_TRUE(temp_file.is_open()) << "Failed to create temporary file\n";
@@ -338,7 +401,8 @@ TEST_F(PaxosSanity, WitnessCount) {
     temp_file << addr << ":" << ports[i] << "\n";
   }
   temp_file << std::endl;
-  // absl::SetFlag(&FLAGS_paxos_node_config_file, "/tmp/nodes_config_5nodes");
+  // absl::SetFlag(&FLAGS_paxos_node_config_file,
+  // "/var/tmp/nodes_config_5nodes");
   const size_t num_nodes = 5;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<Paxos>> nodes(num_nodes);
@@ -382,7 +446,7 @@ struct ReplicatedLogTest : public ::testing::Test {
   std::unique_ptr<witnesskvs::paxos::ReplicatedLog> log;
 
   virtual void SetUp() override {
-    absl::SetFlag(&FLAGS_paxos_log_directory, "/tmp");
+    absl::SetFlag(&FLAGS_paxos_log_directory, "/var/tmp");
     absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
 
     log = std::make_unique<witnesskvs::paxos::ReplicatedLog>(0);

@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -42,7 +43,7 @@ ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
-  KvsServiceImpl(std::vector<Node> nodes);
+  KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes);
   ~KvsServiceImpl() { delete db_; }
 
   void InitPaxos(void);
@@ -60,14 +61,15 @@ class KvsServiceImpl final : public Kvs::Service {
   rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
 
-  std::vector<Node> nodes_;
+  std::vector<std::unique_ptr<Node>> nodes_;
 
   Status PaxosProposeWrapper(const std::string& value, bool is_read);
 
   void KvsPaxosCommitCallback(std::string value);
 };
 
-KvsServiceImpl::KvsServiceImpl(std::vector<Node> nodes) : nodes_{nodes} {}
+KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
+    : nodes_{std::move(nodes)} {}
 
 void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
   CHECK(this->paxos_ != nullptr)
@@ -159,9 +161,9 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
         << "[KVS]: Paxos library returned us an invalid leader node id";
 
     LOG(INFO) << "[KVS]: Leader address returned: "
-              << nodes_[leader_node_id].GetAddressPortStr();
+              << nodes_[leader_node_id]->GetAddressPortStr();
     return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                        nodes_[leader_node_id].GetAddressPortStr());
+                        nodes_[leader_node_id]->GetAddressPortStr());
   } else {
     // Either there is no-leader or more likely there are not enough nodes up
     // and running.
@@ -237,15 +239,15 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
-void RunKvsServer(const std::string& db_path, std::vector<Node> nodes,
-                  uint8_t node_id) {
-  KvsServiceImpl service(nodes);
+void RunKvsServer(const std::string& db_path,
+                  std::vector<std::unique_ptr<Node>> nodes, uint8_t node_id) {
+  const std::string address_port_str = nodes[node_id]->GetAddressPortStr();
+  KvsServiceImpl service(std::move(nodes));
   service.InitPaxos();
   service.InitRocksDb(db_path);
 
   ServerBuilder builder;
-  builder.AddListeningPort(nodes[node_id].GetAddressPortStr(),
-                           grpc::InsecureServerCredentials());
+  builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server(builder.BuildAndStart());
 
@@ -263,5 +265,5 @@ int main(int argc, char** argv) {
   std::string database_path =
       absl::StrCat(absl::GetFlag(FLAGS_kvs_db_path), node_id);
 
-  RunKvsServer(database_path, nodes, node_id);
+  RunKvsServer(database_path, std::move(nodes), node_id);
 }

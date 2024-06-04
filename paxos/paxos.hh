@@ -38,9 +38,10 @@ class Paxos {
   PaxosResult RegisterAppCallback(std::function<void(std::string)> callback);
 
   // Helper functions for unit testing.
-  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }
+  std::shared_ptr<ReplicatedLog>& GetReplicatedLog() { return replicated_log_; }  
   bool IsLeader() { return paxos_node_->IsLeader(); }
   bool IsWitness() { return paxos_node_->IsWitness(); }
+  void RunTruncationOnce() { paxos_node_->RunTruncationOnce(); }
 };
 }  // namespace witnesskvs::paxos
 #endif  // PAXOS_HH_
