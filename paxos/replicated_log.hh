@@ -72,5 +72,7 @@ class ReplicatedLog {
   }
 };
 
+std::function<bool(const Log::Message& a, const Log::Message& b)> GetLogSortFn();
+
 }  // namespace witnesskvs::paxos
 #endif  // REPLICATED_LOG_H_

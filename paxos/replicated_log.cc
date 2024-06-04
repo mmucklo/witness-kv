@@ -11,16 +11,8 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-ReplicatedLog::ReplicatedLog(uint8_t node_id)
-    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
-  CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
-
-  const std::string prefix =
-      absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
-
-  witnesskvs::log::SortingLogsLoader log_loader{
-      absl::GetFlag(FLAGS_paxos_log_directory), prefix,
-      [](const Log::Message &a, const Log::Message &b) {
+std::function<bool(const Log::Message& a, const Log::Message& b)> GetLogSortFn() {
+  static auto fn =  [](const Log::Message &a, const Log::Message &b) {
         if (a.paxos().idx() < b.paxos().idx()) {
           return true;
         } else if (a.paxos().idx() == b.paxos().idx()) {
@@ -33,7 +25,19 @@ ReplicatedLog::ReplicatedLog(uint8_t node_id)
           return false;
         }
         return false;
-      }};
+      };
+  return fn;
+}
+
+ReplicatedLog::ReplicatedLog(uint8_t node_id)
+    : node_id_{node_id}, first_unchosen_index_{0}, proposal_number_{0} {
+  CHECK_LT(node_id, max_node_id_) << "Node initialization has gone wrong.";
+
+  const std::string prefix =
+      absl::GetFlag(FLAGS_paxos_log_file_prefix) + std::to_string(node_id);
+
+  witnesskvs::log::SortingLogsLoader log_loader{
+      absl::GetFlag(FLAGS_paxos_log_directory), prefix, GetLogSortFn()};
   for (auto &log_msg : log_loader) {
     ReplicatedLogEntry &entry = log_entries_[log_msg.paxos().idx()];
     entry.idx_ = log_msg.paxos().idx();
@@ -221,6 +225,7 @@ void ReplicatedLog::Truncate(uint64_t index) {
   // Note maybe we should put this under a lock and make sure
   // we're not shutting down / going through destruction.
   CHECK(logs_truncator_ != nullptr);
+  log_writer_->MaybeForceRotate();
   logs_truncator_->Truncate(index);
 }
 

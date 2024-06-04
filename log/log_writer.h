@@ -57,6 +57,7 @@ class LogWriter {
 
   void SetSkipFlush(bool skip_flush);
   bool skip_flush() const;
+  int64_t total_entries_output() const;
 
  private:
   struct ListEntry {
@@ -123,6 +124,7 @@ class LogWriter {
       ABSL_ACQUIRED_BEFORE(write_list_lock_);
   int64_t entries_count_ ABSL_GUARDED_BY(
       lock_);  // Number of entries written to current file_writer_
+  int64_t total_entries_output_ ABSL_GUARDED_BY(lock_);
   std::vector<std::string> filenames_
       ABSL_GUARDED_BY(lock_);  // List of files written to.
   std::function<uint64_t(const Log::Message&)> idxfn_;  //

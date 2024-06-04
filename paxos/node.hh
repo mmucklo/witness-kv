@@ -1,6 +1,7 @@
 #ifndef NODE_HH_
 #define NODE_HH_
 
+#include <cstddef>
 #include <memory>
 
 #include "absl/base/optimization.h"
@@ -22,9 +23,9 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   std::vector<std::unique_ptr<paxos_rpc::Acceptor::Stub>> acceptor_stubs_
       ABSL_GUARDED_BY(lock_);
 
-  size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(lock_);
+  std::size_t num_active_acceptors_conns_ ABSL_GUARDED_BY(lock_);
 
-  size_t quorum_;
+  std::size_t quorum_;
   uint8_t node_id_;
   uint8_t leader_node_id_ ABSL_GUARDED_BY(lock_);
 
@@ -32,14 +33,14 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   std::jthread truncation_thread_;
 
   // Sends heartbeat/ping messages to all other nodes in `acceptor_stubs_`.
-  // This thread then goes to sleep for `paxos_node_heartbeat` number of
-  // seconds. If it detects failure/timeout, it removes that stub from the
+  // This thread then goes to sleep for `paxos_node_heartbeat_interval` number
+  // of seconds. If it detects failure/timeout, it removes that stub from the
   // vector, and next time will attempt to establish a connection hoping the
   // node is back. If it detects a successful re-connection, reinstate the new
   // stub in the vector at the index corresponding to the node.
   void HeartbeatThread(std::stop_token st);
   void TruncationLoop(std::stop_token st);
-
+  void Truncate(uint64_t min_index);
   void CommitAsync(uint8_t node_id, uint64_t idx);
   std::vector<std::future<void>> commit_futures_;
 
@@ -55,6 +56,7 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
 
   std::unique_ptr<paxos_rpc::Acceptor::Stub>& GetAcceptorStub(uint8_t node_id)
       ABSL_LOCKS_EXCLUDED(lock_);
+  std::size_t acceptor_stubs_size_;
 
   // TODO(mmucklo): maybe use a template like this for the boilerplate in grpc
   // functions
@@ -79,7 +81,7 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   void MakeReady(void);
   void CommitOnPeerNodes(const std::vector<uint64_t>& commit_idxs);
 
-  size_t GetNumNodes() const { return nodes_.size(); };
+  std::size_t GetNumNodes() const { return nodes_.size(); };
   std::string GetNodeAddress(uint8_t node_id) const;
 
   bool IsLeader() const;

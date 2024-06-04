@@ -13,6 +13,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "byte_conversion.h"
@@ -55,21 +56,25 @@ LogWriter::LogWriter(std::string dir, std::string prefix,
                      std::function<uint64_t(const Log::Message&)> idxfn)
     : dir_(std::move(dir)),
       prefix_(std::move(prefix)),
+      skip_flush_(false),
       idxfn_(std::move(idxfn)),
+      total_entries_output_(0),
+      entries_count_(0),
       max_idx_(kIdxSentinelValue),
       min_idx_(kIdxSentinelValue),
       rotation_enabled_(true) {
   CheckWriteDir(dir_);
   CheckPrefix(prefix_);
-  {
-    absl::MutexLock l(&lock_);
-    skip_flush_ = false;
-  }
+  absl::MutexLock l(&lock_);
+  InitFileWriterLocked();
 }
 
 LogWriter::LogWriter(std::string filename, int64_t micros,
                      std::function<uint64_t(const Log::Message&)> idxfn)
-    : idxfn_(std::move(idxfn)),
+    : skip_flush_(false),
+      idxfn_(std::move(idxfn)),
+      entries_count_(0),
+      total_entries_output_(0),
       max_idx_(kIdxSentinelValue),
       min_idx_(kIdxSentinelValue),
       rotation_enabled_(false) {
@@ -78,16 +83,18 @@ LogWriter::LogWriter(std::string filename, int64_t micros,
 }
 
 LogWriter::~LogWriter() {
-  if (file_writer_ != nullptr) {
-    // If we have an open file, we need to write out the max_idx.
-    if (file_writer_->bytes_received() > 0 && max_idx_ != kIdxSentinelValue) {
-      std::filesystem::path prev_path =
-          std::filesystem::path(file_writer_->filename());
-      file_writer_.release();
-      CHECK_EQ(file_writer_, nullptr);
-      VLOG(2) << "Writing min_idx: " << min_idx_ << " max_idx: " << max_idx_;
-      FileWriter::WriteHeader(prev_path, GetIdxCord(min_idx_, max_idx_));
-    }
+  CHECK(file_writer_ != nullptr);
+  LOG(INFO) << "LogWriter::~LogWriter: total logged: " << total_entries_output_;
+  LOG(INFO) << "LogWriter::~LogWriter: filenames: "
+            << absl::StrJoin(filenames_, ",");
+  // If we have an open file, we need to write out the max_idx.
+  if (file_writer_->bytes_received() > 0 && max_idx_ != kIdxSentinelValue) {
+    std::filesystem::path prev_path =
+        std::filesystem::path(file_writer_->filename());
+    file_writer_.release();
+    CHECK_EQ(file_writer_, nullptr);
+    VLOG(2) << "Writing min_idx: " << min_idx_ << " max_idx: " << max_idx_;
+    FileWriter::WriteHeader(prev_path, GetIdxCord(min_idx_, max_idx_));
   }
 }
 
@@ -141,6 +148,7 @@ void LogWriter::MaybeForceRotate() {
   if (min_idx_ == kIdxSentinelValue) {
     // It seems we haven't written anything otherwise this would be not the
     // sentinel.
+    LOG(INFO) << "Not rotating an empty log file.";
     return;
   }
   RotateLocked();
@@ -288,6 +296,7 @@ absl::Status LogWriter::Log(const Log::Message& msg) {
         MaybeRotate(size_est);
         Write(*entry->msg);
         ++entries_count_;
+        ++total_entries_output_;
 
         // We will write max_idx_ out later as the first few bytes of the file
         // (plus a checksum).
@@ -341,6 +350,11 @@ void LogWriter::RegisterRotateCallback(
     absl::AnyInvocable<void(std::string, uint64_t, uint64_t)> fn) {
   absl::MutexLock l(&lock_);
   rotate_callback_ = std::move(fn);
+}
+
+int64_t LogWriter::total_entries_output() const {
+  absl::MutexLock l(&lock_);
+  return total_entries_output_;
 }
 
 }  // namespace witnesskvs::log

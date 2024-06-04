@@ -101,6 +101,8 @@ Status AcceptorImpl::Ping(ServerContext* context, const PingRequest* request,
 Status AcceptorImpl::TruncatePropose(ServerContext* context,
                                      const TruncateProposeRequest* request,
                                      TruncateProposeResponse* response) {
+  LOG(INFO) << "Responding to truncation request with First UnchosenIdx: "
+            << this->replicated_log_->GetFirstUnchosenIdx();
   response->set_index(this->replicated_log_->GetFirstUnchosenIdx() - 1);
   return Status::OK;
 }
@@ -109,6 +111,8 @@ Status AcceptorImpl::Truncate(ServerContext* context,
                               const TruncateRequest* request,
                               TruncateResponse* response) {
   // TODO(mmucklo): run truncation.
+  LOG(INFO) << "Got request to truncate at: " << request->index();
+  this->replicated_log_->Truncate(request->index());
   return Status::OK;
 }
 

@@ -11,7 +11,7 @@
 #include "absl/time/time.h"
 
 // https://superuser.com/questions/45342/when-should-i-use-dev-shm-and-when-should-i-use-tmp
-ABSL_FLAG(std::string, tests_test_util_temp_dir, ".",
+ABSL_FLAG(std::string, tests_test_util_temp_dir, "/var/tmp",
           "Where to store temporary files during testing. Note it's "
           "recommended not to use /tmp for running log-related tests since "
           "/tmp is generally run on tmpfs which doesn't respect fsync.");

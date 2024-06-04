@@ -68,7 +68,8 @@ class KvsServiceImpl final : public Kvs::Service {
   void KvsPaxosCommitCallback(std::string value);
 };
 
-KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes) : nodes_{nodes} {}
+KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
+    : nodes_{std::move(nodes)} {}
 
 void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
   CHECK(this->paxos_ != nullptr)
@@ -238,16 +239,15 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
-void RunKvsServer(const std::string& db_path, std::vector<std::unique_ptr<Node>> nodes,
-                  uint8_t node_id) {
+void RunKvsServer(const std::string& db_path,
+                  std::vector<std::unique_ptr<Node>> nodes, uint8_t node_id) {
   const std::string address_port_str = nodes[node_id]->GetAddressPortStr();
   KvsServiceImpl service(std::move(nodes));
   service.InitPaxos();
   service.InitRocksDb(db_path);
 
   ServerBuilder builder;
-  builder.AddListeningPort(address_port_str,
-                           grpc::InsecureServerCredentials());
+  builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server(builder.BuildAndStart());
 

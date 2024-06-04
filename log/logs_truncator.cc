@@ -132,17 +132,23 @@ void LogsTruncator::DoSingleFileTruncation(absl::string_view filename,
     const std::string filename_str(filename);
     LogReader log_reader(filename_str);
     LogWriter log_writer(temp_filename, file_parts.micros, idxfn_);
+    uint64_t removed_count = 0;
+    uint64_t kept_count = 0;
     for (const Log::Message& msg : log_reader) {
       const uint64_t idx = idxfn_(msg);
       if (idx < max_idx) {
         // Okay to discard this older log entry.
+        ++removed_count;
         continue;
       }
+      ++kept_count;
       absl::Status status = log_writer.Log(msg);
       if (!status.ok()) {
         LOG(FATAL) << "Could not log: " << temp_filename << status.ToString();
       }
     }
+    LOG(INFO) << "filename_str removed: " << removed_count
+              << " kept: " << kept_count;
   }
 
   const std::string perm_filename =
@@ -176,7 +182,8 @@ void LogsTruncator::DoTruncation(uint64_t max_idx) {
   for (const auto& [filename, file_info] : filename_max_idx_) {
     if (file_info.max_idx < max_idx) {
       // Delete file.
-      LOG(INFO) << "LogsTruncator: deleting: " << filename;
+      LOG(INFO) << "LogsTruncator: deleting: " << filename
+                << " max_idx: " << file_info.max_idx << " < " << max_idx;
       if (!std::filesystem::remove(std::filesystem::path(filename))) {
         LOG(FATAL) << absl::StrCat(
             "LogsTruncator::DoTruncation: Can't remove: ", filename, " ",
@@ -185,7 +192,9 @@ void LogsTruncator::DoTruncation(uint64_t max_idx) {
       erase_files.push_back(filename);
     } else if (file_info.min_idx < max_idx) {
       // can remove individual entries...
-      LOG(INFO) << "LogsTruncator: truncating: " << filename;
+      LOG(INFO) << "LogsTruncator: truncating: " << filename
+                << " min_idx: " << file_info.min_idx
+                << " max_idx: " << file_info.max_idx;
       DoSingleFileTruncation(filename, max_idx);
       CHECK(filename_max_idx_.contains(filename))
           << "Strange, expected filename in the filename_max_idx_ table: "
@@ -241,7 +250,14 @@ absl::Status LogsTruncator::ReadHeader(const std::filesystem::path& path,
                  .second);
     }
   } else {
-    VLOG(1) << "Could not find valid min/max idx for file: " << path.string();
+    if (min_idx != kIdxSentinelValue || max_idx != kIdxSentinelValue) {
+      CHECK_NE(max_idx, kIdxSentinelValue)
+          << "Strange log file, shouldn't have min_idx, but no max_idx: "
+          << path.string();
+    }
+    VLOG(1) << "Could not find valid min/max idx for file, this may be "
+               "expected if the file is brand new: "
+            << path.string();
   }
   return absl::OkStatus();
 }
