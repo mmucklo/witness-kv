@@ -61,7 +61,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   ASSERT_EQ(remove(filename), 0);
 }
 
-class PaxosSanity : public ::testing::TestWithParam<absl::Duration> {
+class PaxosSanity : public ::testing::Test {
  public:
   static constexpr uint64_t heartbeat_timer = 300;  // ms
   // Setup up abseil flags for paxos library to suit these tests.
@@ -75,7 +75,8 @@ class PaxosSanity : public ::testing::TestWithParam<absl::Duration> {
     absl::SetFlag(&FLAGS_paxos_log_file_prefix, "paxos_sanity_test");
     witnesskvs::test::Cleanup(absl::GetFlag(FLAGS_paxos_log_directory),
                               absl::GetFlag(FLAGS_paxos_log_file_prefix));
-    absl::SetFlag(&FLAGS_paxos_node_truncation_interval, GetParam());
+    // Effectively disable the background truncation loop.
+    absl::SetFlag(&FLAGS_paxos_node_truncation_interval, absl::Seconds(86400));
   }
 
   // Cleanup all log files we may have created.
@@ -110,60 +111,58 @@ class PaxosSanity : public ::testing::TestWithParam<absl::Duration> {
       }
     }
 
-    if (!absl::GetFlag(FLAGS_paxos_node_truncation_enabled) ||
-        absl::GetFlag(FLAGS_paxos_node_truncation_interval) ==
-            absl::Minutes(60)) {
-      // Logs should be complete.
-      for (size_t i = 0; i < nodes.size(); i++) {
-        witnesskvs::log::SortingLogsLoader logs_loader(
-            absl::GetFlag(FLAGS_paxos_log_directory),
-            absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
-            witnesskvs::paxos::GetLogSortFn());
-        // Make sure there's one accept per proposal.
-        absl::flat_hash_set<uint64_t> accepts;
-        for (const Log::Message& msg : logs_loader) {
-          if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
-            accepts.insert(msg.paxos().idx());
-          }
-        }
-        // Make sure a log message exists for every proposal.
-        CHECK_EQ(accepts.size(), total_proposals) << "node: " << i;
-      }
-      if (absl::GetFlag(FLAGS_paxos_node_truncation_enabled)) {
-        for (size_t i = 0; i < nodes.size(); i++) {
-          nodes[i]->GetReplicatedLog()->Truncate(total_proposals - 1);
-          // TODO(mmucklo): somehow instrument logs_truncator so we can know in
-          // tests when a truncation has taken place.
-          absl::SleepFor(absl::Seconds(2));
+    // Logs should be complete.
+    for (size_t i = 0; i < nodes.size(); i++) {
+      witnesskvs::log::SortingLogsLoader logs_loader(
+          absl::GetFlag(FLAGS_paxos_log_directory),
+          absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
+          witnesskvs::paxos::GetLogSortFn());
+      // Make sure there's one accept per proposal.
+      absl::flat_hash_set<uint64_t> accepts;
+      for (const Log::Message& msg : logs_loader) {
+        if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
+          accepts.insert(msg.paxos().idx());
         }
       }
+      // Make sure a log message exists for every proposal.
+      CHECK_EQ(accepts.size(), total_proposals) << "node: " << i;
     }
     if (absl::GetFlag(FLAGS_paxos_node_truncation_enabled)) {
-      absl::SleepFor(absl::Seconds(1));
       for (size_t i = 0; i < nodes.size(); i++) {
-        witnesskvs::log::SortingLogsLoader logs_loader(
-            absl::GetFlag(FLAGS_paxos_log_directory),
-            absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
-            witnesskvs::paxos::GetLogSortFn());
-        // Make sure there's one accept per proposal.
-        absl::flat_hash_set<uint64_t> accepts;
-        for (const Log::Message& msg : logs_loader) {
-          if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
-            accepts.insert(msg.paxos().idx());
-          }
+        nodes[i]->RunTruncationOnce();
+        // TODO(mmucklo): somehow instrument logs_truncator so we can know in
+        // tests when a truncation has taken place.
+      }
+      absl::SleepFor(absl::Seconds(1));
+    }
+
+    for (size_t i = 0; i < nodes.size(); i++) {
+      witnesskvs::log::SortingLogsLoader logs_loader(
+          absl::GetFlag(FLAGS_paxos_log_directory),
+          absl::StrCat(absl::GetFlag(FLAGS_paxos_log_file_prefix), i),
+          witnesskvs::paxos::GetLogSortFn());
+      // Make sure there's one accept per proposal.
+      absl::flat_hash_set<uint64_t> accepts;
+      for (const Log::Message& msg : logs_loader) {
+        if (msg.paxos().accepted_proposal() > 0 || msg.paxos().is_chosen()) {
+          accepts.insert(msg.paxos().idx());
         }
-        // Make sure a log message exists for every proposal.
-        CHECK_EQ(accepts.size(), 1) << "node: " << i;
+      }
+      // Make sure a log message exists for every proposal.
+      CHECK_EQ(accepts.size(), 1) << "node: " << i;
+    }
+
+    // Make sure the log was truncated as well.
+    for (size_t i = 0; i < nodes.size(); i++) {
+      if (nodes[i]) {
+        logs[i] = nodes[i]->GetReplicatedLog()->GetLogEntries();
+        ASSERT_EQ(logs[i].size(), 1) << " node: " << i;
       }
     }
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(TruncationTimings, PaxosSanity,
-                         ::testing::Values(absl::Milliseconds(500),
-                                           absl::Minutes(60)));
-
-TEST_P(PaxosSanity, ReplicatedLogSanity) {
+TEST_F(PaxosSanity, ReplicatedLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
@@ -189,7 +188,7 @@ TEST_P(PaxosSanity, ReplicatedLogSanity) {
   VerifyLogIntegrity(nodes, num_proposals);
 }
 
-TEST_P(PaxosSanity, BasicStableLogSanity) {
+TEST_F(PaxosSanity, BasicStableLogSanity) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
@@ -246,7 +245,7 @@ TEST_P(PaxosSanity, BasicStableLogSanity) {
   VerifyLogIntegrity(nodes, 2 * num_proposals);
 }
 
-TEST_P(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
+TEST_F(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
@@ -290,7 +289,7 @@ TEST_P(PaxosSanity, ReplicatedLogAfterNodeReconnection) {
   VerifyLogIntegrity(nodes, 2 * num_proposals);
 }
 
-TEST_P(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
+TEST_F(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   const size_t num_nodes = 3;
   absl::Duration sleep_timer = absl::Milliseconds(2 * heartbeat_timer);
   std::vector<std::unique_ptr<witnesskvs::paxos::Paxos>> nodes(num_nodes);
@@ -354,7 +353,7 @@ TEST_P(PaxosSanity, ReplicatedLogWhenOneNodeIsDown) {
   VerifyLogIntegrity(nodes, 3 * num_proposals);
 }
 
-TEST_P(PaxosSanity, WitnessNotLeader) {
+TEST_F(PaxosSanity, WitnessNotLeader) {
   using witnesskvs::paxos::Paxos;
 
   const size_t num_nodes = 3;
@@ -386,7 +385,7 @@ TEST_P(PaxosSanity, WitnessNotLeader) {
   ASSERT_EQ(nodes[2]->IsLeader(), true);
 }
 
-TEST_P(PaxosSanity, WitnessCount) {
+TEST_F(PaxosSanity, WitnessCount) {
   using witnesskvs::paxos::Paxos;
 
   std::string addr = "localhost";
@@ -456,7 +455,7 @@ struct ReplicatedLogTest : public ::testing::Test {
   virtual void TearDown() override {}
 };
 
-TEST_P(PaxosSanity, BasicLogTest) {
+TEST_F(PaxosSanity, BasicLogTest) {
   std::unique_ptr<witnesskvs::paxos::ReplicatedLog> log =
       std::make_unique<witnesskvs::paxos::ReplicatedLog>(0);
   uint64_t proposal_number = 0;

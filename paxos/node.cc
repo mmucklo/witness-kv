@@ -109,6 +109,60 @@ void PaxosNode::Truncate(const uint64_t min_index) {
   }
 }
 
+void PaxosNode::RunTruncationOnce() {
+  if (IsLeader()) {
+    // What happens if two truncation loops run on two different nodes
+    // such as during a leader flip. This is okay. We will just enqueue
+    // two truncations at worse. We can optimize this edge case later,
+    // which would only add potentially extra RPCs during leader moves.
+    uint64_t min_index = std::numeric_limits<uint64_t>::max();
+    for (std::size_t i = 0; i < acceptor_stubs_size_; i++) {
+      if (!IsLeader()) {
+        // small optimization, but as explained above still okay if we don't
+        // catch it here due to races between nodes during leader changes.
+        return;
+      }
+      std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
+      paxos_rpc::TruncateProposeRequest request;
+      paxos_rpc::TruncateProposeResponse response;
+      grpc::ClientContext context;
+      absl::ReaderMutexLock l(&lock_);
+      if (stub == nullptr) {
+        // We can't truncate without agreement. Since a node is down, we skip
+        // this round.
+        LOG(INFO) << "Skipping truncation because node: " << i
+                  << " is offline.";
+        return;
+      }
+
+      grpc::Status status = stub->TruncatePropose(&context, request, &response);
+      if (!status.ok()) {
+        LOG(INFO) << "Skipping truncation because TruncatePropose for node : "
+                  << i << " returned invalid status:" << status.error_message();
+        return;
+      }
+      LOG(INFO) << "Got TruncatePropose Response for node: " << i << ": "
+                << response.index();
+      if (response.index() < min_index) {
+        min_index = response.index();
+      }
+    }
+    if (!IsLeader()) {
+      LOG(INFO) << "Stopping truncation process as we're no longer leader.";
+      // This is a small optimization, but as explained above still okay if we
+      // don't catch it here due to races between the nodes during leader
+      // changes.
+      return;
+    }
+    if (min_index == std::numeric_limits<uint64_t>::max()) {
+      LOG(WARNING) << "Truncation min_index is max, skipping: " << min_index;
+      return;
+    }
+
+    Truncate(min_index);
+  }
+}
+
 void PaxosNode::TruncationLoop(std::stop_token st) {
   if (!absl::GetFlag(FLAGS_paxos_node_truncation_enabled)) {
     return;
@@ -118,65 +172,8 @@ void PaxosNode::TruncationLoop(std::stop_token st) {
             << absl::GetFlag(FLAGS_paxos_node_truncation_interval);
 
   while (!st.stop_requested()) {
-    // TODO(mmucklo): fill with Truncation logic.
-    if (IsLeader()) {
-      // What happens if two truncation loops run on two different nodes
-      // such as during a leader flip. This is okay. We will just enqueue
-      // two truncations at worse. We can optimize this edge case later,
-      // which would only add potentially extra RPCs during leader moves.
-      uint64_t min_index = std::numeric_limits<uint64_t>::max();
-      bool skip = false;
-      for (std::size_t i = 0; i < acceptor_stubs_size_; i++) {
-        if (!IsLeader()) {
-          // small optimization, but as explained above still okay if we don't
-          // catch it here due to races between nodes during leader changes.
-          break;
-        }
-        std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
-        paxos_rpc::TruncateProposeRequest request;
-        paxos_rpc::TruncateProposeResponse response;
-        grpc::ClientContext context;
-        absl::ReaderMutexLock l(&lock_);
-        if (stub == nullptr) {
-          // We can't truncate without agreement. Since a node is down, we skip
-          // this round.
-          LOG(INFO) << "Skipping truncation because node: " << i
-                    << " is offline.";
-          skip = true;
-          break;
-        }
+    RunTruncationOnce();
 
-        grpc::Status status =
-            stub->TruncatePropose(&context, request, &response);
-        if (!status.ok()) {
-          LOG(INFO) << "Skipping truncation because TruncatePropose for node : "
-                    << i
-                    << " returned invalid status:" << status.error_message();
-          skip = true;
-          break;
-        }
-        LOG(INFO) << "Got TruncatePropose Response for node: " << i << ": "
-                  << response.index();
-        if (response.index() < min_index) {
-          min_index = response.index();
-        }
-      }
-      if (!IsLeader()) {
-        skip = true;
-        LOG(INFO) << "Stopping truncation process as we're no longer leader.";
-        // This is a small optimization, but as explained above still okay if we
-        // don't catch it here due to races between the nodes during leader
-        // changes.
-      }
-      if (min_index == std::numeric_limits<uint64_t>::max()) {
-        LOG(WARNING) << "Truncation min_index is max, skipping: " << min_index;
-        skip = true;
-      }
-
-      if (!skip) {
-        Truncate(min_index);
-      }
-    }
     LOG(INFO) << "About to sleep TruncationLoop";
     absl::MutexLock l(&lock_);
     auto stopping = [&st]() { return st.stop_requested(); };

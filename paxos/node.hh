@@ -102,6 +102,11 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
                           paxos_rpc::AcceptResponse* response);
   grpc::Status CommitGrpc(uint8_t node_id, paxos_rpc::CommitRequest request,
                           paxos_rpc::CommitResponse* response);
+
+  // Runs a single truncation coordination if it's the leader. Exposed
+  // as public for manual use during testing, but normally should be called
+  // within the background TruncationLoop.
+  void RunTruncationOnce();
 };
 }  // namespace witnesskvs::paxos
 #endif  // NODE_HH_

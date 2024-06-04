@@ -227,6 +227,17 @@ void ReplicatedLog::Truncate(uint64_t index) {
   CHECK(logs_truncator_ != nullptr);
   log_writer_->MaybeForceRotate();
   logs_truncator_->Truncate(index);
+  absl::MutexLock l(&lock_);
+  // TODO: truncate in-memory log.
+  std::vector<Index> erase;
+  for (const auto& [cur_index,  _] : log_entries_) {
+    if (cur_index < index) {
+      erase.push_back(cur_index);
+    }
+  }
+  for (const Index index : erase) {
+    log_entries_.erase(index);
+  }
 }
 
 }  // namespace witnesskvs::paxos
