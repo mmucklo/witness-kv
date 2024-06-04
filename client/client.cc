@@ -378,7 +378,7 @@ int main(int argc, char** argv) {
 
   std::string op = absl::GetFlag(FLAGS_op);
 
-  const std::vector<Node> nodes =
+  std::vector<std::unique_ptr<Node>> nodes =
       ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
   std::transform(op.begin(), op.end(), op.begin(),
