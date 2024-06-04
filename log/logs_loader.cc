@@ -11,11 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "log.pb.h"
-#include "log_reader.h"
-#include "log_util.h"
-#include "log_writer.h"
-
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -24,6 +19,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "log.pb.h"
+#include "log_reader.h"
+#include "log_util.h"
+#include "log_writer.h"
 
 // The maximum amount of memory we can use for loading and sorting the log
 // entries if we need to sort.
@@ -400,7 +399,7 @@ SortingLogsLoader::~SortingLogsLoader() {
   // These were the sorted and merged files that we temporarily created
   // during recovery. Once we're done iterating through them and this class is
   // destructed, it's safe to delete them.
-  //CleanupFiles(temp_files_);
+  CleanupFiles(temp_files_);
 }
 
 }  // namespace witnesskvs::log
