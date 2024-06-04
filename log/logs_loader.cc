@@ -11,11 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "log.pb.h"
-#include "log_reader.h"
-#include "log_util.h"
-#include "log_writer.h"
-
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -24,6 +19,10 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "log.pb.h"
+#include "log_reader.h"
+#include "log_util.h"
+#include "log_writer.h"
 
 // The maximum amount of memory we can use for loading and sorting the log
 // entries if we need to sort.
@@ -193,6 +192,7 @@ std::vector<std::string> SortLogsFile(
       it++;
     }
   }
+
   std::sort(msgs.begin(), msgs.end(), sortfn);
   LogWriter log_writer(parent_path.string(), std::string(prefix_sorted));
   log_writer.SetSkipFlush(true);
@@ -209,6 +209,7 @@ std::vector<std::string> MergeSortedFiles(
     absl::string_view output_prefix,
     const std::function<bool(const Log::Message& a, const Log::Message& b)>&
         sortfn) {
+  LOG(INFO) << "MergeSortedFiles: " << dir << " prefix: " << output_prefix;
   LogWriter log_writer{std::string(dir), std::string(output_prefix)};
   log_writer.SetSkipFlush(true);
   struct LogMessageContainer {
@@ -366,12 +367,6 @@ void SortingLogsLoader::Init(
     cleanup_files.clear();
   }
 
-  for (const auto& filename : cleanup_files) {
-    if (!std::filesystem::remove(std::filesystem::path(filename))) {
-      LOG(FATAL) << absl::StrCat("Can't cleanup: ", filename, " ",
-                                 std::strerror(errno));
-    }
-  }
   logs_loader_ = std::make_unique<LogsLoader>(dir, prefix_merge);
   prefix_merge_ = prefix_merge;
 }

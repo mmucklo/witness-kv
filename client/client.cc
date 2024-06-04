@@ -87,8 +87,8 @@ Status KvsClient::DeleteGrpc(const std::string& key,
 
 // TODO [V]: Should these helper functions do these operations in a fixed retry
 // count loop ?
-static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
-                     const std::string& value) {
+static int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
+                     const std::string& key, const std::string& value) {
   uint8_t node_id = 0;
 
   PutRequest request;
@@ -99,7 +99,7 @@ static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
   Status status;
 
   while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id].GetAddressPortStr(),
+    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
                                        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
@@ -147,7 +147,7 @@ static int PutHelper(const std::vector<Node>& nodes, const std::string& key,
   return -1;
 }
 
-static std::string GetHelper(const std::vector<Node>& nodes,
+static std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                              const std::string& key, int* return_code) {
   uint8_t node_id = 0;
 
@@ -157,7 +157,7 @@ static std::string GetHelper(const std::vector<Node>& nodes,
   GetResponse response;
   Status status;
   while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id].GetAddressPortStr(),
+    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
                                        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
@@ -208,7 +208,7 @@ static std::string GetHelper(const std::vector<Node>& nodes,
   return "";
 }
 
-static int DeleteHelper(const std::vector<Node>& nodes,
+static int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                         const std::string& key) {
   uint8_t node_id = 0;
 
@@ -219,7 +219,7 @@ static int DeleteHelper(const std::vector<Node>& nodes,
   Status status;
 
   while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id].GetAddressPortStr(),
+    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
                                        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
@@ -268,7 +268,7 @@ static int DeleteHelper(const std::vector<Node>& nodes,
 }
 
 int NonInteractiveClientTest(void) {
-  const std::vector<Node> nodes =
+  const std::vector<std::unique_ptr<Node>> nodes =
       ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
   std::map<std::string, std::string> kv;

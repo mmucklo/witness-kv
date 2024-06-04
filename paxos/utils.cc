@@ -1,9 +1,13 @@
 #include "utils.hh"
 
+#include <memory>
+#include <vector>
+
 bool IsValidNodeId(uint8_t node_id) { return (node_id != INVALID_NODE_ID); }
 
-std::vector<Node> ParseNodesConfig(std::string config_file_name) {
-  std::vector<Node> nodes{};
+std::vector<std::unique_ptr<Node>> ParseNodesConfig(
+    std::string config_file_name) {
+  std::vector<std::unique_ptr<Node>> nodes{};
   std::ifstream config_file(config_file_name);
 
   CHECK(config_file.is_open()) << "Failed to open nodes configuration file";
@@ -19,7 +23,7 @@ std::vector<Node> ParseNodesConfig(std::string config_file_name) {
       } catch (const std::invalid_argument& e) {
         throw std::runtime_error("Invalid port number in config file");
       }
-      nodes.push_back({ip_address, port});
+      nodes.push_back(std::make_unique<Node>(std::move(ip_address), port));
     }
   }
 
