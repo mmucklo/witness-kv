@@ -3,6 +3,8 @@
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
 
+ABSL_FLAG(bool, disable_multi_paxos, false, "Disable multi-paxos optimization");
+
 namespace witnesskvs::paxos {
 
 void Proposer::Propose(const std::string& value) {
@@ -15,7 +17,7 @@ void Proposer::Propose(const std::string& value) {
     request.set_proposal_number( proposal_number_ );
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
               << "] Attempting replication at index " << request.index();
-    if (proposal_number_ == 0) {
+    if (proposal_number_ == 0 || DoPreparePhase() || absl::GetFlag(FLAGS_disable_multi_paxos)) {
       PreparePhase(request, value_for_accept_phase);
     }
 
@@ -29,21 +31,30 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
                             std::string& value_for_accept_phase) {
   // Perform phase 1 of the paxos operation i.e. find a proposal that will be
   // accepted by a quorum of acceptors.
-  proposal_number_ = this->replicated_log_->GetNextProposalNumber();
-  request.set_proposal_number( proposal_number_ );
   uint32_t num_promises = 0;
+  proposal_number_ = this->replicated_log_->GetNextProposalNumber();
+  request.set_proposal_number(proposal_number_);
   do {
     uint64_t max_proposal_id = 0;
     for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
       paxos_rpc::PrepareResponse response;
       grpc::Status status = this->paxos_node_->PrepareGrpc(
           static_cast<uint8_t>( i ), request, &response);
-      if ( !status.ok() ) {
+      if (!status.ok()) {
         LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
                      << "] Prepare grpc failed for node: " << i
                      << " with error code: " << status.error_code()
                      << " and error message: " << status.error_message();
         continue;
+      }
+      if (response.max_chosen_index() > request.index()) {
+        LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
+                  << "] Received max chosen index: " << response.max_chosen_index()
+                  << " for index: " << request.index();
+        is_prepare_needed_[i] = true;
+      }
+      else {
+        is_prepare_needed_[i] = false;
       }
 
       if (response.min_proposal() > request.proposal_number()) {
@@ -75,9 +86,9 @@ void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
   // Perform phase 2 of paxos operation i.e. try to get the value we
   // determined in phase 1 to be accepted by a quorum of acceptors.
   paxos_rpc::AcceptRequest accept_request;
-  accept_request.set_proposal_number( request.proposal_number() );
-  accept_request.set_index( request.index() );
-  accept_request.set_value( value_for_accept_phase );
+  accept_request.set_proposal_number(request.proposal_number());
+  accept_request.set_index(request.index());
+  accept_request.set_value(value_for_accept_phase);
   paxos_rpc::AcceptResponse accept_response;
   uint32_t accept_majority_count = 0;
   std::vector<uint64_t> peer_unchosen_idx( this->paxos_node_->GetNumNodes() );
