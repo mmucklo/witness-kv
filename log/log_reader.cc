@@ -18,7 +18,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "byte_conversion.h"
-#include "util/status_macros.h"
+#include "third_party/mediapipe/status_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
 

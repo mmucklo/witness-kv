@@ -11,7 +11,7 @@
 #include "absl/log/initialize.h"
 #include "absl/log/log.h"
 #include "kvs.grpc.pb.h"
-#include "paxos/utils.hh"
+#include "util/node.h"
 
 using grpc::Channel;
 using grpc::ClientContext;

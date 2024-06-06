@@ -1,7 +1,7 @@
-#ifndef ACCEPTOR_HH_
-#define ACCEPTOR_HH_
+#ifndef PAXOS_ACCEPTOR_H_
+#define PAXOS_ACCEPTOR_H_
 
-#include "replicated_log.hh"
+#include "replicated_log.h"
 
 namespace witnesskvs::paxos {
 

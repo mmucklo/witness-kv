@@ -16,8 +16,8 @@
 #include "log_util.h"
 #include "log_writer.h"
 #include "logs_loader.h"
-#include "tests/test_macros.h"
 #include "tests/test_util.h"
+#include "third_party/absl_local/test_macros.h"
 
 using ::testing::AllOf;
 using ::testing::ElementsAre;

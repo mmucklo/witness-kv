@@ -1,12 +1,11 @@
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef UTIL_NODE_H_
+#define UTIL_NODE_H_
 
 #include <memory>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
-#include "common.hh"
 
 #define INVALID_NODE_ID UINT8_MAX
 
@@ -55,4 +54,7 @@ bool IsValidNodeId(uint8_t node_id);
 std::vector<std::unique_ptr<Node>> ParseNodesConfig(
     std::string config_file_name);
 
-#endif  // UTILS_H_
+std::vector<std::unique_ptr<Node>> ParseNodesList(
+    const std::vector<std::string>& node_list);
+
+#endif  // UTIL_NODE_H_

@@ -4,7 +4,6 @@ find_package(protobuf CONFIG REQUIRED)
 include_directories(${PROJECT_SOURCE_DIR})
 
 add_library(test_main test_main.cc)
-add_library(protobuf_matchers protobuf_matchers.cc)
 add_library(test_util_lib test_util.cc)
 
 add_executable(rocksdb_test rocksdb_test.cc)
@@ -16,16 +15,6 @@ target_link_libraries(test_main PUBLIC
     # See https://github.com/abseil/abseil-cpp/blob/c14dfbf9/absl/log/CMakeLists.txt#L464-L467
     $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
 )
-target_link_libraries(protobuf_matchers PUBLIC 
-    protobuf::libprotobuf
-    gtest
-    gmock
-    absl::log
-    absl::flags
-    # See https://github.com/abseil/abseil-cpp/blob/c14dfbf9/absl/log/CMakeLists.txt#L464-L467
-    $<LINK_LIBRARY:WHOLE_ARCHIVE,absl::log_flags>
-    absl::strings
-)
 
 target_link_libraries(test_util_lib PUBLIC
     absl::flags
@@ -36,20 +25,14 @@ target_link_libraries(test_util_lib PUBLIC
     absl::time
 )
 
-set(This paxos_tests)
-
-set(Sources
-    paxos_tests.cc
-)
-
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/paxos)
 
 enable_testing()
 
-add_executable(paxos_tests paxos_tests.cc)
+add_executable(paxos_test paxos_test.cc)
 
-target_link_libraries(paxos_tests PUBLIC
+target_link_libraries(paxos_test PUBLIC
     gtest
     gmock
     test_main
@@ -60,8 +43,8 @@ target_link_libraries(paxos_tests PUBLIC
 )
 
 add_test(
-    NAME ${This}
-    COMMAND ${This}
+    NAME paxos_test
+    COMMAND paxos_test
 )
 
 target_link_libraries(rocksdb_test PUBLIC 
@@ -80,4 +63,4 @@ target_link_libraries(rocksdb_test PUBLIC
 
 include(GoogleTest)
 
-gtest_discover_tests(${This} rocksdb_test)
+gtest_discover_tests(paxos_test rocksdb_test)

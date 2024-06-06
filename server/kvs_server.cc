@@ -1,10 +1,13 @@
 #include <google/protobuf/message.h>
+#include <grpcpp/ext/channelz_service_plugin.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <rocksdb/status.h>
 
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,9 +21,9 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "kvs.grpc.pb.h"
-#include "paxos/paxos.hh"
-#include "paxos/utils.hh"
+#include "paxos/paxos.h"
 #include "rocksdb/db.h"
+#include "util/node.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -36,10 +39,12 @@ using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
 
 // TODO: Maybe parse these from config file.
+ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
+          "Comma separated list of ip addresses and ports");
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
-ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
+ABSL_FLAG(std::string, kvs_db_path, "/var/tmp/kvs_rocksdb", "kvs_db_path");
 
 class KvsServiceImpl final : public Kvs::Service {
  public:
@@ -246,6 +251,9 @@ void RunKvsServer(const std::string& db_path,
   service.InitPaxos();
   service.InitRocksDb(db_path);
 
+  grpc::EnableDefaultHealthCheckService(true);
+  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+  grpc::channelz::experimental::InitChannelzService();
   ServerBuilder builder;
   builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
@@ -257,7 +265,16 @@ void RunKvsServer(const std::string& db_path,
 int main(int argc, char** argv) {
   absl::ParseCommandLine(argc, argv);
 
-  auto nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+  if (argc > 1) {
+    LOG(FATAL) << "Not expecting more command line arguments after flags: "
+               << argc;
+  }
+  std::vector<std::unique_ptr<Node>> nodes;
+  if (!absl::GetFlag(FLAGS_kvs_node_list).empty()) {
+    nodes = ParseNodesList(absl::GetFlag(FLAGS_kvs_node_list));
+  } else {
+    nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+  }
   CHECK_NE(nodes.size(), 0);
 
   uint8_t node_id = absl::GetFlag(FLAGS_kvs_node_id);

@@ -1,10 +1,10 @@
-#include "replicated_log.hh"
+#include "replicated_log.h"
 
 #include <google/protobuf/util/message_differencer.h>
 
 #include "log/logs_loader.h"
 
-ABSL_FLAG(std::string, paxos_log_directory, "/tmp", "Paxos Log directory");
+ABSL_FLAG(std::string, paxos_log_directory, "/var/tmp", "Paxos Log directory");
 
 ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
           "Paxos log file prefix");

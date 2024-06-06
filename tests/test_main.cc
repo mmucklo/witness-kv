@@ -1,14 +1,13 @@
+#include "absl/base/internal/raw_logging.h"
 #include "absl/base/log_severity.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
-#include "absl/log/log.h"
-#include "absl/base/internal/raw_logging.h"
 #include "absl/log/initialize.h"
+#include "absl/log/log.h"
 #include "gtest/gtest.h"
 
-void InternalLogFn(absl::LogSeverity severity,
-                                     const char* file, int line,
-                                     const std::string& message) {
+void InternalLogFn(absl::LogSeverity severity, const char* file, int line,
+                   const std::string& message) {
   // TODO: is there a better more absl way to do this?
   switch (severity) {
     case absl::LogSeverity::kError:
@@ -28,7 +27,7 @@ void InternalLogFn(absl::LogSeverity severity,
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   absl::ParseCommandLine(argc, argv);
   absl::InitializeLog();

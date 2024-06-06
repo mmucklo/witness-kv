@@ -1,15 +1,15 @@
-#ifndef NODE_HH_
-#define NODE_HH_
+#ifndef PAXOS_PAXOS_NODE_H_
+#define PAXOS_PAXOS_NODE_H_
 
 #include <cstddef>
 #include <memory>
 
 #include "absl/base/optimization.h"
-#include "acceptor.hh"
+#include "acceptor.h"
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
-#include "replicated_log.hh"
-#include "utils.hh"
+#include "replicated_log.h"
+#include "util/node.h"
 
 namespace witnesskvs::paxos {
 
@@ -109,4 +109,4 @@ class PaxosNode : public std::enable_shared_from_this<PaxosNode> {
   void RunTruncationOnce();
 };
 }  // namespace witnesskvs::paxos
-#endif  // NODE_HH_
+#endif  // PAXOS_PAXOS_NODE_H

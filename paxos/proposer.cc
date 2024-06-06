@@ -1,4 +1,4 @@
-#include "proposer.hh"
+#include "proposer.h"
 
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
