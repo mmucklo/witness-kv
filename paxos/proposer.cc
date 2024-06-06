@@ -112,7 +112,6 @@ void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
       this->replicated_log_->UpdateProposalNumber(accept_response.min_proposal());
       accept_majority_count = 0;
       is_prepare_needed_[i] = true;
-      LOG(INFO) << "Returning from here:\n";
       break;
     }
     ++accept_majority_count;
