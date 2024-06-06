@@ -35,6 +35,8 @@ ABSL_FLAG(std::string, op, "", "Operation to perform (put, get, delete)");
 
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
+ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
+          "Comma separated list of ip addresses and ports");
 
 class KvsClient {
  private:
@@ -87,8 +89,8 @@ Status KvsClient::DeleteGrpc(const std::string& key,
 
 // TODO [V]: Should these helper functions do these operations in a fixed retry
 // count loop ?
-static int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes, const std::string& key,
-                     const std::string& value) {
+static int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
+                     const std::string& key, const std::string& value) {
   uint8_t node_id = 0;
 
   PutRequest request;
@@ -269,7 +271,9 @@ static int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 int NonInteractiveClientTest(void) {
   const std::vector<std::unique_ptr<Node>> nodes =
-      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+      absl::GetFlag(FLAGS_kvs_node_list).empty()
+          ? ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file))
+          : ParseNodesList(absl::GetFlag(FLAGS_kvs_node_list));
 
   std::map<std::string, std::string> kv;
 
