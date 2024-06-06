@@ -62,7 +62,7 @@ TEST(FileParseTest, ConfigFileParseTest) {
   ASSERT_EQ(remove(filename), 0);
 }
 
-TEST(FileParseTest, ConfigStrTEst) {
+TEST(FileParseTest, ConfigStrTest) {
   std::vector<std::string> addrs = {"0.0.0.0", "0.1.2.3", "8.7.6.5",
                                     "10.10.10.10"};
   std::vector<std::string> ports = {"10", "20", "30", "40"};
