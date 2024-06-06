@@ -145,6 +145,7 @@ void ReplicatedLog::MakeLogEntryStable(const ReplicatedLogEntry &entry) {
 void ReplicatedLog::MarkLogEntryChosen(uint64_t idx) {
   absl::MutexLock l(&lock_);
   ReplicatedLogEntry &entry = log_entries_[idx];
+  entry.idx_ = idx;
   entry.is_chosen_ = true;
   CHECK_EQ(entry.idx_, idx);
 
