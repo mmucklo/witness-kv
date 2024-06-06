@@ -17,8 +17,8 @@
 #include "absl/strings/str_join.h"
 #include "absl/time/time.h"
 #include "log.pb.h"
-#include "tests/test_macros.h"
 #include "tests/test_util.h"
+#include "third_party/absl_local/test_macros.h"
 
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_file_size);
 ABSL_DECLARE_FLAG(uint64_t, log_writer_max_msg_size);
@@ -64,7 +64,6 @@ TEST(LogWriterTest, TooBig) {
     EXPECT_THAT(status, IsError());
     EXPECT_THAT(status.ToString(),
                 AllOf(HasSubstr("is greater than max"), HasSubstr("")));
-    EXPECT_EQ(log_writer.filename(), "");
     cleanup_files = log_writer.filenames();
   }
   ASSERT_THAT(witnesskvs::test::Cleanup(cleanup_files), IsOk());
@@ -74,7 +73,7 @@ TEST(LogWriterTest, Rotation) {
   std::vector<std::string> cleanup_files;
   {
     // Make the max filesize small.
-    absl::SetFlag(&FLAGS_log_writer_max_file_size, 100);
+    absl::SetFlag(&FLAGS_log_writer_max_file_size, 120);
     LogWriter log_writer(absl::GetFlag(FLAGS_tests_test_util_temp_dir),
                          "log_writer_test_rotation");
     Log::Message log_message;

@@ -1,10 +1,10 @@
-#ifndef PAXOS_HH_
-#define PAXOS_HH_
+#ifndef PAXOS_PAXOS_H_
+#define PAXOS_PAXOS_H_
 
-#include "acceptor.hh"
-#include "node.hh"
-#include "proposer.hh"
-#include "replicated_log.hh"
+#include "acceptor.h"
+#include "paxos_node.h"
+#include "proposer.h"
+#include "replicated_log.h"
 
 namespace witnesskvs::paxos {
 enum PaxosResult {
@@ -44,4 +44,4 @@ class Paxos {
   void RunTruncationOnce() { paxos_node_->RunTruncationOnce(); }
 };
 }  // namespace witnesskvs::paxos
-#endif  // PAXOS_HH_
+#endif  // PAXOS_PAXOS_HH_

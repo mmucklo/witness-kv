@@ -19,7 +19,7 @@
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "re2/re2.h"
-#include "util/status_macros.h"
+#include "third_party/mediapipe/status_macros.h"
 
 namespace witnesskvs::log {
 

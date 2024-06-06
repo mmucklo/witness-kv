@@ -1,4 +1,5 @@
-#include "acceptor.hh"
+#include "acceptor.h"
+#include "replicated_log.h"
 
 #include <grpcpp/grpcpp.h>
 

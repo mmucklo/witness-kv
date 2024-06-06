@@ -1,15 +1,15 @@
-#ifndef PROPOSER_HH_
-#define PROPOSER_HH_
+#ifndef PAXOS_PROPOSER_H_
+#define PAXOS_PROPOSER_H_
 
 #include "paxos.grpc.pb.h"
 #include "paxos.pb.h"
-#include "replicated_log.hh"
+#include "replicated_log.h"
 
 // GRPC headers
 #include <grpc/grpc.h>
 #include <grpcpp/server_builder.h>
 
-#include "node.hh"
+#include "paxos_node.h"
 
 namespace witnesskvs::paxos {
 
@@ -46,4 +46,4 @@ class Proposer {
 };
 
 }  // namespace witnesskvs::paxos
-#endif  // PROPOSER_HH_
+#endif  // PAXOS_PROPOSER_H_

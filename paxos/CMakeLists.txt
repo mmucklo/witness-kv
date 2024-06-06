@@ -9,8 +9,7 @@ set(SOURCES
     paxos.cc
     proposer.cc
     replicated_log.cc
-    node.cc
-    utils.cc
+    paxos_node.cc
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})
@@ -30,4 +29,5 @@ target_link_libraries(paxos
     log_writer_lib
     logs_loader_lib
     logs_truncator_lib
+    node_lib
 )
