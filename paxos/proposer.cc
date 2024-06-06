@@ -23,7 +23,7 @@ void Proposer::Propose(const std::string& value) {
     }
 
     const bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
-    AcceptPhase(request, value_for_accept_phase, nop_paxos_round, done, value);
+    done = AcceptPhase(request, value_for_accept_phase, nop_paxos_round, value);
   }
 
 }
@@ -48,9 +48,9 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
                      << " and error message: " << status.error_message();
         continue;
       }
-      if (response.max_chosen_index() > request.index()) {
+      if (response.max_idx_in_log() > request.index()) {
         LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-                  << "] Received max chosen index: " << response.max_chosen_index()
+                  << "] Received max chosen index: " << response.max_idx_in_log()
                   << " for index: " << request.index();
         is_prepare_needed_[i] = true;
       }
@@ -81,11 +81,12 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
 
 }
 
-void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
+bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
                            std::string& value_for_accept_phase,
-                           bool nop_paxos_round, bool& done, const std::string& value) {
+                           bool nop_paxos_round, const std::string& value) {
   // Perform phase 2 of paxos operation i.e. try to get the value we
   // determined in phase 1 to be accepted by a quorum of acceptors.
+  bool done = false;
   paxos_rpc::AcceptRequest accept_request;
   accept_request.set_proposal_number(request.proposal_number());
   accept_request.set_index(request.index());
@@ -112,7 +113,7 @@ void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
       this->replicated_log_->UpdateProposalNumber(accept_response.min_proposal());
       accept_majority_count = 0;
       is_prepare_needed_[i] = true;
-      break;
+      return false;
     }
     ++accept_majority_count;
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
@@ -146,5 +147,6 @@ void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
     done = true;
     this->paxos_node_->CommitOnPeerNodes(peer_unchosen_idx);
   }
+  return done;
 }
 }  // namespace witnesskvs::paxos

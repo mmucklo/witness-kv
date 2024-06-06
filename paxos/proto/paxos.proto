@@ -21,7 +21,7 @@ message PrepareResponse {
     uint64 accepted_proposal = 2;
     string accepted_value = 3;
     uint64 min_proposal = 4;
-    uint64 max_chosen_index = 5;
+    uint64 max_idx_in_log = 5;
 }
 
 message AcceptRequest {

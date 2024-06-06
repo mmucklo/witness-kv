@@ -70,7 +70,7 @@ Status AcceptorImpl::Prepare(ServerContext* context,
     response->set_accepted_value(entry.accepted_value_);
     response->set_has_accepted_value(true);
   }
-  response->set_max_chosen_index(this->replicated_log_->GetLogEntries().rbegin()->first);
+  response->set_max_idx_in_log(this->replicated_log_->GetLogEntries().rbegin()->first);
 
   return Status::OK;
 }
