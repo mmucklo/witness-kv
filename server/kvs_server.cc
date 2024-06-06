@@ -2,9 +2,11 @@
 #include <grpcpp/grpcpp.h>
 #include <rocksdb/status.h>
 
+#include <csignal>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -41,10 +43,25 @@ ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
 ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
+ABSL_FLAG(bool, kvs_enable_linearizability_checks, false, "");
+
+using json = nlohmann::json;
+
+struct JSONLogEntry {
+  std::string type;  // "invoke" or "ok"
+  std::vector<std::string> value;
+  long long time;
+
+  // Convert to JSON
+  json to_json() const {
+    return json{{"type", type}, {"value", value}, {"time", time}};
+  }
+};
+
 class KvsServiceImpl final : public Kvs::Service {
  public:
   KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes);
-  ~KvsServiceImpl() { delete db_; }
+  ~KvsServiceImpl();
 
   void InitPaxos(void);
   void InitRocksDb(const std::string& db_path);
@@ -63,13 +80,43 @@ class KvsServiceImpl final : public Kvs::Service {
 
   std::vector<std::unique_ptr<Node>> nodes_;
 
+  std::vector<JSONLogEntry> json_log_;
+  std::string json_log_file_;
+
+  json j_;
+
+  void LogToJSONFile(const std::string& type,
+                     const std::vector<std::string>& value, long long time) {
+    std::ofstream file;  //(json_log_file_);
+    file.open(json_log_file_, std::ios_base::app);
+    if (file.is_open()) {
+      j_.push_back(JSONLogEntry{type, value, time}.to_json());
+
+      j_ = j_.dump(4);
+      file << j_;
+      file.close();
+    }
+  }
+
+  void log(const std::string& type, const std::vector<std::string>& value,
+           long long time) {
+    // json_log_.push_back(JSONLogEntry{type, value, time});
+    LogToJSONFile(type, value, time);
+  }
+
+  long long current_time_millis() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::system_clock::now().time_since_epoch())
+        .count();
+  }
+
   Status PaxosProposeWrapper(const std::string& value, bool is_read);
 
   void KvsPaxosCommitCallback(std::string value);
 };
 
 KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
-    : nodes_{std::move(nodes)} {}
+    : nodes_{std::move(nodes)}, json_log_file_{"history.json"} {}
 
 void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
   CHECK(this->paxos_ != nullptr)
@@ -92,6 +139,8 @@ void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
     LOG(INFO) << "[KVS]: Registered Database callback.";
   }
 }
+
+KvsServiceImpl::~KvsServiceImpl() { delete db_; }
 
 void KvsServiceImpl::InitPaxos(void) {
   paxos_ = std::make_unique<witnesskvs::paxos::Paxos>(
@@ -175,6 +224,9 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
 Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                            PutResponse* response) {
+  long long startTime = current_time_millis();
+  log("invoke", {"PUT", request->key(), request->value()}, startTime);
+
   KeyValueStore::OperationType op;
   op.set_type(KeyValueStore::OperationType_Type_PUT);
   KeyValueStore::PutRequest* kv_put = op.mutable_put_data();
@@ -193,11 +245,18 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
   if (status.ok()) {
     response->set_status("[KVS]: Put operation Successful");
   }
+
+  long long endTime = current_time_millis();
+  log("ok", {"PUT", request->key(), request->value()}, endTime);
+
   return status;
 }
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
+  long long startTime = current_time_millis();
+  log("invoke", {"GET", request->key()}, startTime);
+
   Status statusGrpc = PaxosProposeWrapper("", true);
   if (!statusGrpc.ok()) {
     return statusGrpc;
@@ -213,6 +272,10 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
   }
 
   response->set_value(value);
+
+  long long endTime = current_time_millis();
+  log("ok", {"GET", request->key(), value}, endTime);
+
   return Status::OK;
 }
 
@@ -239,6 +302,15 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
+/*
+void signal_handler(int signal) {
+  LOG(INFO) << "[KVS]: Triggered signal handler...";
+  if (server) {
+    server->Shutdown();
+  }
+  exit(signal);
+}*/
+
 void RunKvsServer(const std::string& db_path,
                   std::vector<std::unique_ptr<Node>> nodes, uint8_t node_id) {
   const std::string address_port_str = nodes[node_id]->GetAddressPortStr();
@@ -249,7 +321,10 @@ void RunKvsServer(const std::string& db_path,
   ServerBuilder builder;
   builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
-  std::unique_ptr<Server> server(builder.BuildAndStart());
+  std::unique_ptr<Server> server = builder.BuildAndStart();
+
+  // std::signal(SIGINT, signal_handler);
+  // std::signal(SIGTERM, signal_handler);
 
   server->Wait();
 }

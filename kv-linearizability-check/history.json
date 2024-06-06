@@ -1,0 +1,22 @@
+[
+    {
+        "time": 1717573864156,
+        "type": "invoke",
+        "value": ["PUT", "key0", "value0"]
+    },
+    {
+        "time": 1717573864170,
+        "type": "ok",
+        "value": ["PUT", "key0", "value0"]
+    },
+    {
+        "time": 1717573864178,
+        "type": "invoke",
+        "value": ["GET", "key0"]
+    },
+    {
+        "time": 1717573864195,
+        "type": "ok",
+        "value": ["GET", "key0", "value0"]
+    }
+]
