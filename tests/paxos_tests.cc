@@ -358,6 +358,64 @@ TEST_F(PaxosSanity, BasicMultiPaxosSanity) {
       << "Prposal number for same after leader change "
       << " observed: (" << second_proposal_number << ") and previous proposal number ("
       << first_proposal_number << ")";
+  nodes[1] = std::make_unique<witnesskvs::paxos::Paxos>(1);
+  absl::SleepFor(sleep_timer);
+  for (size_t i = 0; i < num_proposals; i++) {
+    auto status = nodes[num_nodes - 1]->Propose(std::to_string((num_proposals + i) * 2), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+  }
+
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    auto status = nodes[leader_id]->Propose(std::to_string((num_proposals + i) * 3), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
+  }
+  log = nodes[0]->GetReplicatedLog()->GetLogEntries();
+  ASSERT_EQ(log.size(), 3 * num_proposals);
+
+  /*we want to check proposal numbers of second set after leader change
+  they should be different than original one*/
+  auto third_proposal_number = nodes[0]->GetReplicatedLog()->GetLogEntries().find(10)->second.accepted_proposal_;
+  for (size_t i = 10; i < log.size(); i++) {
+    auto entry = log.find(i)->second;
+    ASSERT_EQ(entry.accepted_proposal_, third_proposal_number)
+        << "Prposal number for log entry mistmatch at index: " << i << " observed: ("
+        << entry.accepted_proposal_ << ") and expected: (" << second_proposal_number
+        << ")";
+  }
+  
+  nodes[1].reset();
+  absl::SleepFor(sleep_timer);
+  for (size_t i = 0; i < num_proposals; i++) {
+    auto status = nodes[num_nodes - 1]->Propose(std::to_string((num_proposals + i) * 4), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_ERROR_NOT_PERMITTED, status);
+  }
+
+  for ( size_t i = 0; i < num_proposals; i++ ) {
+    auto status = nodes[leader_id]->Propose(std::to_string((num_proposals + i) * 4), &leader_id, false);
+    ASSERT_EQ(witnesskvs::paxos::PAXOS_OK, status);
+  }
+  log = nodes[0]->GetReplicatedLog()->GetLogEntries();
+  ASSERT_EQ(log.size(), 4 * num_proposals);
+
+  /*we want to check proposal numbers of second set after leader change
+  they should be different than original one*/
+  auto fourth_proposal_number = nodes[0]->GetReplicatedLog()->GetLogEntries().find(15)->second.accepted_proposal_;
+  for (size_t i = 15; i < log.size(); i++) {
+    auto entry = log.find(i)->second;
+    ASSERT_EQ(entry.accepted_proposal_, fourth_proposal_number)
+        << "Prposal number for log entry mistmatch at index: " << i << " observed: ("
+        << entry.accepted_proposal_ << ") and expected: (" << second_proposal_number
+        << ")";
+  }
+  ASSERT_NE( second_proposal_number,  third_proposal_number)
+      << "Third Prposal number for same after leader change "
+      << " observed: (" <<  third_proposal_number << ") and previous(second) proposal number ("
+      <<  third_proposal_number << ")";
+  
+  ASSERT_NE( third_proposal_number,  fourth_proposal_number)
+      << "Fourth Prposal number for same after leader change "
+      << " observed: (" <<  third_proposal_number << ") and previous(third) proposal number ("
+      <<  third_proposal_number << ")";
 }
 
 TEST_F(PaxosSanity, WitnessNotLeader) {

@@ -16,7 +16,8 @@ void Proposer::Propose(const std::string& value) {
     request.set_index(this->replicated_log_->GetFirstUnchosenIdx());
     request.set_proposal_number( proposal_number_ );
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-              << "] Attempting replication at index " << request.index();
+              << "] Attempting replication at index " << request.index()
+              << " with proposal number: " << proposal_number_;
     if (proposal_number_ == 0 || DoPreparePhase() || absl::GetFlag(FLAGS_disable_multi_paxos)) {
       PreparePhase(request, value_for_accept_phase);
     }
@@ -110,6 +111,7 @@ void Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
     if (accept_response.min_proposal() > request.proposal_number()) {
       this->replicated_log_->UpdateProposalNumber(accept_response.min_proposal());
       accept_majority_count = 0;
+      is_prepare_needed_[i] = true;
       LOG(INFO) << "Returning from here:\n";
       break;
     }
