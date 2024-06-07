@@ -1,0 +1,19 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+ 
+  <groupId>edu.stanford.witnesskvs</groupId>
+  <artifactId>root</artifactId>
+  <packaging>pom</packaging>
+  <version>1</version>
+  <name>witnesskvs</name>
+  <url>https://github.com/mmucklo/witness-kv</url>
+
+  <modules>
+    <module>client</module>
+  </modules>
+
+  <!-- https://github.com/grpc/grpc-java/blob/master/examples/pom.xml -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+</project>
