@@ -1,3 +1,6 @@
+#ifndef SERVER_KVS_SERVER_H_
+#define SERVER_KVS_SERVER_H_
+
 #include <google/protobuf/message.h>
 #include <grpcpp/ext/channelz_service_plugin.h>
 #include <grpcpp/ext/proto_server_reflection_plugin.h>
@@ -125,3 +128,5 @@ class KvsServiceImpl final : public Kvs::Service {
     }
   }
 };
+
+#endif // SERVER_KVS_SERVER_H_

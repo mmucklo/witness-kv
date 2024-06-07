@@ -1,5 +1,5 @@
 
-#include "kvs_server.hh"
+#include "kvs_server.h"
 
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},

@@ -41,7 +41,7 @@ class Proposer {
   void PreparePhase(paxos_rpc::PrepareRequest& request,
                     std::string& value_for_accept_phase);
   bool AcceptPhase(paxos_rpc::PrepareRequest& request,
-                   std::string& value_for_accept_phase, bool is_nop_paxos_round,
+                   const std::string& value_for_accept_phase, bool is_nop_paxos_round,
                    const std::string& value);
   bool DoPreparePhase() {
     return std::any_of(is_prepare_needed_.begin(), is_prepare_needed_.end(),
