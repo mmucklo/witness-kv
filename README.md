@@ -58,10 +58,11 @@ sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-
 
 To run YCSB against this:
 
-1. First build this repo with mvn.
+1. First BUILD this repo with mvn: cd /path/to/this/witness-kv; mvn clean package
 2. Clone our fork of YCSB: https://github.com/mmucklo/YCSB
 3. In YCSB, git checkout witness-kv
 4. BUILD like this: mvn -Dwitnesskvpath=/path/to/this/witness-kv -pl site.ycsb:witnesskvs-binding -am clean package
+5. Set ENV variable first: export witnesskvpath=/path/to/this/witness-kv
 5. RUN load: ./bin/ycsb load witnesskvs -P witnesskvs/conf/witnesskvs.properties -P workloads/workloada -p recordcount=100 -threads 10 -s
 6. RUN test: ./bin/ycsb run witnesskvs -P witnesskvs/conf/witnesskvs.properties -P workloads/workloadb -p recordcount=100 -p operationcount=1000 -threads 10 -s
 
