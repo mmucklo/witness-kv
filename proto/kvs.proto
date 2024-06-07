@@ -50,3 +50,20 @@ message OperationType {
     DeleteRequest del_data = 3;  // Key for DELETE operation
   }
 }
+
+message KvsStatus {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    OK = 1;
+    REDIRECT = 2;
+    UNAVAILABLE = 3;
+    ERROR = 4;
+  }
+  message RedirectDetails {
+    string ip_address_with_port = 1;
+    int64 node_id = 2;
+  }
+
+  Type type = 1;
+  RedirectDetails redirect_details = 2;
+}

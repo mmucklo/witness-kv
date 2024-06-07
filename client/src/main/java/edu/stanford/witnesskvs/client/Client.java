@@ -19,13 +19,23 @@ package edu.stanford.witnesskvs.client;
 
 import io.grpc.Channel;
 import io.grpc.Grpc;
+import io.grpc.Status;
+import io.grpc.protobuf.lite.ProtoLiteUtils;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.Metadata;
 import io.grpc.StatusRuntimeException;
+import java.lang.reflect.Method;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import org.apache.commons.lang3.ObjectUtils.Null;
+
+import java.util.HashMap;
+import java.util.HashSet;
 import edu.stanford.witnesskvs.KvsGrpc;
+import edu.stanford.witnesskvs.KvsStatus;
 import edu.stanford.witnesskvs.GetRequest;
 import edu.stanford.witnesskvs.GetResponse;
 import edu.stanford.witnesskvs.PutRequest;
@@ -39,66 +49,139 @@ import edu.stanford.witnesskvs.DeleteResponse;
 public class Client {
   private static final Logger logger = Logger.getLogger(Client.class.getName());
 
-  private final KvsGrpc.KvsBlockingStub blockingStub;
+  private HashMap<String, ManagedChannel> channel_map;
+  private HashMap<String, KvsGrpc.KvsBlockingStub> stub_map;
+  private String preferred;
 
-  /** Construct client for accessing HelloWorld server using the existing channel. */
-  public Client(Channel channel) {
-    // 'channel' here is a Channel, not a ManagedChannel, so it is not this code's responsibility to
-    // shut it down.
-
-    // Passing Channels to code makes code easier to test and makes it easier to reuse Channels.
-    blockingStub = KvsGrpc.newBlockingStub(channel);
+  protected void finalize() throws Throwable {
+    channel_map.forEach((h, channel) -> {
+      try {
+        channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+      } catch (InterruptedException e) {
+      }
+    });
   }
 
+  /*
+   * Returns a blocking stub for hostport, creating it if necessary, storing it in
+   * a hashmap along with the channel in another hashmap.
+   */
+  private KvsGrpc.KvsBlockingStub GetStub(String hostport) {
+    if (!stub_map.containsKey(hostport)) {
+      if (!channel_map.containsKey(hostport)) {
+        ManagedChannel channel = Grpc.newChannelBuilder(hostport, InsecureChannelCredentials.create())
+            .build();
+        channel_map.put(hostport, channel);
+      }
+      ManagedChannel channel = channel_map.get(hostport);
+      KvsGrpc.KvsBlockingStub stub = KvsGrpc.newBlockingStub(channel);
+      stub_map.put(hostport, stub);
+    }
+    return stub_map.get(hostport);
+  }
+
+  public Client(String[] hostports, String preferred) {
+    this.channel_map = new HashMap<>();
+    this.stub_map = new HashMap<>();
+    this.preferred = preferred;
+    for (String hostport : hostports) {
+      GetStub(hostport);
+    }
+  }
+
+  private static final Metadata.Key<KvsStatus> STATUS_DETAILS_KEY = Metadata.Key.of(
+      "grpc-status-details-bin",
+      ProtoLiteUtils.metadataMarshaller(KvsStatus.getDefaultInstance()));
+
   /** Get from server. */
-  public void get(String key) {
+  public String get(String key) {
     logger.info("Will try to get " + key + " ...");
     GetRequest request = GetRequest.newBuilder().setKey(key).build();
     GetResponse response;
     try {
-      response = blockingStub.get(request);
+      response = GetStub(preferred).get(request);
+      return response.getValue();
     } catch (StatusRuntimeException e) {
+      // TODO(mmucklo): Maybe figure out a way to cleanup this duplicated code.
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return;
+      Metadata trailers = e.getTrailers();
+      KvsStatus status = trailers.get(STATUS_DETAILS_KEY);
+      if (status != null && status.getType() == KvsStatus.Type.REDIRECT) {
+        String ip_port = status.getRedirectDetails().getIpAddressWithPort();
+        try {
+          preferred = ip_port;
+          response = GetStub(ip_port).get(request);
+          return response.getValue();
+        } catch (StatusRuntimeException ex) {
+          logger.log(Level.WARNING, "RPC failed: {0}", ex.getStatus());
+          return null;
+        }
+      }
+      return null;
     }
-    logger.info("Value: " + response.getValue());
   }
 
   /** Put to server. */
-  public void put(String key, String value) {
+  public Boolean put(String key, String value) {
     logger.info("Will try to put " + key + " " + value + " ...");
     PutRequest request = PutRequest.newBuilder().setKey(key).setValue(value).build();
     PutResponse response;
     try {
-      response = blockingStub.put(request);
+      response = GetStub(preferred).put(request);
+      return true;
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return;
+      Metadata trailers = e.getTrailers();
+      KvsStatus status = trailers.get(STATUS_DETAILS_KEY);
+      if (status != null && status.getType() == KvsStatus.Type.REDIRECT) {
+        String ip_port = status.getRedirectDetails().getIpAddressWithPort();
+        try {
+          preferred = ip_port;
+          response = GetStub(ip_port).put(request);
+          return true;
+        } catch (StatusRuntimeException ex) {
+          logger.log(Level.WARNING, "RPC failed: {0}", ex.getStatus());
+          return false;
+        }
+      }
+      return false;
     }
-    logger.info("Status: " + response.getStatus());
   }
 
   /** Delete from server. */
-  public void delete(String key) {
+  public Boolean delete(String key) {
     logger.info("Will try to delete " + key + " ...");
     DeleteRequest request = DeleteRequest.newBuilder().setKey(key).build();
     DeleteResponse response;
     try {
-      response = blockingStub.delete(request);
+      response = GetStub(preferred).delete(request);
+      return true;
     } catch (StatusRuntimeException e) {
       logger.log(Level.WARNING, "RPC failed: {0}", e.getStatus());
-      return;
+      Metadata trailers = e.getTrailers();
+      KvsStatus status = trailers.get(STATUS_DETAILS_KEY);
+      if (status != null && status.getType() == KvsStatus.Type.REDIRECT) {
+        String ip_port = status.getRedirectDetails().getIpAddressWithPort();
+        try {
+          preferred = ip_port;
+          response = GetStub(ip_port).delete(request);
+          return true;
+        } catch (StatusRuntimeException ex) {
+          logger.log(Level.WARNING, "RPC failed: {0}", ex.getStatus());
+          return false;
+        }
+      }
+      return false;
     }
-    logger.info("Status: " + response.getStatus());
   }
 
   public static void usage(String errmsg) {
     if (errmsg.length() > 0) {
       System.err.println(errmsg);
     }
-    System.err.println("Usage: <host:port> <operation> <key> [value]");
+    System.err.println("Usage: <host:port,host:port,...> <operation> <key> [value]");
     System.err.println("");
-    System.err.println("  host:port       The host:port to contact");
+    System.err.println("  host:port  The host:port(s) to contact");
     System.err.println("  operation  One of get|put|delete");
     System.err.println("  key        The key to operate on");
     System.err.println("  value      Optional value if needed");
@@ -106,7 +189,8 @@ public class Client {
   }
 
   /**
-   * Greet server. If provided, the first element of {@code args} is the name to use in the
+   * Greet server. If provided, the first element of {@code args} is the name to
+   * use in the
    * greeting. The second argument is the target server.
    */
   public static void main(String[] args) throws Exception {
@@ -125,33 +209,27 @@ public class Client {
       value = args[3];
     }
 
-    // Create a communication channel to the server, known as a Channel. Channels are thread-safe
-    // and reusable. It is common to create channels at the beginning of your application and reuse
-    // them until the application shuts down.
-    //
-    // For the example we use plaintext insecure credentials to avoid needing TLS certificates. To
-    // use TLS, use TlsChannelCredentials instead.
-    ManagedChannel channel = Grpc.newChannelBuilder(hostport, InsecureChannelCredentials.create())
-        .build();
-    try {
-      Client client = new Client(channel);
-      if (operation.equals("get")) {
-        client.get(key);
-      } else if (operation.equals("put")) {
-        if (args.length < 4) {
-          usage("No value passed in.");
-        }
-        client.put(key, value);
-      } else if (operation.equals("delete")) {
-        client.delete(key);
-      } else {
-        usage("Unknown operation" + operation);
+    String[] hostports = hostport.split(",");
+
+    Client client = new Client(hostports, hostports[0]);
+    if (operation.equals("get")) {
+      String result = client.get(key);
+      if (result != null) {
+        System.out.println(result);
       }
-    } finally {
-      // ManagedChannels use resources like threads and TCP connections. To prevent leaking these
-      // resources the channel should be shut down when it will no longer be used. If it may be used
-      // again leave it running.
-      channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+    } else if (operation.equals("put")) {
+      if (args.length < 4) {
+        usage("No value passed in.");
+      }
+      if (client.put(key, value)) {
+        System.out.println("Success (put)!");
+      }
+    } else if (operation.equals("delete")) {
+      if (client.delete(key)) {
+        System.out.println("Success (delete)!");
+      }
+    } else {
+      usage("Unknown operation" + operation);
     }
   }
 }
