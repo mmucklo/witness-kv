@@ -1,6 +1,6 @@
 # witness-kv
 
-Prerequisites
+## Prerequisites
 - Building works on Ubuntu 22.04 LTS with g++ 11 or clang++ 15 (clang++ 14 may work as well)
 - Install CMake
 - Need cmake 3.29
@@ -13,6 +13,17 @@ Prerequisites
   - cd build; make -j `nproc`
 - To format the code
   - cmake --build build --target format
+
+# Src tree
+* **core/** (Contains essential project components)
+    * `paxos/` (Contains the core paxos library implementation)
+    * `log\` (Contains the logging ligrary used by paxos for its logging operation)
+    * `src/` (Holds the source code)
+        * `api/` (API-related code)
+        * `components/` (Reusable UI components)
+        * `utils/` (Utility functions)
+* **docs/` (Documentation files)
+* **tests/` (Unit tests)
 
 # Unit tests
 
@@ -79,7 +90,8 @@ To run porcupine checker against this:
 5. Run the linearizability checker in `witness-kv/kv-linearizability-check` by running `go test`. An example output of a successful run is pasted below:
    PASS
    ok      github.com/vramesh7/kv-linearizability-check/kv-linearizability-check   0.010s
-6. External Citation:
+6. Optionally, the checker code in `kv-linearizability-check/main_test.go` can be updated by uncommenting the Visualize function to dump out the HTML output to the console log.
+7. External Citation:
    @misc{athalye2017porcupine,
      author = {Anish Athalye},
      title = {Porcupine: A fast linearizability checker in {Go}},
