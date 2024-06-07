@@ -83,7 +83,7 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
 }
 
 bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
-                           std::string& value_for_accept_phase,
+                           const std::string& value_for_accept_phase,
                            bool nop_paxos_round, const std::string& value) {
   // Perform phase 2 of paxos operation i.e. try to get the value we
   // determined in phase 1 to be accepted by a quorum of acceptors.
