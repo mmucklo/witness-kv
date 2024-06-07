@@ -167,6 +167,7 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
     LOG(INFO) << "[KVS]: Leader address returned: "
               << nodes_[leader_node_id]->GetAddressPortStr();
+
     return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                         nodes_[leader_node_id]->GetAddressPortStr());
   } else {
@@ -263,12 +264,27 @@ void RunKvsServer(const std::string& db_path,
 }
 
 int main(int argc, char** argv) {
-  absl::ParseCommandLine(argc, argv);
-
-  if (argc > 1) {
-    LOG(FATAL) << "Not expecting more command line arguments after flags: "
-               << argc;
+  std::vector<char*> positional_args;
+  std::vector<absl::UnrecognizedFlag> unrecognized_flags;
+  absl::ParseAbseilFlagsOnly(argc, argv, positional_args, unrecognized_flags);
+  if (positional_args.size() != 1) {
+    for (size_t i = 1; i < positional_args.size() ; i++) {
+      LOG(ERROR) << "Unknown arg " << positional_args[i];
+    }
+    return -1;
   }
+  if (!unrecognized_flags.empty()) {
+    for (const auto& unrecognized_flag : unrecognized_flags) {
+      std::string from =
+          unrecognized_flag.kFromArgv == absl::UnrecognizedFlag::kFromArgv
+              ? "ARGV"
+              : "FLAG_FILE";
+      LOG(ERROR) << "Unknown " << from
+                 << " flag: " << unrecognized_flag.flag_name;
+    }
+    return -1;
+  }
+
   std::vector<std::unique_ptr<Node>> nodes;
   if (!absl::GetFlag(FLAGS_kvs_node_list).empty()) {
     nodes = ParseNodesList(absl::GetFlag(FLAGS_kvs_node_list));
