@@ -1,7 +1,7 @@
-#ifndef REPLICATED_LOG_H_
-#define REPLICATED_LOG_H_
+#ifndef PAXOS_REPLICATED_LOG_H_
+#define PAXOS_REPLICATED_LOG_H_
 
-#include "common.hh"
+#include "common.h"
 #include "log/log_writer.h"
 #include "log/logs_truncator.h"
 
@@ -75,4 +75,4 @@ class ReplicatedLog {
 std::function<bool(const Log::Message& a, const Log::Message& b)> GetLogSortFn();
 
 }  // namespace witnesskvs::paxos
-#endif  // REPLICATED_LOG_H_
+#endif  // PAXOS_REPLICATED_LOG_H_

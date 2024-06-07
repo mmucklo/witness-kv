@@ -2,10 +2,12 @@
 #include "kvs_server.hh"
 
 // TODO: Maybe parse these from config file.
+ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
+          "Comma separated list of ip addresses and ports");
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
-ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
+ABSL_FLAG(std::string, kvs_db_path, "/var/tmp/kvs_rocksdb", "kvs_db_path");
 
 ABSL_FLAG(bool, kvs_enable_linearizability_checks, false, "");
 ABSL_FLAG(std::string, kvs_linearizability_json_file, "history.json",
@@ -107,6 +109,7 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
     LOG(INFO) << "[KVS]: Leader address returned: "
               << nodes_[leader_node_id]->GetAddressPortStr();
+
     return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
                         nodes_[leader_node_id]->GetAddressPortStr());
   } else {
@@ -241,6 +244,9 @@ void RunKvsServer(const std::string& db_path,
   service.InitPaxos();
   service.InitRocksDb(db_path);
 
+  grpc::EnableDefaultHealthCheckService(true);
+  grpc::reflection::InitProtoReflectionServerBuilderPlugin();
+  grpc::channelz::experimental::InitChannelzService();
   ServerBuilder builder;
   builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
@@ -250,9 +256,33 @@ void RunKvsServer(const std::string& db_path,
 }
 
 int main(int argc, char** argv) {
-  absl::ParseCommandLine(argc, argv);
+  std::vector<char*> positional_args;
+  std::vector<absl::UnrecognizedFlag> unrecognized_flags;
+  absl::ParseAbseilFlagsOnly(argc, argv, positional_args, unrecognized_flags);
+  if (positional_args.size() != 1) {
+    for (size_t i = 1; i < positional_args.size(); i++) {
+      LOG(ERROR) << "Unknown arg " << positional_args[i];
+    }
+    return -1;
+  }
+  if (!unrecognized_flags.empty()) {
+    for (const auto& unrecognized_flag : unrecognized_flags) {
+      std::string from =
+          unrecognized_flag.kFromArgv == absl::UnrecognizedFlag::kFromArgv
+              ? "ARGV"
+              : "FLAG_FILE";
+      LOG(ERROR) << "Unknown " << from
+                 << " flag: " << unrecognized_flag.flag_name;
+    }
+    return -1;
+  }
 
-  auto nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+  std::vector<std::unique_ptr<Node>> nodes;
+  if (!absl::GetFlag(FLAGS_kvs_node_list).empty()) {
+    nodes = ParseNodesList(absl::GetFlag(FLAGS_kvs_node_list));
+  } else {
+    nodes = ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+  }
   CHECK_NE(nodes.size(), 0);
 
   uint8_t node_id = absl::GetFlag(FLAGS_kvs_node_id);

@@ -1,4 +1,4 @@
-#include "paxos.hh"
+#include "paxos.h"
 
 namespace witnesskvs::paxos {
 

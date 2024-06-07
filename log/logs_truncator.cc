@@ -24,7 +24,7 @@
 #include "log_reader.h"
 #include "log_util.h"
 #include "log_writer.h"
-#include "util/status_macros.h"
+#include "third_party/mediapipe/status_macros.h"
 
 namespace witnesskvs::log {
 

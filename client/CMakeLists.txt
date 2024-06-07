@@ -16,6 +16,7 @@ target_link_libraries(client
     PRIVATE
     kvsproto
     paxos
+    node_lib
     absl::flags
     absl::flags_parse
     absl::log

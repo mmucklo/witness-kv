@@ -5,8 +5,8 @@
 #include <system_error>
 
 #include "rocksdb/db.h"
-#include "tests/test_macros.h"
 #include "tests/test_util.h"
+#include "third_party/absl_local/test_macros.h"
 
 namespace witnesskvs::test {
 namespace {

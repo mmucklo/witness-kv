@@ -1,10 +1,10 @@
-#include "node.hh"
+#include "paxos_node.h"
 
 #include <cstddef>
 #include <functional>
 #include <limits>
 
-#include "proposer.hh"
+#include "proposer.h"
 
 // GRPC headers
 #include <grpc/grpc.h>
@@ -27,6 +27,8 @@ ABSL_FLAG(bool, paxos_node_truncation_enabled, true,
 
 ABSL_FLAG(std::string, paxos_node_config_file, "paxos/nodes_config.txt",
           "Paxos config file for nodes ip addresses and ports");
+ABSL_FLAG(std::vector<std::string>, paxos_node_list, {},
+          "Comma separated list of ip addresses and ports");
 
 ABSL_FLAG(bool, witness_support, true, "Enable witness support");
 ABSL_FLAG(bool, lower_node_witness, false, "Lower nodes are witnesses");
@@ -38,7 +40,11 @@ PaxosNode::PaxosNode(uint8_t node_id, std::shared_ptr<ReplicatedLog> rlog)
       replicated_log_{rlog},
       leader_node_id_{INVALID_NODE_ID} {
   // TODO: shouldn't this be passed in from kvs_server?
-  nodes_ = ParseNodesConfig(absl::GetFlag(FLAGS_paxos_node_config_file));
+  if (!absl::GetFlag(FLAGS_paxos_node_list).empty()) {
+    nodes_ = ParseNodesList(absl::GetFlag(FLAGS_paxos_node_list));
+  } else {
+    nodes_ = ParseNodesConfig(absl::GetFlag(FLAGS_paxos_node_config_file));
+  }
   CHECK_NE(nodes_.size(), 0);
 
   std::set<std::pair<std::string, int>> s;
@@ -78,7 +84,7 @@ PaxosNode::~PaxosNode() {
 }
 
 void PaxosNode::Truncate(const uint64_t min_index) {
-  LOG(INFO) << "Sending Truncation at index: " << index;
+  LOG(INFO) << "Sending Truncation at index: " << min_index;
   for (std::size_t i = 0; i < acceptor_stubs_size_; i++) {
     std::unique_ptr<paxos_rpc::Acceptor::Stub>& stub = GetAcceptorStub(i);
     paxos_rpc::TruncateRequest request;

@@ -18,9 +18,9 @@
 #include "absl/time/time.h"
 #include "log.pb.h"
 #include "log_writer.h"
-#include "tests/protobuf_matchers.h"
-#include "tests/test_macros.h"
+#include "third_party/nucleus/protobuf_matchers.h"
 #include "tests/test_util.h"
+#include "third_party/absl_local/test_macros.h"
 
 using ::protobuf_matchers::EqualsProto;
 using ::testing::AllOf;

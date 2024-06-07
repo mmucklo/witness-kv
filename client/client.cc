@@ -13,6 +13,8 @@ ABSL_FLAG(std::string, op, "", "Operation to perform (put, get, delete)");
 
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
+ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
+          "Comma separated list of ip addresses and ports");
 
 int NonInteractiveClientTest(const std::vector<std::unique_ptr<Node>>& nodes) {
   std::map<std::string, std::string> kv;
