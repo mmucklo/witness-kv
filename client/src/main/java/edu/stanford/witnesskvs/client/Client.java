@@ -95,7 +95,7 @@ public class Client {
 
   /** Get from server. */
   public String get(String key) {
-    logger.info("Will try to get " + key + " ...");
+    //logger.info("Will try to get " + key + " ...");
     GetRequest request = GetRequest.newBuilder().setKey(key).build();
     GetResponse response;
     try {
@@ -123,7 +123,7 @@ public class Client {
 
   /** Put to server. */
   public Boolean put(String key, String value) {
-    logger.info("Will try to put " + key + " " + value + " ...");
+    //logger.info("Will try to put " + key + " " + value + " ...");
     PutRequest request = PutRequest.newBuilder().setKey(key).setValue(value).build();
     PutResponse response;
     try {
@@ -150,7 +150,7 @@ public class Client {
 
   /** Delete from server. */
   public Boolean delete(String key) {
-    logger.info("Will try to delete " + key + " ...");
+    //logger.info("Will try to delete " + key + " ...");
     DeleteRequest request = DeleteRequest.newBuilder().setKey(key).build();
     DeleteResponse response;
     try {

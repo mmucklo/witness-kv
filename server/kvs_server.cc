@@ -1,5 +1,4 @@
-
-#include "kvs_server.hh"
+#include "kvs_server.h"
 
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
@@ -113,9 +112,10 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
     KeyValueStore::KvsStatus kvs_status;
     kvs_status.set_type(KeyValueStore::KvsStatus_Type_REDIRECT);
     kvs_status.mutable_redirect_details()->set_node_id(leader_node_id);
-    kvs_status.mutable_redirect_details()->set_ip_address_with_port(nodes_[leader_node_id]->GetAddressPortStr());
-    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                        "REDIRECT", kvs_status.SerializeAsString());
+    kvs_status.mutable_redirect_details()->set_ip_address_with_port(
+        nodes_[leader_node_id]->GetAddressPortStr());
+    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "REDIRECT",
+                        kvs_status.SerializeAsString());
   } else {
     // Either there is no-leader or more likely there are not enough nodes up
     // and running.
@@ -123,8 +123,8 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
     kvs_status.set_type(KeyValueStore::KvsStatus_Type_UNAVAILABLE);
     return grpc::Status(
         grpc::StatusCode::UNAVAILABLE,
-        "[KVS]: Cluster is not in a state to serve requests right now", kvs_status.SerializeAsString());
-
+        "[KVS]: Cluster is not in a state to serve requests right now",
+        kvs_status.SerializeAsString());
   }
 }
 
