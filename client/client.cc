@@ -1,30 +1,8 @@
-#include <grpcpp/grpcpp.h>
-
-#include <iostream>
-#include <memory>
-#include <random>
-#include <string>
-
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/log/check.h"
-#include "absl/log/initialize.h"
-#include "absl/log/log.h"
-#include "kvs.grpc.pb.h"
-#include "paxos/utils.hh"
-
-using grpc::Channel;
-using grpc::ClientContext;
-using grpc::Status;
-using KeyValueStore::DeleteRequest;
-using KeyValueStore::DeleteResponse;
-using KeyValueStore::GetRequest;
-using KeyValueStore::GetResponse;
-using KeyValueStore::Kvs;
-using KeyValueStore::PutRequest;
-using KeyValueStore::PutResponse;
+#include "client_util_common.hh"
 
 ABSL_FLAG(bool, interactive, false, "Mode for running the client test");
+ABSL_FLAG(bool, linearizability, false,
+          "Test will perform linearizability checks");
 
 ABSL_FLAG(std::string, server_address, "",
           "Address of the key-value server (host:port)");
@@ -36,241 +14,7 @@ ABSL_FLAG(std::string, op, "", "Operation to perform (put, get, delete)");
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
           "KVS config file for nodes ip addresses and ports");
 
-class KvsClient {
- private:
-  std::unique_ptr<Kvs::Stub> stub_;
-
- public:
-  KvsClient(std::shared_ptr<Channel> channel);
-  ~KvsClient() = default;
-
-  Status PutGrpc(const std::string& key, const std::string& value,
-                 PutResponse* response) const;
-
-  Status GetGrpc(const std::string& key, GetResponse* response) const;
-
-  Status DeleteGrpc(const std::string& key, DeleteResponse* response) const;
-};
-
-KvsClient::KvsClient(std::shared_ptr<Channel> channel)
-    : stub_{Kvs::NewStub(channel)} {}
-
-Status KvsClient::PutGrpc(const std::string& key, const std::string& value,
-                          PutResponse* response) const {
-  ClientContext context;
-
-  PutRequest request;
-  request.set_key(key);
-  request.set_value(value);
-
-  return stub_->Put(&context, request, response);
-}
-
-Status KvsClient::GetGrpc(const std::string& key, GetResponse* response) const {
-  ClientContext context;
-
-  GetRequest request;
-  request.set_key(key);
-
-  return stub_->Get(&context, request, response);
-}
-
-Status KvsClient::DeleteGrpc(const std::string& key,
-                             DeleteResponse* response) const {
-  ClientContext context;
-
-  DeleteRequest request;
-  request.set_key(key);
-
-  return stub_->Delete(&context, request, response);
-}
-
-// TODO [V]: Should these helper functions do these operations in a fixed retry
-// count loop ?
-static int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
-                     const std::string& key, const std::string& value) {
-  uint8_t node_id = 0;
-
-  PutRequest request;
-  request.set_key(key);
-  request.set_value(value);
-
-  PutResponse response;
-  Status status;
-
-  while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
-                                       grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
-
-    ClientContext context;
-    status = stub->Put(&context, request, &response);
-    if (status.ok()) {
-      LOG(INFO) << response.status();
-      return 0;
-    }
-    if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      node_id = (++node_id) % nodes.size();
-      continue;
-    }
-
-    if (status.error_code() != grpc::StatusCode::PERMISSION_DENIED) {
-      LOG(INFO) << "[Client]: Error from KVS server: " << status.error_code();
-      return -1;
-    }
-
-    if (status.error_message().empty()) {
-      LOG(INFO) << "[Client]: Error from KVS server***";
-      return -1;
-    }
-
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
-
-    ClientContext ctx;
-    status = st->Put(&ctx, request, &response);
-    if (status.ok()) {
-      return 0;
-    } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      absl::SleepFor(absl::Seconds(1));
-    } else {
-      LOG(WARNING) << "[Client]: Error from KVS server leader node: "
-                   << status.error_code();
-      return -1;
-    }
-  }
-
-  return -1;
-}
-
-static std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
-                             const std::string& key, int* return_code) {
-  uint8_t node_id = 0;
-
-  GetRequest request;
-  request.set_key(key);
-
-  GetResponse response;
-  Status status;
-  while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
-                                       grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
-
-    ClientContext context;
-    status = stub->Get(&context, request, &response);
-    if (status.ok()) {
-      return response.value();
-    }
-    if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      node_id = (++node_id) % nodes.size();
-      continue;
-    }
-
-    if (status.error_code() != grpc::StatusCode::PERMISSION_DENIED) {
-      LOG(INFO) << "[Client]: Error from KVS server: " << status.error_code();
-      *return_code = -1;
-      return response.value();
-    }
-
-    if (status.error_message().empty()) {
-      LOG(INFO) << "[Client]: Error from KVS server***";
-      *return_code = -1;
-      return response.value();
-    }
-
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
-
-    ClientContext ctx;
-    status = st->Get(&ctx, request, &response);
-    if (status.ok()) {
-      *return_code = 0;
-      return response.value();
-    } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      absl::SleepFor(absl::Seconds(2));
-    } else {
-      LOG(WARNING) << "[Client]: Error from KVS server leader node: "
-                   << status.error_code();
-      *return_code = 0;
-      return response.value();
-    }
-  }
-  *return_code = -1;
-  return "";
-}
-
-static int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
-                        const std::string& key) {
-  uint8_t node_id = 0;
-
-  DeleteRequest request;
-  request.set_key(key);
-
-  DeleteResponse response;
-  Status status;
-
-  while (true) {
-    auto channel = grpc::CreateChannel(nodes[node_id]->GetAddressPortStr(),
-                                       grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> stub = Kvs::NewStub(channel);
-
-    ClientContext context;
-    status = stub->Delete(&context, request, &response);
-    if (status.ok()) {
-      LOG(INFO) << response.status();
-      return 0;
-    }
-    if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      node_id = (++node_id) % nodes.size();
-      continue;
-    }
-
-    if (status.error_code() != grpc::StatusCode::PERMISSION_DENIED) {
-      LOG(INFO) << "[Client]: Error from KVS server: " << status.error_code();
-      return -1;
-    }
-
-    if (status.error_message().empty()) {
-      LOG(INFO) << "[Client]: Error from KVS server***";
-      return -1;
-    }
-
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
-
-    std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
-
-    ClientContext ctx;
-    status = st->Delete(&ctx, request, &response);
-    if (status.ok()) {
-      return 0;
-    } else if (status.error_code() == grpc::StatusCode::UNAVAILABLE) {
-      absl::SleepFor(absl::Seconds(1));
-    } else {
-      LOG(WARNING) << "[Client]: Error from KVS server leader node: "
-                   << status.error_code();
-      return -1;
-    }
-  }
-
-  return -1;
-}
-
-int NonInteractiveClientTest(void) {
-  const std::vector<std::unique_ptr<Node>> nodes =
-      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
-
+int NonInteractiveClientTest(const std::vector<std::unique_ptr<Node>>& nodes) {
   std::map<std::string, std::string> kv;
 
   std::random_device rd;
@@ -346,14 +90,7 @@ int NonInteractiveClientTest(void) {
   return 0;
 }
 
-int main(int argc, char** argv) {
-  absl::ParseCommandLine(argc, argv);
-  // absl::InitializeLog();
-
-  if (!absl::GetFlag(FLAGS_interactive)) {
-    return NonInteractiveClientTest();
-  }
-
+int InteractiveTest(const std::vector<std::unique_ptr<Node>>& nodes) {
   if (absl::GetFlag(FLAGS_server_address).empty()) {
     LOG(ERROR) << "[Client]: Usage: --server_address is required.";
     return 1;
@@ -377,9 +114,6 @@ int main(int argc, char** argv) {
   }
 
   std::string op = absl::GetFlag(FLAGS_op);
-
-  std::vector<std::unique_ptr<Node>> nodes =
-      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
 
   std::transform(op.begin(), op.end(), op.begin(),
                  [](unsigned char c) { return std::tolower(c); });
@@ -407,4 +141,59 @@ int main(int argc, char** argv) {
   }
 
   return 0;
+}
+
+int LinearizabilityTest(const std::vector<std::unique_ptr<Node>>& nodes) {
+  CHECK_EQ(LinearizabilityCheckerInitHelper(nodes), 0);
+
+  const size_t num_entries = 100;
+  for (size_t i = 0; i < num_entries; i++) {
+    CHECK_EQ(PutHelper(nodes, std::to_string(i), "0"), 0);
+  }
+
+  int magic = 100;
+  std::thread thread1([num_entries, magic, &nodes]() {
+    for (size_t i = 0; i < num_entries; i++) {
+      CHECK_EQ(PutHelper(nodes, std::to_string(i), std::to_string(magic + 1)),
+               0);
+      int ret;
+      std::string value = GetHelper(nodes, std::to_string(i), &ret);
+      CHECK_EQ(ret, 0);
+    }
+  });
+
+  magic = 200;
+  std::thread thread2([num_entries, magic, &nodes]() {
+    for (size_t i = 0; i < num_entries; i++) {
+      CHECK_EQ(PutHelper(nodes, std::to_string(i), std::to_string(magic + 2)),
+               0);
+      int ret;
+      std::string value = GetHelper(nodes, std::to_string(i), &ret);
+      CHECK_EQ(ret, 0);
+    }
+  });
+
+  // Wait for both threads to finish
+  thread1.join();
+  thread2.join();
+
+  CHECK_EQ(LinearizabilityCheckerDeinitHelper(nodes), 0);
+  return 0;
+}
+
+int main(int argc, char** argv) {
+  absl::ParseCommandLine(argc, argv);
+  // absl::InitializeLog();
+
+  const std::vector<std::unique_ptr<Node>> nodes =
+      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+
+  if (absl::GetFlag(FLAGS_interactive)) {
+    return InteractiveTest(nodes);
+  } else if (absl::GetFlag(FLAGS_linearizability)) {
+    return LinearizabilityTest(nodes);
+  } else {
+    return NonInteractiveClientTest(nodes);
+  }
+  // return 0;
 }

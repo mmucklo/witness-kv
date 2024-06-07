@@ -1,11 +1,15 @@
 syntax = "proto3";
 
+import "google/protobuf/empty.proto";
+
 package KeyValueStore;
 
 service Kvs {
   rpc Get(GetRequest)       returns (GetResponse);
   rpc Put(PutRequest)       returns (PutResponse);
-  rpc Delete(DeleteRequest) returns (DeleteResponse); 
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  rpc LinearizabilityCheckerInit(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc LinearizabilityCheckerDeinit(google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 message GetRequest {

@@ -1,41 +1,5 @@
-#include <google/protobuf/message.h>
-#include <grpcpp/grpcpp.h>
-#include <rocksdb/status.h>
 
-#include <csignal>
-#include <iostream>
-#include <map>
-#include <memory>
-#include <nlohmann/json.hpp>
-#include <string>
-#include <vector>
-
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/log/check.h"
-#include "absl/log/initialize.h"
-#include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/strings/str_format.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "kvs.grpc.pb.h"
-#include "paxos/paxos.hh"
-#include "paxos/utils.hh"
-#include "rocksdb/db.h"
-
-using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::Status;
-
-using KeyValueStore::DeleteRequest;
-using KeyValueStore::DeleteResponse;
-using KeyValueStore::GetRequest;
-using KeyValueStore::GetResponse;
-using KeyValueStore::Kvs;
-using KeyValueStore::PutRequest;
-using KeyValueStore::PutResponse;
+#include "kvs_server.hh"
 
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
@@ -44,79 +8,11 @@ ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
 ABSL_FLAG(std::string, kvs_db_path, "/tmp/kvs_rocksdb", "kvs_db_path");
 
 ABSL_FLAG(bool, kvs_enable_linearizability_checks, false, "");
-
-using json = nlohmann::json;
-
-struct JSONLogEntry {
-  std::string type;  // "invoke" or "ok"
-  std::vector<std::string> value;
-  long long time;
-
-  // Convert to JSON
-  json to_json() const {
-    return json{{"type", type}, {"value", value}, {"time", time}};
-  }
-};
-
-class KvsServiceImpl final : public Kvs::Service {
- public:
-  KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes);
-  ~KvsServiceImpl();
-
-  void InitPaxos(void);
-  void InitRocksDb(const std::string& db_path);
-
-  // GRPC routines mapping directly to rocksdb operations.
-  Status Get(ServerContext* context, const GetRequest* request,
-             GetResponse* response) override;
-  Status Put(ServerContext* context, const PutRequest* request,
-             PutResponse* response) override;
-  Status Delete(ServerContext* context, const DeleteRequest* request,
-                DeleteResponse* response) override;
-
- private:
-  rocksdb::DB* db_;
-  std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
-
-  std::vector<std::unique_ptr<Node>> nodes_;
-
-  std::vector<JSONLogEntry> json_log_;
-  std::string json_log_file_;
-
-  json j_;
-
-  void LogToJSONFile(const std::string& type,
-                     const std::vector<std::string>& value, long long time) {
-    std::ofstream file;  //(json_log_file_);
-    file.open(json_log_file_, std::ios_base::app);
-    if (file.is_open()) {
-      j_.push_back(JSONLogEntry{type, value, time}.to_json());
-
-      j_ = j_.dump(4);
-      file << j_;
-      file.close();
-    }
-  }
-
-  void log(const std::string& type, const std::vector<std::string>& value,
-           long long time) {
-    // json_log_.push_back(JSONLogEntry{type, value, time});
-    LogToJSONFile(type, value, time);
-  }
-
-  long long current_time_millis() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
-        .count();
-  }
-
-  Status PaxosProposeWrapper(const std::string& value, bool is_read);
-
-  void KvsPaxosCommitCallback(std::string value);
-};
+ABSL_FLAG(std::string, kvs_linearizability_json_file, "history.json",
+          "kvs_linearizability_json_file");
 
 KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
-    : nodes_{std::move(nodes)}, json_log_file_{"history.json"} {}
+    : nodes_{std::move(nodes)} {}
 
 void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
   CHECK(this->paxos_ != nullptr)
@@ -224,8 +120,11 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
 Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                            PutResponse* response) {
-  long long startTime = current_time_millis();
-  log("invoke", {"PUT", request->key(), request->value()}, startTime);
+  // LinearizabilityLog("invoke", {"PUT", request->key(), request->value()});
+
+  absl::MutexLock l(&dblock_);  // HACK
+  auto entry =
+      LinearizabilityLogBegin({"PUT", request->key(), request->value()});
 
   KeyValueStore::OperationType op;
   op.set_type(KeyValueStore::OperationType_Type_PUT);
@@ -246,16 +145,17 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
     response->set_status("[KVS]: Put operation Successful");
   }
 
-  long long endTime = current_time_millis();
-  log("ok", {"PUT", request->key(), request->value()}, endTime);
+  // LinearizabilityLog("ok", {"PUT", request->key(), request->value()});
+  LinearizabilityLogEnd(entry, {"PUT", request->key(), request->value()});
 
   return status;
 }
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
-  long long startTime = current_time_millis();
-  log("invoke", {"GET", request->key()}, startTime);
+  // LinearizabilityLog("invoke", {"GET", request->key()});
+  absl::MutexLock l(&dblock_);  // HACK
+  auto entry = LinearizabilityLogBegin({"GET", request->key()});
 
   Status statusGrpc = PaxosProposeWrapper("", true);
   if (!statusGrpc.ok()) {
@@ -273,8 +173,8 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
 
   response->set_value(value);
 
-  long long endTime = current_time_millis();
-  log("ok", {"GET", request->key(), value}, endTime);
+  // LinearizabilityLog("ok", {"GET", request->key(), value});
+  LinearizabilityLogEnd(entry, {"GET", request->key(), value});
 
   return Status::OK;
 }
@@ -302,14 +202,70 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
-/*
-void signal_handler(int signal) {
-  LOG(INFO) << "[KVS]: Triggered signal handler...";
-  if (server) {
-    server->Shutdown();
+LinearizabilityChecker::JSONLogEntry LinearizabilityChecker::LogBegin(
+    const std::vector<std::string>& value) {
+  // json_log_.push_back(JSONLogEntry{type, value, current_time_millis()});
+  LinearizabilityChecker::JSONLogEntry entry = {value, current_time_millis()};
+  return entry;
+}
+
+void LinearizabilityChecker::LogEnd(JSONLogEntry entry,
+                                    const std::vector<std::string>& value) {
+  entry.value = value;
+  entry.end = current_time_millis();
+  json_log_.push_back(entry);
+}
+
+LinearizabilityChecker::~LinearizabilityChecker() {
+  std::ofstream file(absl::GetFlag(FLAGS_kvs_linearizability_json_file));
+  CHECK(file.is_open())
+      << "[KVS]: Failed to open file to logging checker information";
+
+  LOG(INFO) << "~LinearizabilityChecker(): json_log_.size() "
+            << json_log_.size();
+
+  json json_vector;
+  /*for (const auto& entry : json_log_) {
+    json_vector += nlohmann::json({
+        {"type", entry.type},
+        {"value", entry.value},
+        {"time", entry.time},
+    });
+  }*/
+
+  for (const auto& entry : json_log_) {
+    json_vector += nlohmann::json({
+        {"value", entry.value},
+        {"start", entry.start},
+        {"end", entry.end},
+    });
   }
-  exit(signal);
-}*/
+
+  file << json_vector.dump(4) << std::endl;
+  file.close();
+}
+
+Status KvsServiceImpl::LinearizabilityCheckerInit(
+    ServerContext* context, const google::protobuf::Empty* request,
+    google::protobuf::Empty* response) {
+  if (absl::GetFlag(FLAGS_kvs_enable_linearizability_checks)) {
+    LOG(INFO) << "[KVS]: Initialized Linearizability checker.";
+    absl::MutexLock l(&lock_);
+    checker_ = std::make_unique<LinearizabilityChecker>();
+  }
+  return Status::OK;
+}
+
+Status KvsServiceImpl::LinearizabilityCheckerDeinit(
+    ServerContext* context, const google::protobuf::Empty* request,
+    google::protobuf::Empty* response) {
+  absl::MutexLock l(&lock_);
+  if (checker_) {
+    LOG(INFO) << "[KVS]: Deinitialized Linearizability checker.";
+    checker_.reset();
+  }
+  return Status::OK;
+}
 
 void RunKvsServer(const std::string& db_path,
                   std::vector<std::unique_ptr<Node>> nodes, uint8_t node_id) {
@@ -322,9 +278,6 @@ void RunKvsServer(const std::string& db_path,
   builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
   std::unique_ptr<Server> server = builder.BuildAndStart();
-
-  // std::signal(SIGINT, signal_handler);
-  // std::signal(SIGTERM, signal_handler);
 
   server->Wait();
 }
