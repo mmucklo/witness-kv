@@ -1,12 +1,14 @@
 #include <google/protobuf/message.h>
+#include <grpcpp/ext/channelz_service_plugin.h>
+#include <grpcpp/ext/proto_server_reflection_plugin.h>
 #include <grpcpp/grpcpp.h>
 #include <rocksdb/status.h>
 
-#include <csignal>
 #include <iostream>
 #include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -20,9 +22,9 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "kvs.grpc.pb.h"
-#include "paxos/paxos.hh"
-#include "paxos/utils.hh"
+#include "paxos/paxos.h"
 #include "rocksdb/db.h"
+#include "util/node.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;

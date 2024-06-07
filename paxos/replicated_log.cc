@@ -11,21 +11,22 @@ ABSL_FLAG(std::string, paxos_log_file_prefix, "replicated_log",
 
 namespace witnesskvs::paxos {
 
-std::function<bool(const Log::Message& a, const Log::Message& b)> GetLogSortFn() {
-  static auto fn =  [](const Log::Message &a, const Log::Message &b) {
-        if (a.paxos().idx() < b.paxos().idx()) {
-          return true;
-        } else if (a.paxos().idx() == b.paxos().idx()) {
-          if (a.paxos().is_chosen() == b.paxos().is_chosen()) {
-            return false;  // for strict weak ordering criteria.
-          }
-          if (!a.paxos().is_chosen()) {
-            return true;
-          }
-          return false;
-        }
-        return false;
-      };
+std::function<bool(const Log::Message &a, const Log::Message &b)>
+GetLogSortFn() {
+  static auto fn = [](const Log::Message &a, const Log::Message &b) {
+    if (a.paxos().idx() < b.paxos().idx()) {
+      return true;
+    } else if (a.paxos().idx() == b.paxos().idx()) {
+      if (a.paxos().is_chosen() == b.paxos().is_chosen()) {
+        return false;  // for strict weak ordering criteria.
+      }
+      if (!a.paxos().is_chosen()) {
+        return true;
+      }
+      return false;
+    }
+    return false;
+  };
   return fn;
 }
 
@@ -200,7 +201,6 @@ void ReplicatedLog::UpdateMinProposalForIdx(uint64_t idx,
 ReplicatedLogEntry ReplicatedLog::GetLogEntryAtIdx(uint64_t idx) {
   absl::MutexLock l(&lock_);
   auto it = log_entries_.find(idx);
-  CHECK(it != log_entries_.end());
   it->second.idx_ = idx;
   return it->second;
 }
@@ -231,7 +231,7 @@ void ReplicatedLog::Truncate(uint64_t index) {
   absl::MutexLock l(&lock_);
   // TODO: truncate in-memory log.
   std::vector<Index> erase;
-  for (const auto& [cur_index,  _] : log_entries_) {
+  for (const auto &[cur_index, _] : log_entries_) {
     if (cur_index < index) {
       erase.push_back(cur_index);
     }
