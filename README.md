@@ -44,6 +44,7 @@ sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-
     * `server/` (KVS server implementation that exposes GET, PUT, DELETE functionality and integrates with paxos logic and RocksDB)
     * `client/` (Contains the client code that calls the KVS server for database opeations)
     * `proto/` (Protocol buffer files used by logging library and clients and KVS server)
+    * `third_party` (Third party libraries that we used off the shelf)
     * `tests/` (Unit tests for validating core paxos logic and DB operations)
 
 ## Unit tests
@@ -97,3 +98,6 @@ To run porcupine checker against this:
      year = {2017},
      howpublished = {\url{https://github.com/anishathalye/porcupine}}
    }
+
+# Documentation
+TODO: Add location of paper here.
