@@ -3,6 +3,7 @@
 /.vscode
 *.swp
 /.cache
+*.json
 /client/target
 /client/dependency-reduced-pom.xml
 /dependency-reduced-pom.xml

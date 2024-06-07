@@ -5,6 +5,7 @@ include_directories(${PROJECT_SOURCE_DIR})
 
 set(SOURCES
     client.cc
+    client_util.cc
 )
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})

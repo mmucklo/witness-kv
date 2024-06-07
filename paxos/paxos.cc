@@ -52,6 +52,7 @@ PaxosResult Paxos::Propose(const std::string& value, uint8_t* leader_node_id,
 
   // If the new leader is in the process of catching up, do not service
   // reads/writes.
+  CHECK(IsLeader());
   while (!this->paxos_node_->IsLeaderCaughtUp()) {
     absl::SleepFor(absl::Milliseconds(900));
   }

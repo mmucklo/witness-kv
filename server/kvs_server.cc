@@ -1,42 +1,5 @@
-#include <google/protobuf/message.h>
-#include <grpcpp/ext/channelz_service_plugin.h>
-#include <grpcpp/ext/proto_server_reflection_plugin.h>
-#include <grpcpp/grpcpp.h>
-#include <rocksdb/status.h>
 
-#include <iostream>
-#include <map>
-#include <memory>
-#include <optional>
-#include <string>
-#include <vector>
-
-#include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/log/check.h"
-#include "absl/log/initialize.h"
-#include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/strings/str_format.h"
-#include "absl/time/clock.h"
-#include "absl/time/time.h"
-#include "kvs.grpc.pb.h"
-#include "paxos/paxos.h"
-#include "rocksdb/db.h"
-#include "util/node.h"
-
-using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::Status;
-
-using KeyValueStore::DeleteRequest;
-using KeyValueStore::DeleteResponse;
-using KeyValueStore::GetRequest;
-using KeyValueStore::GetResponse;
-using KeyValueStore::Kvs;
-using KeyValueStore::PutRequest;
-using KeyValueStore::PutResponse;
+#include "kvs_server.hh"
 
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
@@ -46,32 +9,9 @@ ABSL_FLAG(std::string, kvs_node_config_file, "server/kvs_nodes_cfg.txt",
 ABSL_FLAG(uint64_t, kvs_node_id, 0, "kvs_node_id");
 ABSL_FLAG(std::string, kvs_db_path, "/var/tmp/kvs_rocksdb", "kvs_db_path");
 
-class KvsServiceImpl final : public Kvs::Service {
- public:
-  KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes);
-  ~KvsServiceImpl() { delete db_; }
-
-  void InitPaxos(void);
-  void InitRocksDb(const std::string& db_path);
-
-  // GRPC routines mapping directly to rocksdb operations.
-  Status Get(ServerContext* context, const GetRequest* request,
-             GetResponse* response) override;
-  Status Put(ServerContext* context, const PutRequest* request,
-             PutResponse* response) override;
-  Status Delete(ServerContext* context, const DeleteRequest* request,
-                DeleteResponse* response) override;
-
- private:
-  rocksdb::DB* db_;
-  std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
-
-  std::vector<std::unique_ptr<Node>> nodes_;
-
-  Status PaxosProposeWrapper(const std::string& value, bool is_read);
-
-  void KvsPaxosCommitCallback(std::string value);
-};
+ABSL_FLAG(bool, kvs_enable_linearizability_checks, false, "");
+ABSL_FLAG(std::string, kvs_linearizability_json_file, "history.json",
+          "kvs_linearizability_json_file");
 
 KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
     : nodes_{std::move(nodes)} {}
@@ -97,6 +37,8 @@ void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
     LOG(INFO) << "[KVS]: Registered Database callback.";
   }
 }
+
+KvsServiceImpl::~KvsServiceImpl() { delete db_; }
 
 void KvsServiceImpl::InitPaxos(void) {
   paxos_ = std::make_unique<witnesskvs::paxos::Paxos>(
@@ -188,6 +130,8 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
 Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                            PutResponse* response) {
+  auto entry = LinearizabilityLogBegin();
+
   KeyValueStore::OperationType op;
   op.set_type(KeyValueStore::OperationType_Type_PUT);
   KeyValueStore::PutRequest* kv_put = op.mutable_put_data();
@@ -206,11 +150,16 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
   if (status.ok()) {
     response->set_status("[KVS]: Put operation Successful");
   }
+
+  LinearizabilityLogEnd(entry, {"PUT", request->key(), request->value()});
+
   return status;
 }
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
+  auto entry = LinearizabilityLogBegin();
+
   Status statusGrpc = PaxosProposeWrapper("", true);
   if (!statusGrpc.ok()) {
     return statusGrpc;
@@ -226,6 +175,9 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
   }
 
   response->set_value(value);
+
+  LinearizabilityLogEnd(entry, {"GET", request->key(), value});
+
   return Status::OK;
 }
 
@@ -252,6 +204,46 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
+LinearizabilityChecker::~LinearizabilityChecker() {
+  std::ofstream file(absl::GetFlag(FLAGS_kvs_linearizability_json_file));
+  CHECK(file.is_open())
+      << "[KVS]: Failed to open file to logging checker information";
+
+  json json_vector;
+  for (const auto& entry : json_log_) {
+    json_vector += nlohmann::json({
+        {"value", entry.value},
+        {"start", entry.start},
+        {"end", entry.end},
+    });
+  }
+
+  file << json_vector.dump(4) << std::endl;
+  file.close();
+}
+
+Status KvsServiceImpl::LinearizabilityCheckerInit(
+    ServerContext* context, const google::protobuf::Empty* request,
+    google::protobuf::Empty* response) {
+  if (absl::GetFlag(FLAGS_kvs_enable_linearizability_checks)) {
+    LOG(INFO) << "[KVS]: Initialized Linearizability checker.";
+    absl::MutexLock l(&lock_);
+    checker_ = std::make_unique<LinearizabilityChecker>();
+  }
+  return Status::OK;
+}
+
+Status KvsServiceImpl::LinearizabilityCheckerDeinit(
+    ServerContext* context, const google::protobuf::Empty* request,
+    google::protobuf::Empty* response) {
+  absl::MutexLock l(&lock_);
+  if (checker_) {
+    LOG(INFO) << "[KVS]: Deinitialized Linearizability checker.";
+    checker_.reset();
+  }
+  return Status::OK;
+}
+
 void RunKvsServer(const std::string& db_path,
                   std::vector<std::unique_ptr<Node>> nodes, uint8_t node_id) {
   const std::string address_port_str = nodes[node_id]->GetAddressPortStr();
@@ -265,7 +257,7 @@ void RunKvsServer(const std::string& db_path,
   ServerBuilder builder;
   builder.AddListeningPort(address_port_str, grpc::InsecureServerCredentials());
   builder.RegisterService(&service);
-  std::unique_ptr<Server> server(builder.BuildAndStart());
+  std::unique_ptr<Server> server = builder.BuildAndStart();
 
   server->Wait();
 }
@@ -275,7 +267,7 @@ int main(int argc, char** argv) {
   std::vector<absl::UnrecognizedFlag> unrecognized_flags;
   absl::ParseAbseilFlagsOnly(argc, argv, positional_args, unrecognized_flags);
   if (positional_args.size() != 1) {
-    for (size_t i = 1; i < positional_args.size() ; i++) {
+    for (size_t i = 1; i < positional_args.size(); i++) {
       LOG(ERROR) << "Unknown arg " << positional_args[i];
     }
     return -1;
