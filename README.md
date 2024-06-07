@@ -7,43 +7,10 @@
 - Install grpc and protobuf: https://grpc.io/docs/languages/cpp/quickstart/
 - sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libbz2-dev
 
-## Build Instructions
-- In the top level directory (witness-kv):
-  - cmake -S . -B build
-  - cd build; make -j `nproc`
-- To format the code
-  - cmake --build build --target format
-
-# Src tree
-* **witness-kv/** (Top level directory)
-    * `paxos/` (Core paxos library implementation)
-    * `log/` (Logging library that abstracts log writer, loader and truncation used by paxos for its durable logging)
-    * `server/` (KVS server implementation that exposes GET, PUT, DELETE functionality and integrates with paxos logic and RocksDB)
-    * `client/` (Contains the client code that calls the KVS server for database opeations)
-    * `proto/` (Protocol buffer files used by logging library and clients and KVS server)
-    * `tests/` (Unit tests for validating core paxos logic and DB operations)
-
-# Unit tests
-
-## LOG(INFO):
-You may need to specify "-- --stderrthreshold=0" when running unit tests to get logging messages to show:
-  e.g.
-        ./log_writer_test -- --stderrthreshold=0
-
-"--" tells gtest that the rest of the arguments should get passed to the tests.
-
-To make VLOG show, add --v=2 (or =1 or whatever level you want to see).
-
-## NOTE: on log/ unit tests
-Unit tests for logging currently write to /tmp - however tmpfs typically ignores or doesn't pay attention to fsync.
-There is a possibility of some flakiness as a result.
-
-TODO(mmucklo): make test temp directory flag configurable.
-
-# For RocksDB, may need the following libs
+### For RocksDB, may need the following libs
 sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libbz2-dev
 
-# GRPC (one way to install it)
+### GRPC (one way to install it)
 1. git clone --recurse-submodules -b v1.64.0 --depth 1 --shallow-submodules https://github.com/grpc/grpc
 2. cd grpc
 3. mkdir -p cmake/build; pushd cmake/build
@@ -51,7 +18,7 @@ sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-
 5. cmake --build . -j `nproc`
 6. cmake --install .
 
-# Latest cmake build (one way to install it)
+### Latest cmake build (one way to install it)
 1. Download cmake-3.29.3.tar.gz from cmake.org
 2. tar xzf cmake-3.29.3.tar.gz
 3. mkdir $HOME/.local
@@ -63,7 +30,41 @@ sudo apt install -y libgflags-dev liburing-dev libzstd-dev libsnappy-dev zlib1g-
 9. cmake --build . -j `nproc`
 10. cmake --install .
 
-# YCSB
+## Build Instructions
+- In the top level directory (witness-kv):
+  - cmake -S . -B build
+  - cd build; make -j `nproc`
+- To format the code
+  - cmake --build build --target format
+
+# Source tree
+* **`witness-kv/`** (Top level directory)
+    * `paxos/` (Core paxos library implementation)
+    * `log/` (Logging library that abstracts log writer, loader and truncation used by paxos for its durable logging)
+    * `server/` (KVS server implementation that exposes GET, PUT, DELETE functionality and integrates with paxos logic and RocksDB)
+    * `client/` (Contains the client code that calls the KVS server for database opeations)
+    * `proto/` (Protocol buffer files used by logging library and clients and KVS server)
+    * `tests/` (Unit tests for validating core paxos logic and DB operations)
+
+## Unit tests
+
+### LOG(INFO):
+You may need to specify "-- --stderrthreshold=0" when running unit tests to get logging messages to show:
+  e.g.
+        ./log_writer_test -- --stderrthreshold=0
+
+"--" tells gtest that the rest of the arguments should get passed to the tests.
+
+To make VLOG show, add --v=2 (or =1 or whatever level you want to see).
+
+### NOTE: on log/ unit tests
+Unit tests for logging currently write to /tmp - however tmpfs typically ignores or doesn't pay attention to fsync.
+There is a possibility of some flakiness as a result.
+
+TODO(mmucklo): make test temp directory flag configurable.
+
+# Evaluation
+## YCSB
 To run YCSB against this:
 
 1. First BUILD this repo with mvn: cd /path/to/this/witness-kv; mvn clean package
@@ -77,7 +78,7 @@ To run YCSB against this:
 - OPTIONALLY see witnesskvs/README.md for more details
 - OPTIONALLY change node config in witnesskvs/conf/witnesskvs.properties
 
-# Porcupine
+## Porcupine
 We use porcupine linearizability (cited below) checker for the correctness of the witness-kv. 
 To run porcupine checker against this:
 
