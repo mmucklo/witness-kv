@@ -127,8 +127,14 @@ static int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
       return -1;
     }
 
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(kvs_status.redirect_details().ip_address_with_port(),
                                   grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
@@ -186,8 +192,14 @@ static std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
       return response.value();
     }
 
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(kvs_status.redirect_details().ip_address_with_port(),
                                   grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
@@ -248,7 +260,15 @@ static int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
     }
 
     // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
+
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(kvs_status.redirect_details().ip_address_with_port(),
                                   grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);

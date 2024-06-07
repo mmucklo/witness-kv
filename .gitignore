@@ -3,3 +3,5 @@
 /.vscode
 *.swp
 /.cache
+/client/target
+/client/dependency-reduced-pom.xml
