@@ -3,7 +3,7 @@
  
   <parent>
     <groupId>edu.stanford.witnesskvs</groupId>
-    <artifactId>witnesskvs</artifactId>
+    <artifactId>root</artifactId>
     <version>1</version>
   </parent>
 

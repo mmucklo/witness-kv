@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
  
   <groupId>edu.stanford.witnesskvs</groupId>
-  <artifactId>witnesskvs</artifactId>
+  <artifactId>root</artifactId>
   <packaging>pom</packaging>
   <version>1</version>
   <name>witnesskvs</name>
