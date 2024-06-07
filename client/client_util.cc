@@ -1,8 +1,7 @@
-#include "client_util.hh"
+#include "client_util.h"
 
 #include <grpcpp/grpcpp.h>
 
-#include "client_util_common.hh"
 #include "kvs.grpc.pb.h"
 
 using grpc::Channel;

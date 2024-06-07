@@ -199,9 +199,6 @@ LinearizabilityChecker::~LinearizabilityChecker() {
   CHECK(file.is_open())
       << "[KVS]: Failed to open file to logging checker information";
 
-  LOG(INFO) << "~LinearizabilityChecker(): json_log_.size() "
-            << json_log_.size();
-
   json json_vector;
   for (const auto& entry : json_log_) {
     json_vector += nlohmann::json({

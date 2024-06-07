@@ -1,4 +1,4 @@
-#include "client_util.hh"
+#include "client_util.h"
 
 ABSL_FLAG(bool, interactive, false, "Mode for running the client test");
 ABSL_FLAG(bool, linearizability, false,
