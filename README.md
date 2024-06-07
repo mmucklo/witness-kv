@@ -15,15 +15,13 @@
   - cmake --build build --target format
 
 # Src tree
-* **core/** (Contains essential project components)
-    * `paxos/` (Contains the core paxos library implementation)
-    * `log\` (Contains the logging ligrary used by paxos for its logging operation)
-    * `src/` (Holds the source code)
-        * `api/` (API-related code)
-        * `components/` (Reusable UI components)
-        * `utils/` (Utility functions)
-* **docs/` (Documentation files)
-* **tests/` (Unit tests)
+* **witness-kv/** (Top level directory)
+    * `paxos/` (Core paxos library implementation)
+    * `log/` (Logging library that abstracts log writer, loader and truncation used by paxos for its durable logging)
+    * `server/` (KVS server implementation that exposes GET, PUT, DELETE functionality and integrates with paxos logic and RocksDB)
+    * `client/` (Contains the client code that calls the KVS server for database opeations)
+    * `proto/` (Protocol buffer files used by logging library and clients and KVS server)
+    * `tests/` (Unit tests for validating core paxos logic and DB operations)
 
 # Unit tests
 
