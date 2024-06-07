@@ -1,7 +1,12 @@
 <project>
   <modelVersion>4.0.0</modelVersion>
  
-  <groupId>edu.stanford.witnesskvs</groupId>
+  <parent>
+    <groupId>edu.stanford.witnesskvs</groupId>
+    <artifactId>root</artifactId>
+    <version>1</version>
+  </parent>
+
   <artifactId>client</artifactId>
   <packaging>jar</packaging>
   <version>1</version>
@@ -146,6 +151,7 @@
           </execution>
         </executions>
       </plugin>
+  <!-- Below cobbled together from various stack overflow posts -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
