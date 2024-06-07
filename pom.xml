@@ -1,12 +1,7 @@
 <project>
   <modelVersion>4.0.0</modelVersion>
  
-  <parent>
-    <groupId>edu.stanford.witnesskvs</groupId>
-    <artifactId>witnesskvs</artifactId>
-    <version>1</version>
-  </parent>
-
+  <groupId>edu.stanford.witnesskvs</groupId>
   <artifactId>client</artifactId>
   <packaging>jar</packaging>
   <version>1</version>
