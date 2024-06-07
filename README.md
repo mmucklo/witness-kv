@@ -68,10 +68,21 @@ To run YCSB against this:
 - OPTIONALLY see witnesskvs/README.md for more details
 - OPTIONALLY change node config in witnesskvs/conf/witnesskvs.properties
 
-# External citations
-@misc{athalye2017porcupine,
-  author = {Anish Athalye},
-  title = {Porcupine: A fast linearizability checker in {Go}},
-  year = {2017},
-  howpublished = {\url{https://github.com/anishathalye/porcupine}}
-}
+# Porcupine
+We use porcupine linearizability (cited below) checker for the correctness of the witness-kv. 
+To run porcupine checker against this:
+
+1. Install `go` and make sure `go` is added to your PATH
+2. Run the witness-kv servers
+3. Run the client binary (build/client/client) with the `--linearizability=true` option. Which will enable and disable linearizability logging on the server.
+4. After the test completes, a new json file(default name = `history.json`) with the operation history will be stored in your current working drectory.
+5. Run the linearizability checker in `witness-kv/kv-linearizability-check` by running `go test`. An example output of a successful run is pasted below:
+   PASS
+   ok      github.com/vramesh7/kv-linearizability-check/kv-linearizability-check   0.010s
+6. External Citation:
+   @misc{athalye2017porcupine,
+     author = {Anish Athalye},
+     title = {Porcupine: A fast linearizability checker in {Go}},
+     year = {2017},
+     howpublished = {\url{https://github.com/anishathalye/porcupine}}
+   }
