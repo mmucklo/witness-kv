@@ -21,3 +21,5 @@ target_link_libraries(client
     absl::flags_parse
     absl::log
 )
+
+configure_file("Dockerfile" "Dockerfile" COPYONLY)

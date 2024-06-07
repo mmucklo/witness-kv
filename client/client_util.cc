@@ -15,11 +15,9 @@ using KeyValueStore::Kvs;
 using KeyValueStore::PutRequest;
 using KeyValueStore::PutResponse;
 
-// TODO [V]: Should these helper functions do these operations in a fixed retry
-// count loop ?
 int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
               const std::string& key, const std::string& value) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   PutRequest request;
   request.set_key(key);
@@ -55,9 +53,16 @@ int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
       return -1;
     }
 
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(
+        kvs_status.redirect_details().ip_address_with_port(),
+        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
 
@@ -79,7 +84,7 @@ int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                       const std::string& key, int* return_code) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   GetRequest request;
   request.set_key(key);
@@ -114,9 +119,16 @@ std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
       return response.value();
     }
 
-    // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(
+        kvs_status.redirect_details().ip_address_with_port(),
+        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
 
@@ -140,7 +152,7 @@ std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                  const std::string& key) {
-  uint8_t node_id = 1;
+  uint8_t node_id = 0;
 
   DeleteRequest request;
   request.set_key(key);
@@ -176,8 +188,17 @@ int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
     }
 
     // Retry this opeartion now with the leader address
-    auto ch = grpc::CreateChannel(status.error_message(),
-                                  grpc::InsecureChannelCredentials());
+
+    KeyValueStore::KvsStatus kvs_status;
+    if (!kvs_status.ParseFromString(status.error_details())) {
+      LOG(FATAL) << "Could not parse error details.";
+    }
+    LOG(INFO) << kvs_status.DebugString();
+    CHECK_EQ(kvs_status.type(), KeyValueStore::KvsStatus_Type_REDIRECT);
+
+    auto ch = grpc::CreateChannel(
+        kvs_status.redirect_details().ip_address_with_port(),
+        grpc::InsecureChannelCredentials());
 
     std::unique_ptr<Kvs::Stub> st = Kvs::NewStub(ch);
 

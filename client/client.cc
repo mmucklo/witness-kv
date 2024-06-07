@@ -188,7 +188,9 @@ int main(int argc, char** argv) {
   // absl::InitializeLog();
 
   const std::vector<std::unique_ptr<Node>> nodes =
-      ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file));
+      absl::GetFlag(FLAGS_kvs_node_list).empty()
+          ? ParseNodesConfig(absl::GetFlag(FLAGS_kvs_node_config_file))
+          : ParseNodesList(absl::GetFlag(FLAGS_kvs_node_list));
 
   if (absl::GetFlag(FLAGS_interactive)) {
     return InteractiveTest(nodes);

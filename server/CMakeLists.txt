@@ -24,3 +24,4 @@ target_link_libraries(kvs_server PRIVATE
     absl::flags
     absl::flags_parse
     absl::log)
+configure_file("Dockerfile" "Dockerfile" COPYONLY)

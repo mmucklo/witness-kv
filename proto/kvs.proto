@@ -2,6 +2,10 @@ syntax = "proto3";
 
 import "google/protobuf/empty.proto";
 
+option java_multiple_files = true;
+option java_package = "edu.stanford.witnesskvs";
+option java_outer_classname = "KvsProto";
+
 package KeyValueStore;
 
 service Kvs {
@@ -49,4 +53,21 @@ message OperationType {
     PutRequest put_data  = 2;    // Key-value pair for PUT operation
     DeleteRequest del_data = 3;  // Key for DELETE operation
   }
+}
+
+message KvsStatus {
+  enum Type {
+    UNKNOWN_TYPE = 0;
+    OK = 1;
+    REDIRECT = 2;
+    UNAVAILABLE = 3;
+    ERROR = 4;
+  }
+  message RedirectDetails {
+    string ip_address_with_port = 1;
+    int64 node_id = 2;
+  }
+
+  Type type = 1;
+  RedirectDetails redirect_details = 2;
 }
