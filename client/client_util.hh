@@ -1,32 +1,26 @@
-#include <grpcpp/grpcpp.h>
+#include <iostream>
+#include <memory>
+#include <random>
+#include <string>
 
-#include "kvs.grpc.pb.h"
+#include "absl/flags/flag.h"
+#include "absl/flags/parse.h"
+#include "absl/log/check.h"
+#include "absl/log/initialize.h"
+#include "absl/log/log.h"
+#include "paxos/utils.hh"
 
-using grpc::Channel;
-using grpc::ClientContext;
-using grpc::Status;
-using KeyValueStore::DeleteRequest;
-using KeyValueStore::DeleteResponse;
-using KeyValueStore::GetRequest;
-using KeyValueStore::GetResponse;
-using KeyValueStore::Kvs;
-using KeyValueStore::PutRequest;
-using KeyValueStore::PutResponse;
+int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
+              const std::string& key, const std::string& value);
 
-class KvsClient {
- private:
-  std::unique_ptr<Kvs::Stub> stub_;
+std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
+                      const std::string& key, int* return_code);
 
- public:
-  KvsClient(std::shared_ptr<Channel> channel);
-  ~KvsClient() = default;
+int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
+                 const std::string& key);
 
-  Status PutGrpc(const std::string& key, const std::string& value,
-                 PutResponse* response) const;
+int LinearizabilityCheckerInitHelper(
+    const std::vector<std::unique_ptr<Node>>& nodes);
 
-  Status GetGrpc(const std::string& key, GetResponse* response) const;
-
-  Status DeleteGrpc(const std::string& key, DeleteResponse* response) const;
-  Status LinearizabilityCheckerInitGrpc() const;
-  Status LinearizabilityCheckerDeInitGrpc() const;
-};
+int LinearizabilityCheckerDeinitHelper(
+    const std::vector<std::unique_ptr<Node>>& nodes);

@@ -55,3 +55,10 @@ cmake --install .
 10. cmake --install .
 
 
+# External citations
+@misc{athalye2017porcupine,
+  author = {Anish Athalye},
+  title = {Porcupine: A fast linearizability checker in {Go}},
+  year = {2017},
+  howpublished = {\url{https://github.com/anishathalye/porcupine}}
+}

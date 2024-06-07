@@ -120,11 +120,7 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
 
 Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
                            PutResponse* response) {
-  // LinearizabilityLog("invoke", {"PUT", request->key(), request->value()});
-
-  absl::MutexLock l(&dblock_);  // HACK
-  auto entry =
-      LinearizabilityLogBegin({"PUT", request->key(), request->value()});
+  auto entry = LinearizabilityLogBegin();
 
   KeyValueStore::OperationType op;
   op.set_type(KeyValueStore::OperationType_Type_PUT);
@@ -145,7 +141,6 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
     response->set_status("[KVS]: Put operation Successful");
   }
 
-  // LinearizabilityLog("ok", {"PUT", request->key(), request->value()});
   LinearizabilityLogEnd(entry, {"PUT", request->key(), request->value()});
 
   return status;
@@ -153,9 +148,7 @@ Status KvsServiceImpl::Put(ServerContext* context, const PutRequest* request,
 
 Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
                            GetResponse* response) {
-  // LinearizabilityLog("invoke", {"GET", request->key()});
-  absl::MutexLock l(&dblock_);  // HACK
-  auto entry = LinearizabilityLogBegin({"GET", request->key()});
+  auto entry = LinearizabilityLogBegin();
 
   Status statusGrpc = PaxosProposeWrapper("", true);
   if (!statusGrpc.ok()) {
@@ -173,7 +166,6 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
 
   response->set_value(value);
 
-  // LinearizabilityLog("ok", {"GET", request->key(), value});
   LinearizabilityLogEnd(entry, {"GET", request->key(), value});
 
   return Status::OK;
@@ -202,20 +194,6 @@ Status KvsServiceImpl::Delete(ServerContext* context,
   return status;
 }
 
-LinearizabilityChecker::JSONLogEntry LinearizabilityChecker::LogBegin(
-    const std::vector<std::string>& value) {
-  // json_log_.push_back(JSONLogEntry{type, value, current_time_millis()});
-  LinearizabilityChecker::JSONLogEntry entry = {value, current_time_millis()};
-  return entry;
-}
-
-void LinearizabilityChecker::LogEnd(JSONLogEntry entry,
-                                    const std::vector<std::string>& value) {
-  entry.value = value;
-  entry.end = current_time_millis();
-  json_log_.push_back(entry);
-}
-
 LinearizabilityChecker::~LinearizabilityChecker() {
   std::ofstream file(absl::GetFlag(FLAGS_kvs_linearizability_json_file));
   CHECK(file.is_open())
@@ -225,14 +203,6 @@ LinearizabilityChecker::~LinearizabilityChecker() {
             << json_log_.size();
 
   json json_vector;
-  /*for (const auto& entry : json_log_) {
-    json_vector += nlohmann::json({
-        {"type", entry.type},
-        {"value", entry.value},
-        {"time", entry.time},
-    });
-  }*/
-
   for (const auto& entry : json_log_) {
     json_vector += nlohmann::json({
         {"value", entry.value},

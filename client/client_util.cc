@@ -1,57 +1,26 @@
 #include "client_util.hh"
 
+#include <grpcpp/grpcpp.h>
+
 #include "client_util_common.hh"
+#include "kvs.grpc.pb.h"
 
-KvsClient::KvsClient(std::shared_ptr<Channel> channel)
-    : stub_{Kvs::NewStub(channel)} {}
-
-Status KvsClient::PutGrpc(const std::string& key, const std::string& value,
-                          PutResponse* response) const {
-  ClientContext context;
-
-  PutRequest request;
-  request.set_key(key);
-  request.set_value(value);
-
-  return stub_->Put(&context, request, response);
-}
-
-Status KvsClient::GetGrpc(const std::string& key, GetResponse* response) const {
-  ClientContext context;
-
-  GetRequest request;
-  request.set_key(key);
-
-  return stub_->Get(&context, request, response);
-}
-
-Status KvsClient::DeleteGrpc(const std::string& key,
-                             DeleteResponse* response) const {
-  ClientContext context;
-
-  DeleteRequest request;
-  request.set_key(key);
-
-  return stub_->Delete(&context, request, response);
-}
-
-Status KvsClient::LinearizabilityCheckerInitGrpc() const {
-  ClientContext context;
-  google::protobuf::Empty empty;
-  return stub_->LinearizabilityCheckerInit(&context, empty, nullptr);
-}
-
-Status KvsClient::LinearizabilityCheckerDeInitGrpc() const {
-  ClientContext context;
-  google::protobuf::Empty empty;
-  return stub_->LinearizabilityCheckerDeinit(&context, empty, nullptr);
-}
+using grpc::Channel;
+using grpc::ClientContext;
+using grpc::Status;
+using KeyValueStore::DeleteRequest;
+using KeyValueStore::DeleteResponse;
+using KeyValueStore::GetRequest;
+using KeyValueStore::GetResponse;
+using KeyValueStore::Kvs;
+using KeyValueStore::PutRequest;
+using KeyValueStore::PutResponse;
 
 // TODO [V]: Should these helper functions do these operations in a fixed retry
 // count loop ?
 int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
               const std::string& key, const std::string& value) {
-  uint8_t node_id = 0;
+  uint8_t node_id = 1;
 
   PutRequest request;
   request.set_key(key);
@@ -111,7 +80,7 @@ int PutHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                       const std::string& key, int* return_code) {
-  uint8_t node_id = 0;
+  uint8_t node_id = 1;
 
   GetRequest request;
   request.set_key(key);
@@ -172,7 +141,7 @@ std::string GetHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
                  const std::string& key) {
-  uint8_t node_id = 0;
+  uint8_t node_id = 1;
 
   DeleteRequest request;
   request.set_key(key);
@@ -231,7 +200,6 @@ int DeleteHelper(const std::vector<std::unique_ptr<Node>>& nodes,
 
 int LinearizabilityCheckerInitHelper(
     const std::vector<std::unique_ptr<Node>>& nodes) {
-  // for (size_t i = 0; i < nodes.size(); i++) {
   auto channel = grpc::CreateChannel(nodes[1]->GetAddressPortStr(),
                                      grpc::InsecureChannelCredentials());
 
@@ -241,20 +209,16 @@ int LinearizabilityCheckerInitHelper(
   google::protobuf::Empty empty;
   google::protobuf::Empty empty_response;
 
-  // LOG(INFO) << "[Client]: Enabling Linearizability checker for node: " << i;
   Status status =
       stub->LinearizabilityCheckerInit(&context, empty, &empty_response);
   if (!status.ok()) {
     return -1;
   }
-  // LOG(INFO) << "[Client]: Enabled Linearizability checker for node: " << i;
-  //}
   return 0;
 }
 
 int LinearizabilityCheckerDeinitHelper(
     const std::vector<std::unique_ptr<Node>>& nodes) {
-  // for (size_t i = 0; i < nodes.size(); i++) {
   auto channel = grpc::CreateChannel(nodes[1]->GetAddressPortStr(),
                                      grpc::InsecureChannelCredentials());
 
@@ -269,6 +233,5 @@ int LinearizabilityCheckerDeinitHelper(
   if (!status.ok()) {
     return -1;
   }
-  //}
   return 0;
 }

@@ -17,7 +17,7 @@ type JSONLogEntry struct {
 }
 
 type kvInput struct {
-	op    uint8 // 0 => get, 1 => put
+	op    string
 	key   string
 	value string
 }
@@ -42,11 +42,9 @@ var kvNoPartitionModel = porcupine.Model{
 		inp := input.(kvInput)
 		out := output.(kvOutput)
 		st := state.(map[string]string)
-		if inp.op == 0 {
-			// get
+		if inp.op == "GET" {
 			return out.value == st[inp.key], state
-		} else if inp.op == 1 {
-			// put
+		} else if inp.op == "PUT" {
 			st2 := cloneMap(st)
 			st2[inp.key] = inp.value
 			return true, st2
@@ -86,11 +84,11 @@ func TestRegisterModel(t *testing.T) {
 
 			switch op {
 			case "GET":
-				input.op = 0
+				input.op = entry.Value[0].(string)
 				input.key, _ = entry.Value[1].(string)
 				output.value, _ = entry.Value[2].(string)
 			case "PUT":
-				input.op = 1
+				input.op = entry.Value[0].(string)
 				input.key, _ = entry.Value[1].(string)
 				input.value, _ = entry.Value[2].(string)
 			default:
@@ -110,13 +108,16 @@ func TestRegisterModel(t *testing.T) {
 	}
 
 	res := porcupine.CheckOperations(kvNoPartitionModel, ops)
-	//res, info := porcupine.CheckOperationsVerbose(kvNoPartitionModel, ops, 0)
 	if res != true {
-	//if res != "ok" {
 		t.Fatal("expected operations to be linearizable")
 	}
 
-	/*res1 := porcupine.Visualize(kvNoPartitionModel, info, os.Stdout)
+	/*res, info := porcupine.CheckOperationsVerbose(kvNoPartitionModel, ops, 0)
+	if res != "ok" {
+		t.Fatal("expected operations to be linearizable")
+	}
+
+	res1 := porcupine.Visualize(kvNoPartitionModel, info, os.Stdout)
 	if res1 != nil {
 		t.Fatal("expected operations to be linearizable")
 	}*/

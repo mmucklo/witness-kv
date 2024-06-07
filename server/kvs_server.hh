@@ -50,16 +50,19 @@ class LinearizabilityChecker {
     long long end;
   };
 
-  JSONLogEntry LogBegin(const std::vector<std::string>& value);
-  void LogEnd(JSONLogEntry entry, const std::vector<std::string>& value);
+  JSONLogEntry LogBegin() {
+    LinearizabilityChecker::JSONLogEntry entry;
+    entry.start = current_time_millis();
+    return entry;
+  }
+
+  void LogEnd(JSONLogEntry entry, const std::vector<std::string>& value) {
+    entry.value = value;
+    entry.end = current_time_millis();
+    json_log_.push_back(entry);
+  }
 
  private:
-  /*struct JSONLogEntry {
-    std::string type;  // "invoke" or "ok"
-    std::vector<std::string> value;
-    long long time;
-  };*/
-
   long long current_time_millis() const {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch())
@@ -95,8 +98,6 @@ class KvsServiceImpl final : public Kvs::Service {
   rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
 
-  absl::Mutex dblock_;
-
   std::vector<std::unique_ptr<Node>> nodes_;
 
   absl::Mutex lock_;
@@ -105,19 +106,10 @@ class KvsServiceImpl final : public Kvs::Service {
   Status PaxosProposeWrapper(const std::string& value, bool is_read);
   void KvsPaxosCommitCallback(std::string value);
 
-  /*void LinearizabilityLog(const std::string& type,
-                          const std::vector<std::string>& value) {
+  LinearizabilityChecker::JSONLogEntry LinearizabilityLogBegin() {
     absl::MutexLock l(&lock_);
     if (checker_) {
-      checker_->Log(type, value);
-    }
-  }*/
-
-  LinearizabilityChecker::JSONLogEntry LinearizabilityLogBegin(
-      const std::vector<std::string>& value) {
-    absl::MutexLock l(&lock_);
-    if (checker_) {
-      return checker_->LogBegin(value);
+      return checker_->LogBegin();
     }
 
     return {};

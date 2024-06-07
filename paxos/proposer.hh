@@ -19,6 +19,8 @@ class Proposer {
   uint8_t node_id_;
   int majority_threshold_;
 
+  absl::Mutex lock_;
+
   std::shared_ptr<ReplicatedLog> replicated_log_;
   std::shared_ptr<PaxosNode> paxos_node_;
   std::vector<bool> is_prepare_needed_;
@@ -39,10 +41,12 @@ class Proposer {
   void PreparePhase(paxos_rpc::PrepareRequest& request,
                     std::string& value_for_accept_phase);
   bool AcceptPhase(paxos_rpc::PrepareRequest& request,
-                   std::string& value_for_accept_phase,
-                   bool is_nop_paxos_round,
+                   std::string& value_for_accept_phase, bool is_nop_paxos_round,
                    const std::string& value);
-  bool DoPreparePhase() {return std::any_of(is_prepare_needed_.begin(), is_prepare_needed_.end(), [](bool v) { return v; });};
+  bool DoPreparePhase() {
+    return std::any_of(is_prepare_needed_.begin(), is_prepare_needed_.end(),
+                       [](bool v) { return v; });
+  };
 };
 
 }  // namespace witnesskvs::paxos

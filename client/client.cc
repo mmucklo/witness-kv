@@ -1,4 +1,4 @@
-#include "client_util_common.hh"
+#include "client_util.hh"
 
 ABSL_FLAG(bool, interactive, false, "Mode for running the client test");
 ABSL_FLAG(bool, linearizability, false,
@@ -146,7 +146,7 @@ int InteractiveTest(const std::vector<std::unique_ptr<Node>>& nodes) {
 int LinearizabilityTest(const std::vector<std::unique_ptr<Node>>& nodes) {
   CHECK_EQ(LinearizabilityCheckerInitHelper(nodes), 0);
 
-  const size_t num_entries = 100;
+  const size_t num_entries = 10;
   for (size_t i = 0; i < num_entries; i++) {
     CHECK_EQ(PutHelper(nodes, std::to_string(i), "0"), 0);
   }

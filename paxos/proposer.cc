@@ -8,24 +8,26 @@ ABSL_FLAG(bool, disable_multi_paxos, false, "Disable multi-paxos optimization");
 namespace witnesskvs::paxos {
 
 void Proposer::Propose(const std::string& value) {
+  absl::MutexLock l(&lock_);
+
   bool is_nop = value.empty();
   bool done = false;
   while (!done) {
     std::string value_for_accept_phase = value;
     paxos_rpc::PrepareRequest request;
     request.set_index(this->replicated_log_->GetFirstUnchosenIdx());
-    request.set_proposal_number( proposal_number_ );
+    request.set_proposal_number(proposal_number_);
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
               << "] Attempting replication at index " << request.index()
               << " with proposal number: " << proposal_number_;
-    if (proposal_number_ == 0 || DoPreparePhase() || absl::GetFlag(FLAGS_disable_multi_paxos)) {
+    if (proposal_number_ == 0 || DoPreparePhase() ||
+        absl::GetFlag(FLAGS_disable_multi_paxos)) {
       PreparePhase(request, value_for_accept_phase);
     }
 
     const bool nop_paxos_round = (is_nop and (value == value_for_accept_phase));
     done = AcceptPhase(request, value_for_accept_phase, nop_paxos_round, value);
   }
-
 }
 
 void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
@@ -40,7 +42,7 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
     for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
       paxos_rpc::PrepareResponse response;
       grpc::Status status = this->paxos_node_->PrepareGrpc(
-          static_cast<uint8_t>( i ), request, &response);
+          static_cast<uint8_t>(i), request, &response);
       if (!status.ok()) {
         LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
                      << "] Prepare grpc failed for node: " << i
@@ -50,11 +52,11 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
       }
       if (response.max_idx_in_log() > request.index()) {
         LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-                  << "] Received max chosen index: " << response.max_idx_in_log()
+                  << "] Received max chosen index: "
+                  << response.max_idx_in_log()
                   << " for index: " << request.index();
         is_prepare_needed_[i] = true;
-      }
-      else {
+      } else {
         is_prepare_needed_[i] = false;
       }
 
@@ -78,7 +80,6 @@ void Proposer::PreparePhase(paxos_rpc::PrepareRequest& request,
       ++num_promises;
     }
   } while (num_promises < majority_threshold_);
-
 }
 
 bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
@@ -93,11 +94,11 @@ bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
   accept_request.set_value(value_for_accept_phase);
   paxos_rpc::AcceptResponse accept_response;
   uint32_t accept_majority_count = 0;
-  std::vector<uint64_t> peer_unchosen_idx( this->paxos_node_->GetNumNodes() );
+  std::vector<uint64_t> peer_unchosen_idx(this->paxos_node_->GetNumNodes());
 
   for (size_t i = 0; i < this->paxos_node_->GetNumNodes(); i++) {
     grpc::Status status = this->paxos_node_->AcceptGrpc(
-        static_cast<uint8_t>( i ), accept_request, &accept_response );
+        static_cast<uint8_t>(i), accept_request, &accept_response);
     if (!status.ok()) {
       LOG(WARNING) << "NODE: [" << static_cast<uint32_t>(node_id_)
                    << "] Accept grpc failed for node: " << i
@@ -107,10 +108,13 @@ bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
     }
 
     peer_unchosen_idx[i] = accept_response.first_unchosen_index();
-    if (nop_paxos_round) {continue;}
+    if (nop_paxos_round) {
+      continue;
+    }
 
     if (accept_response.min_proposal() > request.proposal_number()) {
-      this->replicated_log_->UpdateProposalNumber(accept_response.min_proposal());
+      this->replicated_log_->UpdateProposalNumber(
+          accept_response.min_proposal());
       accept_majority_count = 0;
       is_prepare_needed_[i] = true;
       return false;
@@ -131,10 +135,10 @@ bool Proposer::AcceptPhase(paxos_rpc::PrepareRequest& request,
 
     this->replicated_log_->MarkLogEntryChosen(request.index());
     LOG(INFO) << "NODE: [" << static_cast<uint32_t>(node_id_)
-                << "] Accepted Proposal number: "
-                << accept_response.min_proposal()
-                << ", accepted value: " << value_for_accept_phase
-                << ", at index: " << request.index() << "\n";
+              << "] Accepted Proposal number: "
+              << accept_response.min_proposal()
+              << ", accepted value: " << value_for_accept_phase
+              << ", at index: " << request.index() << "\n";
 
     if (value == value_for_accept_phase) {
       done = true;
