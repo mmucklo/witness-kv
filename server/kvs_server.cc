@@ -1,6 +1,14 @@
 
 #include "kvs_server.h"
 
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+#include "absl/flags/flag.h"
+#include "rocksdb_container.h"
+
 // TODO: Maybe parse these from config file.
 ABSL_FLAG(std::vector<std::string>, kvs_node_list, {},
           "Comma separated list of ip addresses and ports");
@@ -13,6 +21,8 @@ ABSL_FLAG(bool, kvs_enable_linearizability_checks, false, "");
 ABSL_FLAG(std::string, kvs_linearizability_json_file, "history.json",
           "kvs_linearizability_json_file");
 
+ABSL_FLAG(uint16_t, kvs_num_shards, 1, "Number of (rocksdb for now) shards.");
+
 KvsServiceImpl::KvsServiceImpl(std::vector<std::unique_ptr<Node>> nodes)
     : nodes_{std::move(nodes)} {}
 
@@ -21,13 +31,11 @@ void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
       << "[KVS]: Attempting to initialize Rocks DB before PaxosNode";
 
   if (!this->paxos_->IsWitness()) {
-    rocksdb::Options options;
-    options.create_if_missing = true;
-    rocksdb::Status status = rocksdb::DB::Open(options, db_path, &db_);
-    if (!status.ok()) {
-      LOG(FATAL) << "[KVS]: Failed to open RocksDB: " << status.ToString();
+    if (!std::filesystem::exists(std::filesystem::path{db_path})) {
+      CHECK(std::filesystem::create_directory(std::filesystem::path{db_path}));
     }
-
+    rocksdb_container_ = std::make_unique<witnesskvs::server::RocksDBContainer>(
+        db_path, absl::GetFlag(FLAGS_kvs_num_shards));
     auto callback = std::bind(&KvsServiceImpl::KvsPaxosCommitCallback, this,
                               std::placeholders::_1);
     if (witnesskvs::paxos::PAXOS_OK !=
@@ -38,7 +46,7 @@ void KvsServiceImpl::InitRocksDb(const std::string& db_path) {
   }
 }
 
-KvsServiceImpl::~KvsServiceImpl() { delete db_; }
+KvsServiceImpl::~KvsServiceImpl() {}
 
 void KvsServiceImpl::InitPaxos(void) {
   paxos_ = std::make_unique<witnesskvs::paxos::Paxos>(
@@ -53,8 +61,10 @@ void KvsServiceImpl::KvsPaxosCommitCallback(std::string value) {
 
   switch (op.type()) {
     case KeyValueStore::OperationType_Type_PUT: {
-      rocksdb::Status status = this->db_->Put(
-          rocksdb::WriteOptions(), op.put_data().key(), op.put_data().value());
+      rocksdb::Status status =
+          this->rocksdb_container_->GetDB(op.put_data().key())
+              ->Put(rocksdb::WriteOptions(), op.put_data().key(),
+                    op.put_data().value());
       if (!status.ok()) {
         LOG(WARNING) << "[KVS]: Put operation failed with error : "
                      << status.ToString();
@@ -63,7 +73,8 @@ void KvsServiceImpl::KvsPaxosCommitCallback(std::string value) {
     }
     case KeyValueStore::OperationType_Type_DELETE: {
       rocksdb::Status status =
-          this->db_->Delete(rocksdb::WriteOptions(), op.del_data().key());
+          this->rocksdb_container_->GetDB(op.del_data().key())
+              ->Delete(rocksdb::WriteOptions(), op.del_data().key());
       if (!status.ok()) {
         LOG(WARNING) << "[KVS]: Delete operation failed with error : "
                      << status.ToString();
@@ -113,9 +124,10 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
     KeyValueStore::KvsStatus kvs_status;
     kvs_status.set_type(KeyValueStore::KvsStatus_Type_REDIRECT);
     kvs_status.mutable_redirect_details()->set_node_id(leader_node_id);
-    kvs_status.mutable_redirect_details()->set_ip_address_with_port(nodes_[leader_node_id]->GetAddressPortStr());
-    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED,
-                        "REDIRECT", kvs_status.SerializeAsString());
+    kvs_status.mutable_redirect_details()->set_ip_address_with_port(
+        nodes_[leader_node_id]->GetAddressPortStr());
+    return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "REDIRECT",
+                        kvs_status.SerializeAsString());
   } else {
     // Either there is no-leader or more likely there are not enough nodes up
     // and running.
@@ -123,8 +135,8 @@ Status KvsServiceImpl::PaxosProposeWrapper(const std::string& value,
     kvs_status.set_type(KeyValueStore::KvsStatus_Type_UNAVAILABLE);
     return grpc::Status(
         grpc::StatusCode::UNAVAILABLE,
-        "[KVS]: Cluster is not in a state to serve requests right now", kvs_status.SerializeAsString());
-
+        "[KVS]: Cluster is not in a state to serve requests right now",
+        kvs_status.SerializeAsString());
   }
 }
 
@@ -167,7 +179,8 @@ Status KvsServiceImpl::Get(ServerContext* context, const GetRequest* request,
 
   std::string value;
   rocksdb::Status status =
-      db_->Get(rocksdb::ReadOptions(), request->key(), &value);
+      rocksdb_container_->GetDB(request->key())
+          ->Get(rocksdb::ReadOptions(), request->key(), &value);
   if (!status.ok()) {
     LOG(WARNING) << "[KVS]: Get operation for key: " << request->key()
                  << " failed with error: " << status.ToString();
