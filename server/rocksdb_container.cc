@@ -15,6 +15,7 @@ namespace witnesskvs::server {
 
 RocksDBContainer::RocksDBContainer(absl::string_view db_path, uint16_t shards)
     : shards_(shards) {
+  // Powers of 2 make the bit reversal algorithm slightly easier.
   CHECK_EQ(std::popcount(shards), 1) << shards << " not a power of 2";
   for (uint16_t i = 0; i < shards; i++) {
     rocksdb::Options options;
@@ -46,7 +47,8 @@ rocksdb::DB* RocksDBContainer::GetDB(const std::string& key) const {
   return it->db;
 }
 
-// bit-reversed shard id.
+// shard id is based on bit-reversing the string until we reach the number
+// of shards.
 uint16_t GetShardId(const std::string& key, uint16_t shards) {
   if (key.length() == 0 || shards == 1) {
     return 0;
@@ -58,10 +60,12 @@ uint16_t GetShardId(const std::string& key, uint16_t shards) {
   // uint64_t for future expansion.
   uint64_t shard_id = 0;
   char x;
-  ;
   size_t round = 1;
   for (int i = 0; i < f - 1; i++) {
     if (i % 8 == 0) {
+      if (key.length() - round < 0) {
+        return shard_id;
+      }
       x = key[key.length() - round];
       ++round;
     }
