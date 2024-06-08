@@ -15,6 +15,8 @@
 #include <string>
 #include <vector>
 
+#include "rocksdb_container.h"
+
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "absl/log/check.h"
@@ -100,13 +102,13 @@ class KvsServiceImpl final : public Kvs::Service {
       google::protobuf::Empty* response) override;
 
  private:
-  rocksdb::DB* db_;
   std::unique_ptr<witnesskvs::paxos::Paxos> paxos_;
 
   std::vector<std::unique_ptr<Node>> nodes_;
 
   absl::Mutex lock_;
   std::unique_ptr<LinearizabilityChecker> checker_ ABSL_GUARDED_BY(lock_);
+  std::unique_ptr<witnesskvs::server::RocksDBContainer> rocksdb_container_;
 
   Status PaxosProposeWrapper(const std::string& value, bool is_read);
   void KvsPaxosCommitCallback(std::string value);
